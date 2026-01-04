@@ -33,6 +33,12 @@ let currentSlot = null;
 // Firebase real-time listener (to unsubscribe when needed)
 let firestoreUnsubscribe = null;
 
+// Track if we're currently saving (to prevent listener loops)
+let isSaving = false;
+
+// Debounce timer for saving
+let saveTimer = null;
+
 // Check if Firebase is available
 function isFirebaseAvailable() {
     return window.firestoreFunctions && window.firestoreFunctions.db;
@@ -69,24 +75,35 @@ async function loadAllSchedules() {
             
             // Set up real-time listener for changes from other devices
             firestoreUnsubscribe = onSnapshot(schedulesRef, (snapshot) => {
+                // Ignore updates while we're saving (to prevent loop)
+                if (isSaving) {
+                    isSaving = false; // Reset flag
+                    return;
+                }
+                
                 if (snapshot.exists()) {
                     const data = snapshot.data();
                     const remoteSchedules = data.schedules || {};
                     
-                    // Update local schedules
-                    Object.assign(teacherSchedules, remoteSchedules);
+                    // Check if data actually changed before updating
+                    const dataChanged = JSON.stringify(remoteSchedules) !== JSON.stringify(teacherSchedules);
                     
-                    // If current teacher is selected, refresh their calendar
-                    if (currentTeacher) {
-                        loadTeacherSchedule(currentTeacher);
-                        refreshCalendarDisplay();
-                        updateSummary();
+                    if (dataChanged) {
+                        // Update local schedules
+                        Object.assign(teacherSchedules, remoteSchedules);
+                        
+                        // If current teacher is selected, refresh their calendar
+                        if (currentTeacher) {
+                            loadTeacherSchedule(currentTeacher);
+                            refreshCalendarDisplay();
+                            updateSummary();
+                        }
+                        
+                        updateSyncStatus('synced', '✓ Updated from cloud');
+                        setTimeout(() => {
+                            updateSyncStatus('synced', 'Cloud sync active');
+                        }, 2000);
                     }
-                    
-                    updateSyncStatus('synced', '✓ Synced with cloud');
-                    setTimeout(() => {
-                        updateSyncStatus('synced', 'Cloud sync active');
-                    }, 2000);
                 }
             }, (error) => {
                 console.error('Firestore listener error:', error);
@@ -120,10 +137,24 @@ function loadAllSchedulesLocal() {
     }
 }
 
-// Save all schedules to Firestore or localStorage
-async function saveAllSchedules() {
+// Save all schedules to Firestore or localStorage (with debouncing)
+function saveAllSchedules() {
+    // Clear any pending save
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+    }
+    
+    // Debounce saves - wait 500ms before actually saving
+    saveTimer = setTimeout(async () => {
+        await performSave();
+    }, 500);
+}
+
+// Actually perform the save operation
+async function performSave() {
     if (isFirebaseAvailable()) {
         try {
+            isSaving = true; // Set flag to prevent listener from triggering
             updateSyncStatus('syncing', 'Saving to cloud...');
             
             const { db, doc, setDoc } = window.firestoreFunctions;
@@ -134,12 +165,18 @@ async function saveAllSchedules() {
                 lastUpdated: new Date().toISOString()
             }, { merge: false });
             
-            updateSyncStatus('synced', '✓ Saved to cloud');
+            // Small delay before resetting flag to ensure listener sees it
             setTimeout(() => {
-                updateSyncStatus('synced', 'Cloud sync active');
-            }, 1500);
+                isSaving = false;
+                updateSyncStatus('synced', '✓ Saved');
+                setTimeout(() => {
+                    updateSyncStatus('synced', 'Cloud sync active');
+                }, 1000);
+            }, 200);
+            
         } catch (error) {
             console.error('Error saving schedules to Firestore:', error);
+            isSaving = false;
             updateSyncStatus('local-only', '⚠ Save failed, using local storage');
             // Fallback to localStorage
             saveAllSchedulesLocal();
