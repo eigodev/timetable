@@ -105,6 +105,42 @@ header h1 {
     font-size: 1.1em;
 }
 
+.sync-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.9em;
+    color: #666;
+}
+
+.sync-status.synced {
+    color: #28a745;
+}
+
+.sync-status.syncing {
+    color: #ff6600;
+}
+
+.sync-status.local-only {
+    color: #999;
+}
+
+#syncIcon {
+    display: inline-block;
+    animation: none;
+}
+
+#syncIcon.syncing {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .calendar-controls {
     display: flex;
     gap: 10px;
