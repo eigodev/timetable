@@ -3,7 +3,7 @@
 
 export async function onRequest(context) {
   const { request, env } = context;
-  const { KV_SCHEDULES } = env; // KV namespace binding
+  const KV_SCHEDULES = env.KV_SCHEDULES; // KV namespace binding
   
   // Enable CORS
   const corsHeaders = {
@@ -17,16 +17,34 @@ export async function onRequest(context) {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Check if KV is configured
+  if (!KV_SCHEDULES) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'KV_SCHEDULES not configured. Please bind KV namespace in Pages settings.',
+      }),
+      {
+        status: 503,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  }
+
   try {
     if (request.method === 'GET') {
       // Get all schedules from KV
       const schedules = await KV_SCHEDULES.get('all_schedules', 'json');
+      const lastUpdated = await KV_SCHEDULES.get('last_updated', 'text');
       
       return new Response(
         JSON.stringify({
           success: true,
           schedules: schedules || {},
-          lastUpdated: schedules ? await KV_SCHEDULES.get('last_updated', 'text') : null,
+          lastUpdated: lastUpdated || null,
         }),
         {
           headers: {
@@ -54,8 +72,8 @@ export async function onRequest(context) {
       }
       
       // Save to KV
-      await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
       const timestamp = new Date().toISOString();
+      await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
       await KV_SCHEDULES.put('last_updated', timestamp);
       
       return new Response(
@@ -82,6 +100,7 @@ export async function onRequest(context) {
       JSON.stringify({
         success: false,
         error: error.message || 'Internal server error',
+        details: error.stack,
       }),
       {
         status: 500,

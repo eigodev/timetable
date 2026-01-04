@@ -83,8 +83,10 @@ async function loadAllSchedules() {
         if (response.ok) {
             const data = await response.json();
             
-            if (data.success && data.schedules) {
-                Object.assign(teacherSchedules, data.schedules);
+            if (data.success) {
+                if (data.schedules) {
+                    Object.assign(teacherSchedules, data.schedules);
+                }
                 lastUpdateTimestamp = data.lastUpdated;
                 
                 // Start polling for updates
@@ -92,16 +94,45 @@ async function loadAllSchedules() {
                 
                 updateSyncStatus('synced', '✓ Cloud sync active');
             } else {
+                // API returned error
+                const errorMsg = data.error || 'Unknown error';
+                console.error('API Error:', errorMsg);
+                if (errorMsg.includes('KV_SCHEDULES not configured')) {
+                    updateSyncStatus('local-only', '⚠ KV not configured - see CLOUDFLARE_SETUP.md');
+                } else {
+                    updateSyncStatus('local-only', '⚠ Cloud error - using local storage');
+                }
                 // Fallback to localStorage
                 loadAllSchedulesLocal();
-                updateSyncStatus('local-only', 'ℹ No cloud data, using local storage');
             }
         } else {
-            throw new Error(`HTTP ${response.status}`);
+            // Get error details
+            let errorDetails = `HTTP ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData.error) {
+                    errorDetails = errorData.error;
+                }
+            } catch (e) {
+                // Couldn't parse error
+            }
+            
+            throw new Error(errorDetails);
         }
     } catch (error) {
         console.error('Error loading schedules from Cloudflare:', error);
-        updateSyncStatus('local-only', '⚠ Offline mode (localStorage only)');
+        
+        // Check if it's a network error or API error
+        let statusMessage = '⚠ Offline mode (localStorage only)';
+        if (error.message.includes('KV_SCHEDULES not configured')) {
+            statusMessage = '⚠ KV not configured - check Pages settings';
+        } else if (error.message.includes('HTTP 404')) {
+            statusMessage = '⚠ API not found - check function path';
+        } else if (error.message.includes('HTTP 503')) {
+            statusMessage = '⚠ KV not bound - see CLOUDFLARE_SETUP.md';
+        }
+        
+        updateSyncStatus('local-only', statusMessage);
         // Fallback to localStorage
         loadAllSchedulesLocal();
     }
@@ -243,9 +274,23 @@ async function performSave() {
         }
     } catch (error) {
         console.error('Error saving schedules to Cloudflare:', error);
+        
+        // Try to get more detailed error info
+        let errorMessage = 'Save failed';
+        try {
+            const errorData = await response?.json();
+            if (errorData?.error) {
+                errorMessage = errorData.error;
+                console.error('API Error:', errorData);
+            }
+        } catch (e) {
+            // Couldn't parse error response
+        }
+        
         isSaving = false;
-        updateSyncStatus('local-only', '⚠ Save failed, using local storage');
-        // Fallback to localStorage
+        updateSyncStatus('local-only', `⚠ ${errorMessage} - using local storage`);
+        
+        // Still save locally as fallback
         saveAllSchedulesLocal();
     }
 }
