@@ -425,81 +425,57 @@ function hideContextMenu() {
     currentSlot = null;
 }
 
-// Update the summary panel
+// Update the summary panel - show only Available slots
 function updateSummary() {
     if (!currentTeacher) return;
     
     const summaryContent = document.getElementById('summaryContent');
     
-    // Organize by state
-    const byState = {
-        available: {},
-        unavailable: {},
-        navy: {},
-        cyan: {},
-        magenta: {},
-        salmon: {}
-    };
+    // Only collect available slots
+    const availableSlots = {};
     
     DAYS.forEach(day => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const state = getSlotState(day, hour);
-            if (state) {
-                if (!byState[state][day]) {
-                    byState[state][day] = [];
+            if (state === 'available') {
+                if (!availableSlots[day]) {
+                    availableSlots[day] = [];
                 }
-                byState[state][day].push(hour);
+                availableSlots[day].push(hour);
             }
         }
     });
     
-    // Check if there are any selections
-    const hasSelections = Object.values(byState).some(dayObj => 
-        Object.values(dayObj).some(hours => hours.length > 0)
-    );
+    // Check if there are any available slots
+    const hasAvailable = Object.values(availableSlots).some(hours => hours.length > 0);
     
-    if (!hasSelections) {
-        summaryContent.innerHTML = '<p class="empty-message">No hours selected yet. Left-click to mark available/unavailable, or right-click for custom colors.</p>';
+    if (!hasAvailable) {
+        summaryContent.innerHTML = '<p class="empty-message">No available hours selected yet. Left-click to mark available time slots.</p>';
         return;
     }
     
     let html = '';
     
-    const stateLabels = {
-        available: { label: 'Available', color: '#6b8e23' },
-        unavailable: { label: 'Unavailable', color: '#8b0000' },
-        navy: { label: 'Home Teachers', color: '#000080' },
-        cyan: { label: 'Home Teachers (extra)', color: '#00bcd4' },
-        magenta: { label: 'SpeakOn', color: '#ff00ff' },
-        salmon: { label: 'SpeakOn (extra)', color: '#fa8072' }
-    };
+    // Only show Available section
+    html += '<div class="day-summary" style="border-left-color: #6b8e23;">';
+    html += '<h3 style="color: #6b8e23;">Available</h3>';
     
-    Object.keys(stateLabels).forEach(state => {
-        const days = byState[state];
-        const hasDays = Object.values(days).some(hours => hours.length > 0);
-        
-        if (hasDays) {
-            html += `<div class="day-summary" style="border-left-color: ${stateLabels[state].color};">`;
-            html += `<h3 style="color: ${stateLabels[state].color};">${stateLabels[state].label}</h3>`;
-            
-            DAYS.forEach(day => {
-                if (days[day] && days[day].length > 0) {
-                    html += `<div style="margin-bottom: 8px;"><strong>${day}:</strong> `;
-                    const ranges = groupConsecutiveHours(days[day]);
-                    html += ranges.map(range => {
-                        if (range.start === range.end) {
-                            return formatHour(range.start);
-                        } else {
-                            return `${formatHour(range.start)} - ${formatHour(range.end + 1)}`;
-                        }
-                    }).join(', ');
-                    html += '</div>';
+    DAYS.forEach(day => {
+        if (availableSlots[day] && availableSlots[day].length > 0) {
+            html += `<div style="margin-bottom: 8px;"><strong>${day}:</strong> `;
+            const ranges = groupConsecutiveHours(availableSlots[day]);
+            html += ranges.map(range => {
+                if (range.start === range.end) {
+                    return formatHour(range.start);
+                } else {
+                    return `${formatHour(range.start)} - ${formatHour(range.end + 1)}`;
                 }
-            });
-            
+            }).join(', ');
             html += '</div>';
         }
     });
+    
+    html += '</div>';
     
     summaryContent.innerHTML = html;
 }
