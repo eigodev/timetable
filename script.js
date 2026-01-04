@@ -97,8 +97,8 @@ async function loadAllSchedules() {
                 // API returned error
                 const errorMsg = data.error || 'Unknown error';
                 console.error('API Error:', errorMsg);
-                if (errorMsg.includes('KV_SCHEDULES not configured')) {
-                    updateSyncStatus('local-only', '⚠ KV not configured - see CLOUDFLARE_SETUP.md');
+                if (errorMsg.includes('schedules_kv not configured') || errorMsg.includes('KV_SCHEDULES not configured')) {
+                    updateSyncStatus('local-only', '⚠ KV not configured - check Pages settings');
                 } else {
                     updateSyncStatus('local-only', '⚠ Cloud error - using local storage');
                 }
@@ -124,12 +124,12 @@ async function loadAllSchedules() {
         
         // Check if it's a network error or API error
         let statusMessage = '⚠ Offline mode (localStorage only)';
-        if (error.message.includes('KV_SCHEDULES not configured')) {
+        if (error.message.includes('schedules_kv not configured') || error.message.includes('KV_SCHEDULES not configured')) {
             statusMessage = '⚠ KV not configured - check Pages settings';
         } else if (error.message.includes('HTTP 404')) {
             statusMessage = '⚠ API not found - check function path';
         } else if (error.message.includes('HTTP 503')) {
-            statusMessage = '⚠ KV not bound - see CLOUDFLARE_SETUP.md';
+            statusMessage = '⚠ KV not bound - check binding name is "schedules_kv"';
         }
         
         updateSyncStatus('local-only', statusMessage);
@@ -318,8 +318,8 @@ async function performSave() {
         
         // Determine error message
         let errorMessage = 'Save failed';
-        if (error.message.includes('KV_SCHEDULES not configured') || error.message.includes('503')) {
-            errorMessage = 'KV not configured - check Pages settings';
+        if (error.message.includes('schedules_kv not configured') || error.message.includes('KV_SCHEDULES not configured') || error.message.includes('503')) {
+            errorMessage = 'KV not configured - check binding name is "schedules_kv"';
         } else if (error.message.includes('404')) {
             errorMessage = 'API not found - check function deployment';
         } else if (error.message) {

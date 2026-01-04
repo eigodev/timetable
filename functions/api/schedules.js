@@ -3,7 +3,7 @@
 
 export async function onRequest(context) {
   const { request, env } = context;
-  const KV_SCHEDULES = env.KV_SCHEDULES; // KV namespace binding
+  const KV_SCHEDULES = env.schedules_kv; // KV namespace binding (matches your binding name)
   
   // Enable CORS
   const corsHeaders = {
@@ -22,7 +22,7 @@ export async function onRequest(context) {
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'KV_SCHEDULES not configured. Please bind KV namespace in Pages settings.',
+        error: 'schedules_kv not configured. Please bind KV namespace in Pages settings with variable name "schedules_kv".',
       }),
       {
         status: 503,
