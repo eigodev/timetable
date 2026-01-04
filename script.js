@@ -5,7 +5,6 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 // LocalStorage key (fallback)
 const STORAGE_KEY = 'timetable_schedules';
-const FIRESTORE_COLLECTION = 'timetable_schedules';
 
 // Teachers list
 const TEACHERS = [
@@ -30,25 +29,26 @@ const STATE_CYCLE = [null, 'available', 'unavailable'];
 let contextMenu = null;
 let currentSlot = null;
 
-// Firebase real-time listener (to unsubscribe when needed)
-let firestoreUnsubscribe = null;
+// Cloudflare API endpoint
+const API_ENDPOINT = '/api/schedules';
 
-// Track if we're currently saving (to prevent listener loops)
+// Polling interval for checking updates (in milliseconds)
+const POLL_INTERVAL = 3000; // 3 seconds
+
+// Track if we're currently saving
 let isSaving = false;
 
-// Track last save timestamp to prevent listener loops
-let lastSaveTimestamp = 0;
+// Track last update timestamp to prevent unnecessary updates
+let lastUpdateTimestamp = null;
 
 // Debounce timer for saving
 let saveTimer = null;
 
+// Polling timer for checking updates
+let pollTimer = null;
+
 // Track if status update is pending
 let statusUpdateTimer = null;
-
-// Check if Firebase is available
-function isFirebaseAvailable() {
-    return window.firestoreFunctions && window.firestoreFunctions.db;
-}
 
 // Update sync status indicator
 function updateSyncStatus(status, message) {
@@ -68,72 +68,100 @@ function updateSyncStatus(status, message) {
     syncText.textContent = message;
 }
 
-// Load all schedules from Firestore or localStorage
+// Load all schedules from Cloudflare KV or localStorage
 async function loadAllSchedules() {
-    if (isFirebaseAvailable()) {
-        try {
-            updateSyncStatus('syncing', 'Syncing with cloud...');
+    try {
+        updateSyncStatus('syncing', 'Syncing with cloud...');
+        
+        const response = await fetch(API_ENDPOINT, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
             
-            const { db, doc, getDoc, collection, onSnapshot } = window.firestoreFunctions;
-            const schedulesRef = doc(db, FIRESTORE_COLLECTION, 'all_schedules');
-            
-            // First, get current data
-            const docSnap = await getDoc(schedulesRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                Object.assign(teacherSchedules, data.schedules || {});
+            if (data.success && data.schedules) {
+                Object.assign(teacherSchedules, data.schedules);
+                lastUpdateTimestamp = data.lastUpdated;
+                
+                // Start polling for updates
+                startPolling();
+                
+                updateSyncStatus('synced', '✓ Cloud sync active');
+            } else {
+                // Fallback to localStorage
+                loadAllSchedulesLocal();
+                updateSyncStatus('local-only', 'ℹ No cloud data, using local storage');
             }
-            
-            // Set up real-time listener for changes from other devices
-            firestoreUnsubscribe = onSnapshot(schedulesRef, (snapshot) => {
-                const now = Date.now();
-                
-                // Ignore updates within 2 seconds of our own save (to prevent loop)
-                if (isSaving || (now - lastSaveTimestamp < 2000)) {
-                    return;
-                }
-                
-                if (snapshot.exists()) {
-                    const data = snapshot.data();
-                    const remoteSchedules = data.schedules || {};
-                    
-                    // Check if data actually changed before updating
-                    const dataChanged = JSON.stringify(remoteSchedules) !== JSON.stringify(teacherSchedules);
-                    
-                    if (dataChanged) {
-                        // Update local schedules
-                        Object.assign(teacherSchedules, remoteSchedules);
-                        
-                        // If current teacher is selected, refresh their calendar
-                        if (currentTeacher) {
-                            loadTeacherSchedule(currentTeacher);
-                            refreshCalendarDisplay();
-                            updateSummary();
-                        }
-                        
-                        updateSyncStatus('synced', '✓ Updated from cloud');
-                        setTimeout(() => {
-                            updateSyncStatus('synced', 'Cloud sync active');
-                        }, 2000);
-                    }
-                }
-            }, (error) => {
-                console.error('Firestore listener error:', error);
-                updateSyncStatus('local-only', '⚠ Offline mode (localStorage only)');
-            });
-            
-            updateSyncStatus('synced', '✓ Cloud sync active');
-        } catch (error) {
-            console.error('Error loading schedules from Firestore:', error);
-            updateSyncStatus('local-only', '⚠ Offline mode (localStorage only)');
-            // Fallback to localStorage
-            loadAllSchedulesLocal();
+        } else {
+            throw new Error(`HTTP ${response.status}`);
         }
-    } else {
-        updateSyncStatus('local-only', 'ℹ Local storage only (Firebase not configured)');
+    } catch (error) {
+        console.error('Error loading schedules from Cloudflare:', error);
+        updateSyncStatus('local-only', '⚠ Offline mode (localStorage only)');
         // Fallback to localStorage
         loadAllSchedulesLocal();
     }
+}
+
+// Start polling for updates from other devices
+function startPolling() {
+    // Clear any existing polling
+    if (pollTimer) {
+        clearInterval(pollTimer);
+    }
+    
+    // Poll every few seconds for updates
+    pollTimer = setInterval(async () => {
+        // Don't poll while we're saving
+        if (isSaving) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(API_ENDPOINT, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success && data.schedules) {
+                    // Check if data changed and timestamp is newer
+                    if (data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp) {
+                        const dataChanged = JSON.stringify(data.schedules) !== JSON.stringify(teacherSchedules);
+                        
+                        if (dataChanged) {
+                            // Update local schedules
+                            Object.assign(teacherSchedules, data.schedules);
+                            lastUpdateTimestamp = data.lastUpdated;
+                            
+                            // If current teacher is selected, refresh their calendar
+                            if (currentTeacher) {
+                                loadTeacherSchedule(currentTeacher);
+                                refreshCalendarDisplay();
+                                updateSummary();
+                            }
+                            
+                            updateSyncStatus('synced', '✓ Updated from cloud');
+                            setTimeout(() => {
+                                updateSyncStatus('synced', 'Cloud sync active');
+                            }, 2000);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            // Silent error - don't show error for polling failures
+            console.error('Polling error:', error);
+        }
+    }, POLL_INTERVAL);
 }
 
 // Load from localStorage (fallback)
@@ -149,7 +177,7 @@ function loadAllSchedulesLocal() {
     }
 }
 
-// Save all schedules to Firestore or localStorage (with debouncing)
+// Save all schedules to Cloudflare KV or localStorage (with debouncing)
 function saveAllSchedules() {
     // Don't queue another save if we're already saving
     if (isSaving) {
@@ -176,41 +204,47 @@ async function performSave() {
         statusUpdateTimer = null;
     }
     
-    if (isFirebaseAvailable()) {
-        try {
-            isSaving = true;
-            lastSaveTimestamp = Date.now();
-            updateSyncStatus('syncing', 'Saving to cloud...');
-            
-            const { db, doc, setDoc } = window.firestoreFunctions;
-            const schedulesRef = doc(db, FIRESTORE_COLLECTION, 'all_schedules');
-            
-            await setDoc(schedulesRef, {
+    try {
+        isSaving = true;
+        updateSyncStatus('syncing', 'Saving to cloud...');
+        
+        const response = await fetch(API_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
                 schedules: teacherSchedules,
-                lastUpdated: new Date().toISOString()
-            }, { merge: false });
+            }),
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
             
-            // Wait a bit longer before resetting to ensure listener sees the flag
-            statusUpdateTimer = setTimeout(() => {
-                isSaving = false;
-                updateSyncStatus('synced', '✓ Saved');
+            if (data.success) {
+                lastUpdateTimestamp = data.lastUpdated;
                 
-                // Reset to normal status after a delay
+                // Update status after a short delay
                 statusUpdateTimer = setTimeout(() => {
-                    updateSyncStatus('synced', 'Cloud sync active');
-                    statusUpdateTimer = null;
-                }, 1500);
-            }, 1000);
-            
-        } catch (error) {
-            console.error('Error saving schedules to Firestore:', error);
-            isSaving = false;
-            lastSaveTimestamp = 0;
-            updateSyncStatus('local-only', '⚠ Save failed, using local storage');
-            // Fallback to localStorage
-            saveAllSchedulesLocal();
+                    isSaving = false;
+                    updateSyncStatus('synced', '✓ Saved');
+                    
+                    // Reset to normal status after a delay
+                    statusUpdateTimer = setTimeout(() => {
+                        updateSyncStatus('synced', 'Cloud sync active');
+                        statusUpdateTimer = null;
+                    }, 1500);
+                }, 300);
+            } else {
+                throw new Error(data.error || 'Save failed');
+            }
+        } else {
+            throw new Error(`HTTP ${response.status}`);
         }
-    } else {
+    } catch (error) {
+        console.error('Error saving schedules to Cloudflare:', error);
+        isSaving = false;
+        updateSyncStatus('local-only', '⚠ Save failed, using local storage');
         // Fallback to localStorage
         saveAllSchedulesLocal();
     }
@@ -786,24 +820,7 @@ function exportSchedulePDF() {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
-    // Wait for Firebase to be ready (if configured)
-    if (window.firebaseReady) {
-        await initTeachers();
-    } else {
-        // Wait for Firebase initialization event
-        window.addEventListener('firebaseReady', async () => {
-            await initTeachers();
-        }, { once: true });
-        
-        // If Firebase doesn't load within 2 seconds, proceed with localStorage
-        setTimeout(async () => {
-            if (!window.firebaseReady) {
-                console.log('Firebase not configured, using localStorage fallback');
-                await initTeachers();
-            }
-        }, 2000);
-    }
-    
+    await initTeachers();
     initCalendar();
     
     document.getElementById('selectAllBtn').addEventListener('click', selectAll);
@@ -817,8 +834,8 @@ window.addEventListener('beforeunload', () => {
         saveTeacherSchedule(currentTeacher);
     }
     
-    // Clean up Firestore listener
-    if (firestoreUnsubscribe) {
-        firestoreUnsubscribe();
+    // Clean up polling
+    if (pollTimer) {
+        clearInterval(pollTimer);
     }
 });
