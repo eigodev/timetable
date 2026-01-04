@@ -40,6 +40,12 @@ export async function onRequest(context) {
       const schedules = await KV_SCHEDULES.get('all_schedules', 'json');
       const lastUpdated = await KV_SCHEDULES.get('last_updated', 'text');
       
+      console.log('Retrieved schedules from KV:', {
+        hasSchedules: !!schedules,
+        teacherCount: schedules ? Object.keys(schedules).length : 0,
+        lastUpdated: lastUpdated
+      });
+      
       return new Response(
         JSON.stringify({
           success: true,
@@ -73,13 +79,25 @@ export async function onRequest(context) {
       
       // Save to KV
       const timestamp = new Date().toISOString();
-      await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
+      
+      // Convert schedules to string for storage
+      const schedulesString = JSON.stringify(schedules);
+      
+      // Save schedules and timestamp
+      await KV_SCHEDULES.put('all_schedules', schedulesString);
       await KV_SCHEDULES.put('last_updated', timestamp);
+      
+      console.log('Saved schedules to KV:', {
+        teachers: Object.keys(schedules).length,
+        timestamp: timestamp,
+        size: schedulesString.length
+      });
       
       return new Response(
         JSON.stringify({
           success: true,
           lastUpdated: timestamp,
+          message: 'Schedules saved successfully',
         }),
         {
           headers: {

@@ -33,7 +33,7 @@ let currentSlot = null;
 const API_ENDPOINT = '/api/schedules';
 
 // Polling interval for checking updates (in milliseconds)
-const POLL_INTERVAL = 3000; // 3 seconds
+const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
 
 // Track if we're currently saving
 let isSaving = false;
@@ -145,6 +145,8 @@ function startPolling() {
         clearInterval(pollTimer);
     }
     
+    console.log('Starting polling for updates every', POLL_INTERVAL / 1000, 'seconds');
+    
     // Poll every few seconds for updates
     pollTimer = setInterval(async () => {
         // Don't poll while we're saving
@@ -153,23 +155,33 @@ function startPolling() {
         }
         
         try {
-            const response = await fetch(API_ENDPOINT, {
+            const response = await fetch(API_ENDPOINT + '?t=' + Date.now(), {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                cache: 'no-cache',
             });
             
             if (response.ok) {
                 const data = await response.json();
                 
                 if (data.success && data.schedules) {
-                    // Check if data changed and timestamp is newer
-                    if (data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp) {
-                        const dataChanged = JSON.stringify(data.schedules) !== JSON.stringify(teacherSchedules);
+                    // Always update timestamp (even if data hasn't changed)
+                    const timestampChanged = data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp;
+                    
+                    // Compare data to see if it changed
+                    const localSchedulesStr = JSON.stringify(teacherSchedules);
+                    const remoteSchedulesStr = JSON.stringify(data.schedules);
+                    const dataChanged = localSchedulesStr !== remoteSchedulesStr;
+                    
+                    // Update if timestamp changed (means someone else made changes)
+                    if (timestampChanged) {
+                        console.log('Timestamp changed - checking for updates');
                         
                         if (dataChanged) {
-                            // Update local schedules
+                            console.log('Data changed - updating from cloud');
+                            // Update local schedules with remote data
                             Object.assign(teacherSchedules, data.schedules);
                             lastUpdateTimestamp = data.lastUpdated;
                             
@@ -184,9 +196,18 @@ function startPolling() {
                             setTimeout(() => {
                                 updateSyncStatus('synced', 'Cloud sync active');
                             }, 2000);
+                        } else {
+                            // Timestamp changed but data is same - just update timestamp
+                            lastUpdateTimestamp = data.lastUpdated;
+                            console.log('Timestamp updated, data unchanged');
                         }
                     }
+                } else if (data.success && !data.schedules) {
+                    // Empty schedules - update timestamp
+                    lastUpdateTimestamp = data.lastUpdated;
                 }
+            } else {
+                console.error('Polling failed with status:', response.status);
             }
         } catch (error) {
             // Silent error - don't show error for polling failures
@@ -239,6 +260,8 @@ async function performSave() {
         isSaving = true;
         updateSyncStatus('syncing', 'Saving to cloud...');
         
+        console.log('Saving schedules to cloud...', Object.keys(teacherSchedules).length, 'teachers');
+        
         const response = await fetch(API_ENDPOINT, {
             method: 'POST',
             headers: {
@@ -254,11 +277,15 @@ async function performSave() {
             
             if (data.success) {
                 lastUpdateTimestamp = data.lastUpdated;
+                console.log('Successfully saved to cloud. Timestamp:', data.lastUpdated);
+                
+                // Also save to localStorage as backup (even when cloud save succeeds)
+                saveAllSchedulesLocal();
                 
                 // Update status after a short delay
                 statusUpdateTimer = setTimeout(() => {
                     isSaving = false;
-                    updateSyncStatus('synced', '✓ Saved');
+                    updateSyncStatus('synced', '✓ Saved to cloud');
                     
                     // Reset to normal status after a delay
                     statusUpdateTimer = setTimeout(() => {
@@ -270,24 +297,35 @@ async function performSave() {
                 throw new Error(data.error || 'Save failed');
             }
         } else {
-            throw new Error(`HTTP ${response.status}`);
+            // Get error details from response
+            let errorDetails = `HTTP ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData?.error) {
+                    errorDetails = errorData.error;
+                    console.error('API Error:', errorData);
+                }
+            } catch (e) {
+                // Couldn't parse error response
+            }
+            throw new Error(errorDetails);
         }
     } catch (error) {
         console.error('Error saving schedules to Cloudflare:', error);
-        
-        // Try to get more detailed error info
-        let errorMessage = 'Save failed';
-        try {
-            const errorData = await response?.json();
-            if (errorData?.error) {
-                errorMessage = errorData.error;
-                console.error('API Error:', errorData);
-            }
-        } catch (e) {
-            // Couldn't parse error response
-        }
+        console.error('Error details:', error.message);
         
         isSaving = false;
+        
+        // Determine error message
+        let errorMessage = 'Save failed';
+        if (error.message.includes('KV_SCHEDULES not configured') || error.message.includes('503')) {
+            errorMessage = 'KV not configured - check Pages settings';
+        } else if (error.message.includes('404')) {
+            errorMessage = 'API not found - check function deployment';
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
         updateSyncStatus('local-only', `⚠ ${errorMessage} - using local storage`);
         
         // Still save locally as fallback
@@ -366,7 +404,7 @@ function selectTeacher(teacherName) {
 // Save current schedule to teacherSchedules
 function saveTeacherSchedule(teacherName) {
     teacherSchedules[teacherName] = { ...slotStates };
-    // Also save to localStorage
+    // Save to Cloudflare (will also save to localStorage as backup)
     saveAllSchedules();
 }
 
