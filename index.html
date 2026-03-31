@@ -12,7 +12,7 @@
         <!-- Sidebar with Teachers -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>Teachers</h2>
+                <h2>Categories</h2>
             </div>
             <div class="teacher-list" id="teacherList">
                 <!-- Teachers will be populated by JavaScript -->
@@ -22,21 +22,7 @@
         <!-- Main Content -->
         <main class="main-content">
     <div class="container">
-        <header>
-            <h1 id="currentTeacherName">Select a Teacher</h1>
-            <div id="syncStatus" class="sync-status">
-                <span id="syncIcon">🔄</span>
-                <span id="syncText">Initializing...</span>
-            </div>
-        </header>
-
         <div class="calendar-wrapper">
-            <div class="calendar-controls">
-                <button id="selectAllBtn" class="btn btn-primary">Select All</button>
-                <button id="clearAllBtn" class="btn btn-secondary">Clear All</button>
-                <button id="exportPdfBtn" class="btn btn-success">Export PDF</button>
-            </div>
-
             <div class="calendar-grid">
                 <!-- Time column header -->
                 <div class="time-header"></div>
@@ -71,19 +57,23 @@
         <div class="context-menu-title">Available Colors:</div>
         <div class="context-menu-item" data-color="navy">
             <span class="color-preview" style="background: #000080;"></span>
-            Home Teachers
+            HomeTeachers
         </div>
         <div class="context-menu-item" data-color="cyan">
             <span class="color-preview" style="background: #00bcd4;"></span>
-            Home Teachers (extra)
+            HomeTeachers (extra)
         </div>
         <div class="context-menu-item" data-color="magenta">
             <span class="color-preview" style="background: #ff00ff;"></span>
-            SpeakOn
+            SpeakOn Students
         </div>
         <div class="context-menu-item" data-color="salmon">
             <span class="color-preview" style="background: #fa8072;"></span>
-            SpeakOn (extra)
+            SpeakOn Students (extra)
+        </div>
+        <div class="context-menu-item" data-color="special">
+            <span class="color-preview" style="background: #a79b8e;"></span>
+            Special Class
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-color="clear">Clear</div>

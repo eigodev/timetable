@@ -1,16 +1,39 @@
 // Configuration
-const START_HOUR = 8; // 8 AM
-const END_HOUR = 22; // 10 PM (22:00)
+const START_HOUR = 7; // 7 AM
+const END_HOUR = 23; // 11 PM (exclusive, includes 10 PM slot)
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // LocalStorage key (fallback)
 const STORAGE_KEY = 'timetable_schedules';
 
-// Teachers list
-const TEACHERS = [
-    'Bruno', 'Carol', 'Deluca', 'Ester', 'Leandro', 'Lesley', 
-    'Livia', 'Nataly', 'Nino', 'Pedro', 'Priscilla', 'Ricardo', 
-    'Samuel', 'Thiago', 'Vickie'
+// Sidebar categories
+const TEACHERS = ['Samuel'];
+const PRIVATE_STUDENTS = [
+    'Alexandre Eleuterio',
+    'Berenildo Nascimento',
+    'Fernanda Penteado',
+    'Lorena Albergoni',
+    'Lucas Tonholi',
+    'Maiza Camargo',
+    'Matheus Santos',
+    'Michele Miranda',
+    'Rosangela de Paula',
+    'Talita Freire',
+    'Vinicios Santos'
+];
+const SPEAKON_STUDENTS = [
+    'Adelcio Souza',
+    'Alessandra Ramos',
+    'Ana Tereza Candeloro',
+    'Bruna Santos',
+    'Eliane Marcon',
+    'Fernando Yeshua',
+    'Maria Carolina Cecilio',
+    'Maria Ribeiro',
+    'Marisa Nogueira',
+    'Neide de Paula',
+    'Raquel Guedes',
+    'Tamires Busichia'
 ];
 
 // Store schedules for all teachers: { teacherName: { 'day-hour': state } }
@@ -349,22 +372,53 @@ async function initTeachers() {
     
     const teacherList = document.getElementById('teacherList');
     
-    TEACHERS.forEach(teacher => {
-        // Initialize empty schedule for each teacher if not already loaded
-        if (!teacherSchedules[teacher]) {
-            teacherSchedules[teacher] = {};
+    const categories = [
+        { title: 'Teachers', names: TEACHERS, itemClass: 'category-teachers' },
+        { title: 'Private Students', names: PRIVATE_STUDENTS, itemClass: 'category-private' },
+        { title: 'SpeakOn Students', names: SPEAKON_STUDENTS, itemClass: 'category-speakon' }
+    ];
+
+    categories.forEach((category, index) => {
+        const section = document.createElement('div');
+        section.className = 'sidebar-category';
+        if (index !== 0) {
+            section.classList.add('collapsed');
         }
-        
-        const teacherItem = document.createElement('div');
-        teacherItem.className = 'teacher-item';
-        teacherItem.textContent = teacher;
-        teacherItem.dataset.teacher = teacher;
-        
-        teacherItem.addEventListener('click', () => {
-            selectTeacher(teacher);
+
+        const sectionTitle = document.createElement('button');
+        sectionTitle.className = 'sidebar-section-title';
+        sectionTitle.type = 'button';
+        sectionTitle.textContent = category.title;
+        section.appendChild(sectionTitle);
+
+        const sectionItems = document.createElement('div');
+        sectionItems.className = 'sidebar-category-items';
+
+        category.names.forEach(name => {
+            // Initialize empty schedule for each person if not already loaded
+            if (!teacherSchedules[name]) {
+                teacherSchedules[name] = {};
+            }
+
+            const teacherItem = document.createElement('div');
+            teacherItem.className = 'teacher-item';
+            teacherItem.classList.add(category.itemClass);
+            teacherItem.textContent = name;
+            teacherItem.dataset.teacher = name;
+
+            teacherItem.addEventListener('click', () => {
+                selectTeacher(name);
+            });
+
+            sectionItems.appendChild(teacherItem);
         });
-        
-        teacherList.appendChild(teacherItem);
+
+        sectionTitle.addEventListener('click', () => {
+            section.classList.toggle('collapsed');
+        });
+
+        section.appendChild(sectionItems);
+        teacherList.appendChild(section);
     });
     
     // Select first teacher by default
@@ -390,8 +444,6 @@ function selectTeacher(teacherName) {
             item.classList.add('active');
         }
     });
-    
-    document.getElementById('currentTeacherName').textContent = `${teacherName}'s Schedule`;
     
     // Load teacher's schedule
     loadTeacherSchedule(teacherName);
@@ -479,7 +531,7 @@ function refreshCalendarDisplay() {
             
             if (slot) {
                 // Remove all state classes
-                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon');
+                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
                 
                 // Add current state class
                 if (state) {
@@ -490,9 +542,9 @@ function refreshCalendarDisplay() {
     });
 }
 
-// Format hour for display (e.g., 8 -> "8:00 AM", 13 -> "1:00 PM")
+// Format hour for display (e.g., 8 -> "8:00 a.m.", 13 -> "1:00 p.m.")
 function formatHour(hour) {
-    const period = hour >= 12 ? 'PM' : 'AM';
+    const period = hour >= 12 ? 'p.m.' : 'a.m.';
     const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
     return `${displayHour}:00 ${period}`;
 }
@@ -513,7 +565,7 @@ function setSlotState(day, hour, state) {
     if (!slot) return;
     
     // Remove all state classes
-    slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon');
+    slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
     
     if (state) {
         slotStates[key] = state;
@@ -614,7 +666,7 @@ function updateSummary() {
                 if (range.start === range.end) {
                     return formatHour(range.start);
                 } else {
-                    return `${formatHour(range.start)} - ${formatHour(range.end + 1)}`;
+                    return `<strong><em>from</em></strong> ${formatHour(range.start)} <strong><em>to</em></strong> ${formatHour(range.end + 1)}`;
                 }
             }).join(', ');
             html += '</div>';
@@ -659,7 +711,7 @@ function selectAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
-                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon');
+                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
                 slotStates[key] = 'available';
                 slot.classList.add('state-available');
             }
@@ -681,7 +733,7 @@ function clearAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
-                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon');
+                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
                 slotStates[key] = null;
             }
         });
@@ -708,10 +760,11 @@ function exportSchedule() {
     const stateLabels = {
         available: 'Available',
         unavailable: 'Unavailable',
-        navy: 'Home Teachers',
-        cyan: 'Home Teachers (extra)',
-        magenta: 'SpeakOn',
-        salmon: 'SpeakOn (extra)'
+        navy: 'HomeTeachers',
+        cyan: 'HomeTeachers (extra)',
+        magenta: 'SpeakOn Students',
+        salmon: 'SpeakOn Students (extra)',
+        special: 'Special Class'
     };
     
     let hasSelections = false;
@@ -791,21 +844,23 @@ function exportSchedulePDF() {
         navy: [0, 0, 128],               // Navy blue
         cyan: [0, 188, 212],             // Cyan
         magenta: [255, 0, 255],          // Magenta
-        salmon: [250, 128, 114]          // Salmon
+        salmon: [250, 128, 114],         // Salmon
+        special: [167, 155, 142]         // Special class
     };
     
     const stateLabels = {
         available: 'Available',
         unavailable: 'Unavailable',
-        navy: 'Home Teachers',
-        cyan: 'Home Teachers (extra)',
-        magenta: 'SpeakOn',
-        salmon: 'SpeakOn (extra)'
+        navy: 'HomeTeachers',
+        cyan: 'HomeTeachers (extra)',
+        magenta: 'SpeakOn Students',
+        salmon: 'SpeakOn Students (extra)',
+        special: 'Special Class'
     };
     
     // Title
     doc.setFontSize(18);
-    doc.setTextColor(255, 102, 0);
+    doc.setTextColor(63, 81, 181);
     doc.text(`${currentTeacher}'s Teaching Availability`, 105, 20, { align: 'center' });
     
     // Date
@@ -905,10 +960,6 @@ function exportSchedulePDF() {
 document.addEventListener('DOMContentLoaded', async () => {
     await initTeachers();
     initCalendar();
-    
-    document.getElementById('selectAllBtn').addEventListener('click', selectAll);
-    document.getElementById('clearAllBtn').addEventListener('click', clearAll);
-    document.getElementById('exportPdfBtn').addEventListener('click', exportSchedulePDF);
 });
 
 // Save schedules before page unload as a safety backup

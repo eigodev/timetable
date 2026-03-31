@@ -33,7 +33,7 @@ body {
 
 .sidebar-header {
     padding: 20px;
-    background: #ff6600;
+    background: #3f51b5;
     color: white;
 }
 
@@ -48,7 +48,50 @@ body {
     padding: 10px 0;
 }
 
-.teacher-item {
+.sidebar-category {
+    border-top: 1px solid #f2f2f2;
+}
+
+.sidebar-category:first-child {
+    border-top: none;
+}
+
+.sidebar-section-title {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    padding: 10px 20px 8px;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #777;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-section-title::after {
+    content: "v";
+    font-size: 0.9em;
+    color: #999;
+}
+
+.sidebar-category.collapsed .sidebar-section-title::after {
+    content: ">";
+}
+
+.sidebar-category-items {
+    display: block;
+}
+
+.sidebar-category.collapsed .sidebar-category-items {
+    display: none;
+}
+
+.sidebar-category-items .teacher-item {
     padding: 15px 20px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -58,17 +101,47 @@ body {
 
 .teacher-item:hover {
     background: #fff5e6;
-    border-left-color: #ff6600;
+    border-left-color: #3f51b5;
 }
 
 .teacher-item.active {
     background: #fff0e0;
-    border-left-color: #ff6600;
+    border-left-color: #3f51b5;
     font-weight: 600;
-    color: #ff6600;
+    color: #3f51b5;
 }
 
-.teacher-item:last-child {
+.teacher-item.category-private {
+    color: #3f51b5;
+}
+
+.teacher-item.category-private:hover {
+    background: #e3e6f7;
+    border-left-color: #3f51b5;
+}
+
+.teacher-item.category-private.active {
+    background: #e3e6f7;
+    border-left-color: #3f51b5;
+    color: #3f51b5;
+}
+
+.teacher-item.category-speakon {
+    color: #d81b60;
+}
+
+.teacher-item.category-speakon:hover {
+    background: #f8e3e1;
+    border-left-color: #d81b60;
+}
+
+.teacher-item.category-speakon.active {
+    background: #f8e3e1;
+    border-left-color: #d81b60;
+    color: #d81b60;
+}
+
+.sidebar-category-items .teacher-item:last-child {
     border-bottom: none;
 }
 
@@ -95,7 +168,7 @@ header {
 }
 
 header h1 {
-    color: #ff6600;
+    color: #3f51b5;
     font-size: 2.5em;
     margin-bottom: 10px;
 }
@@ -120,7 +193,7 @@ header h1 {
 }
 
 .sync-status.syncing {
-    color: #ff6600;
+    color: #3f51b5;
 }
 
 .sync-status.local-only {
@@ -164,12 +237,12 @@ header h1 {
 }
 
 .btn-primary {
-    background: #ff6600;
+    background: #3f51b5;
     color: white;
 }
 
 .btn-primary:hover {
-    background: #e55a00;
+    background: #32408f;
 }
 
 .btn-secondary {
@@ -182,17 +255,17 @@ header h1 {
 }
 
 .btn-success {
-    background: #ff6600;
+    background: #3f51b5;
     color: white;
 }
 
 .btn-success:hover {
-    background: #e55a00;
+    background: #32408f;
 }
 
 .calendar-grid {
     display: grid;
-    grid-template-columns: 100px repeat(7, 1fr);
+    grid-template-columns: 88px repeat(7, 1fr);
     gap: 2px;
     background: #e0e0e0;
     border-radius: 8px;
@@ -201,26 +274,26 @@ header h1 {
 }
 
 .time-header {
-    background: #ff6600;
+    background: #3f51b5;
     color: white;
-    padding: 10px;
+    padding: 8px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 0.85em;
+}
+
+.day-header {
+    background: #3f51b5;
+    color: white;
+    padding: 8px;
     text-align: center;
     font-weight: bold;
     font-size: 0.9em;
 }
 
-.day-header {
-    background: #ff6600;
-    color: white;
-    padding: 10px;
-    text-align: center;
-    font-weight: bold;
-    font-size: 1em;
-}
-
 .time-slots-container {
     display: grid;
-    grid-template-columns: 100px repeat(7, 1fr);
+    grid-template-columns: 88px repeat(7, 1fr);
     gap: 2px;
     background: #e0e0e0;
     border-radius: 8px;
@@ -229,10 +302,10 @@ header h1 {
 
 .time-label {
     background: #f8f9fa;
-    padding: 10px 7px;
+    padding: 8px 6px;
     text-align: center;
     font-weight: 600;
-    font-size: 0.9em;
+    font-size: 0.82em;
     color: #495057;
     border-right: 2px solid #dee2e6;
     display: flex;
@@ -242,12 +315,12 @@ header h1 {
 
 .time-slot {
     background: white;
-    padding: 10px;
+    padding: 7px;
     cursor: pointer;
     transition: all 0.2s ease;
     border: 2px solid transparent;
     position: relative;
-    min-height: 33px;
+    min-height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -255,7 +328,7 @@ header h1 {
 
 .time-slot:hover {
     background: #fff5e6;
-    border-color: #ff6600;
+    border-color: #3f51b5;
 }
 
 /* Slot states */
@@ -301,6 +374,13 @@ header h1 {
     box-shadow: 0 2px 8px rgba(250, 128, 114, 0.4);
 }
 
+.time-slot.state-special {
+    background: #a79b8e; /* Special class */
+    color: white;
+    border-color: #a79b8e;
+    box-shadow: 0 2px 8px rgba(167, 155, 142, 0.4);
+}
+
 .summary-panel {
     margin-top: 30px;
     padding: 25px;
@@ -310,7 +390,7 @@ header h1 {
 }
 
 .summary-panel h2 {
-    color: #ff6600;
+    color: #3f51b5;
     margin-bottom: 20px;
     font-size: 1.8em;
 }
@@ -325,7 +405,7 @@ header h1 {
     padding: 15px;
     background: white;
     border-radius: 8px;
-    border-left: 4px solid #ff6600;
+    border-left: 4px solid #3f51b5;
 }
 
 .day-summary h3 {
@@ -366,7 +446,7 @@ header h1 {
 .context-menu-title {
     padding: 8px 16px;
     font-weight: 600;
-    color: #ff6600;
+    color: #3f51b5;
     font-size: 0.9em;
     border-bottom: 1px solid #eee;
     margin-bottom: 4px;
@@ -448,7 +528,7 @@ header h1 {
     .teacher-item:hover,
     .teacher-item.active {
         border-left: none;
-        border-top-color: #ff6600;
+        border-top-color: #3f51b5;
     }
     
     .container {
