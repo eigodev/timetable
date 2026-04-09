@@ -5,10 +5,11 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 // LocalStorage key (fallback)
 const STORAGE_KEY = 'timetable_schedules';
+const ROSTER_STORAGE_KEY = 'timetable_roster';
 
 // Sidebar categories
 const TEACHERS = ['Samuel'];
-const PRIVATE_STUDENTS = [
+const DEFAULT_PRIVATE_STUDENTS = [
     'Alexandre Eleuterio',
     'Berenildo Nascimento',
     'Fernanda Penteado',
@@ -21,7 +22,7 @@ const PRIVATE_STUDENTS = [
     'Talita Freire',
     'Vinicios Santos'
 ];
-const SPEAKON_STUDENTS = [
+const DEFAULT_SPEAKON_STUDENTS = [
     'Adelcio Souza',
     'Alessandra Ramos',
     'Ana Tereza Candeloro',
@@ -35,6 +36,41 @@ const SPEAKON_STUDENTS = [
     'Raquel Guedes',
     'Tamires Busichia'
 ];
+
+let privateStudentsList = [];
+let speakonStudentsList = [];
+
+function loadRosterFromStorage() {
+    try {
+        const raw = localStorage.getItem(ROSTER_STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+}
+
+function initRoster() {
+    const saved = loadRosterFromStorage();
+    if (!saved) {
+        privateStudentsList = [...DEFAULT_PRIVATE_STUDENTS];
+        speakonStudentsList = [...DEFAULT_SPEAKON_STUDENTS];
+        return;
+    }
+    privateStudentsList = Array.isArray(saved.private) ? [...saved.private] : [...DEFAULT_PRIVATE_STUDENTS];
+    speakonStudentsList = Array.isArray(saved.speakon) ? [...saved.speakon] : [...DEFAULT_SPEAKON_STUDENTS];
+}
+
+function saveRoster() {
+    try {
+        localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify({
+            private: privateStudentsList,
+            speakon: speakonStudentsList
+        }));
+    } catch (error) {
+        console.error('Error saving roster to localStorage:', error);
+    }
+}
 
 // Store schedules for all teachers: { teacherName: { 'day-hour': state } }
 const teacherSchedules = {};
@@ -365,23 +401,33 @@ function saveAllSchedulesLocal() {
     }
 }
 
-// Initialize teachers sidebar
-async function initTeachers() {
-    // Load schedules (will wait for Firebase if available)
-    await loadAllSchedules();
-    
+function renderSidebar() {
     const teacherList = document.getElementById('teacherList');
-    
+    if (!teacherList) return;
+
+    const collapsedFlags = [];
+    Array.from(teacherList.children).forEach((sec, i) => {
+        if (sec.classList.contains('sidebar-category')) {
+            collapsedFlags[i] = sec.classList.contains('collapsed');
+        }
+    });
+
+    teacherList.innerHTML = '';
+
     const categories = [
-        { title: 'Teachers', names: TEACHERS, itemClass: 'category-teachers' },
-        { title: 'Private Students', names: PRIVATE_STUDENTS, itemClass: 'category-private' },
-        { title: 'SpeakOn Students', names: SPEAKON_STUDENTS, itemClass: 'category-speakon' }
+        { title: 'Teachers', names: TEACHERS, itemClass: 'category-teachers', deletable: false },
+        { title: 'HomeTeachers', names: privateStudentsList, itemClass: 'category-private', deletable: true, rosterKey: 'private' },
+        { title: 'SpeakOn', names: speakonStudentsList, itemClass: 'category-speakon', deletable: true, rosterKey: 'speakon' }
     ];
 
     categories.forEach((category, index) => {
         const section = document.createElement('div');
         section.className = 'sidebar-category';
-        if (index !== 0) {
+        const defaultCollapsed = index !== 0;
+        const collapsed = collapsedFlags.length > 0 && typeof collapsedFlags[index] === 'boolean'
+            ? collapsedFlags[index]
+            : defaultCollapsed;
+        if (collapsed) {
             section.classList.add('collapsed');
         }
 
@@ -395,7 +441,6 @@ async function initTeachers() {
         sectionItems.className = 'sidebar-category-items';
 
         category.names.forEach(name => {
-            // Initialize empty schedule for each person if not already loaded
             if (!teacherSchedules[name]) {
                 teacherSchedules[name] = {};
             }
@@ -403,10 +448,28 @@ async function initTeachers() {
             const teacherItem = document.createElement('div');
             teacherItem.className = 'teacher-item';
             teacherItem.classList.add(category.itemClass);
-            teacherItem.textContent = name;
             teacherItem.dataset.teacher = name;
 
-            teacherItem.addEventListener('click', () => {
+            const nameEl = document.createElement('span');
+            nameEl.className = 'teacher-item-name';
+            nameEl.textContent = name;
+            teacherItem.appendChild(nameEl);
+
+            if (category.deletable) {
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'teacher-item-delete';
+                delBtn.setAttribute('aria-label', `Remove ${name}`);
+                delBtn.setAttribute('data-student-name', name);
+                delBtn.setAttribute('data-roster-kind', category.rosterKey);
+                delBtn.textContent = '\u2212';
+                teacherItem.appendChild(delBtn);
+            }
+
+            teacherItem.addEventListener('click', (e) => {
+                if (e.target.closest('.teacher-item-delete')) {
+                    return;
+                }
                 selectTeacher(name);
             });
 
@@ -420,8 +483,15 @@ async function initTeachers() {
         section.appendChild(sectionItems);
         teacherList.appendChild(section);
     });
-    
-    // Select first teacher by default
+}
+
+// Initialize teachers sidebar
+async function initTeachers() {
+    await loadAllSchedules();
+    initRoster();
+    renderSidebar();
+    setupTeacherListDeleteDelegation();
+
     if (TEACHERS.length > 0) {
         selectTeacher(TEACHERS[0]);
     }
@@ -451,6 +521,165 @@ function selectTeacher(teacherName) {
     // Refresh calendar display
     refreshCalendarDisplay();
     updateSummary();
+}
+
+function removeStudentFromRoster(name, rosterKey) {
+    const kind = String(rosterKey || '').trim();
+    const list = kind === 'private' ? privateStudentsList : speakonStudentsList;
+    let idx = list.indexOf(name);
+    if (idx === -1) {
+        const trimmed = name.trim();
+        idx = list.findIndex((n) => n.trim() === trimmed);
+    }
+    if (idx === -1) {
+        console.warn('removeStudentFromRoster: name not found in roster', { name, rosterKey: kind });
+        return;
+    }
+
+    list.splice(idx, 1);
+    saveRoster();
+
+    const wasCurrent = currentTeacher === name;
+    if (wasCurrent) {
+        currentTeacher = null;
+        slotStates = {};
+    }
+
+    delete teacherSchedules[name];
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+
+    renderSidebar();
+
+    if (wasCurrent) {
+        selectTeacher(TEACHERS[0]);
+    } else {
+        selectTeacher(currentTeacher);
+    }
+}
+
+function setupTeacherListDeleteDelegation() {
+    const teacherList = document.getElementById('teacherList');
+    if (!teacherList || teacherList.dataset.deleteDelegation === '1') {
+        return;
+    }
+    teacherList.dataset.deleteDelegation = '1';
+    teacherList.addEventListener('click', (e) => {
+        const del = e.target.closest('.teacher-item-delete');
+        if (!del || !teacherList.contains(del)) {
+            return;
+        }
+        e.preventDefault();
+        const studentName = del.getAttribute('data-student-name');
+        const rosterKind = del.getAttribute('data-roster-kind');
+        if (studentName != null && rosterKind) {
+            removeStudentFromRoster(studentName, rosterKind);
+        }
+    });
+}
+
+function addStudentFromForm(firstName, lastName, rosterKey) {
+    const first = String(firstName || '').trim();
+    const last = String(lastName || '').trim();
+    const kind = String(rosterKey || '').trim();
+
+    if (!first || !last) {
+        alert('Please enter both first and last name.');
+        return;
+    }
+
+    if (kind !== 'private' && kind !== 'speakon') {
+        alert('Please choose HomeTeachers or SpeakOn.');
+        return;
+    }
+
+    const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
+    const nameTaken = [...TEACHERS, ...privateStudentsList, ...speakonStudentsList].some(
+        (n) => n.trim().toLowerCase() === fullName.toLowerCase()
+    );
+    if (nameTaken) {
+        alert('That name is already in the list.');
+        return;
+    }
+
+    const list = kind === 'private' ? privateStudentsList : speakonStudentsList;
+    list.push(fullName);
+    list.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    if (!teacherSchedules[fullName]) {
+        teacherSchedules[fullName] = {};
+    }
+
+    saveRoster();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+
+    renderSidebar();
+    selectTeacher(currentTeacher || TEACHERS[0]);
+
+    closeAddStudentModal();
+}
+
+function openAddStudentModal() {
+    const modal = document.getElementById('addStudentModal');
+    const firstInput = document.getElementById('addStudentFirst');
+    const lastInput = document.getElementById('addStudentLast');
+    const categorySelect = document.getElementById('addStudentCategory');
+    if (!modal || !firstInput || !lastInput || !categorySelect) {
+        return;
+    }
+
+    firstInput.value = '';
+    lastInput.value = '';
+    categorySelect.selectedIndex = 0;
+
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    firstInput.focus();
+}
+
+function closeAddStudentModal() {
+    const modal = document.getElementById('addStudentModal');
+    if (!modal) {
+        return;
+    }
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function setupAddStudentModal() {
+    const modal = document.getElementById('addStudentModal');
+    const form = document.getElementById('addStudentForm');
+    const openBtn = document.getElementById('addStudentBtn');
+    const cancelBtn = document.getElementById('addStudentCancel');
+    const backdrop = document.getElementById('addStudentModalBackdrop');
+
+    if (!modal || !form || !openBtn) {
+        return;
+    }
+
+    openBtn.addEventListener('click', () => openAddStudentModal());
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => closeAddStudentModal());
+    }
+    if (backdrop) {
+        backdrop.addEventListener('click', () => closeAddStudentModal());
+    }
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const first = document.getElementById('addStudentFirst').value;
+        const last = document.getElementById('addStudentLast').value;
+        const cat = document.getElementById('addStudentCategory').value;
+        addStudentFromForm(first, last, cat);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeAddStudentModal();
+        }
+    });
 }
 
 // Save current schedule to teacherSchedules
@@ -762,8 +991,8 @@ function exportSchedule() {
         unavailable: 'Unavailable',
         navy: 'HomeTeachers',
         cyan: 'HomeTeachers (extra)',
-        magenta: 'SpeakOn Students',
-        salmon: 'SpeakOn Students (extra)',
+        magenta: 'SpeakOn',
+        salmon: 'SpeakOn (extra)',
         special: 'Special Class'
     };
     
@@ -853,8 +1082,8 @@ function exportSchedulePDF() {
         unavailable: 'Unavailable',
         navy: 'HomeTeachers',
         cyan: 'HomeTeachers (extra)',
-        magenta: 'SpeakOn Students',
-        salmon: 'SpeakOn Students (extra)',
+        magenta: 'SpeakOn',
+        salmon: 'SpeakOn (extra)',
         special: 'Special Class'
     };
     
@@ -960,6 +1189,7 @@ function exportSchedulePDF() {
 document.addEventListener('DOMContentLoaded', async () => {
     await initTeachers();
     initCalendar();
+    setupAddStudentModal();
 });
 
 // Save schedules before page unload as a safety backup

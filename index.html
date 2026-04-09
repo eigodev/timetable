@@ -12,7 +12,10 @@
         <!-- Sidebar with Teachers -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>Categories</h2>
+                <div class="sidebar-header-row">
+                    <button type="button" id="addStudentBtn" class="sidebar-add-btn" title="Add student" aria-label="Add student">+</button>
+                    <h2>Categories</h2>
+                </div>
             </div>
             <div class="teacher-list" id="teacherList">
                 <!-- Teachers will be populated by JavaScript -->
@@ -65,11 +68,11 @@
         </div>
         <div class="context-menu-item" data-color="magenta">
             <span class="color-preview" style="background: #ff00ff;"></span>
-            SpeakOn Students
+            SpeakOn
         </div>
         <div class="context-menu-item" data-color="salmon">
             <span class="color-preview" style="background: #fa8072;"></span>
-            SpeakOn Students (extra)
+            SpeakOn (extra)
         </div>
         <div class="context-menu-item" data-color="special">
             <span class="color-preview" style="background: #a79b8e;"></span>
@@ -77,6 +80,36 @@
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-color="clear">Clear</div>
+    </div>
+
+    <!-- Add student modal -->
+    <div id="addStudentModal" class="add-student-modal" aria-hidden="true">
+        <div class="add-student-modal-backdrop" id="addStudentModalBackdrop"></div>
+        <div class="add-student-dialog" role="dialog" aria-labelledby="addStudentModalTitle">
+            <h3 id="addStudentModalTitle" class="add-student-title">Add student</h3>
+            <form id="addStudentForm" class="add-student-form">
+                <label class="add-student-label">
+                    <span>First name</span>
+                    <input type="text" id="addStudentFirst" name="firstName" autocomplete="given-name" required maxlength="80">
+                </label>
+                <label class="add-student-label">
+                    <span>Last name</span>
+                    <input type="text" id="addStudentLast" name="lastName" autocomplete="family-name" required maxlength="80">
+                </label>
+                <label class="add-student-label">
+                    <span>Category</span>
+                    <select id="addStudentCategory" name="category" required>
+                        <option value="" disabled selected>Select category</option>
+                        <option value="private">HomeTeachers</option>
+                        <option value="speakon">SpeakOn</option>
+                    </select>
+                </label>
+                <div class="add-student-actions">
+                    <button type="button" class="btn-add-student-cancel" id="addStudentCancel">Cancel</button>
+                    <button type="submit" class="btn-add-student-submit">Add</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- JavaScript -->
