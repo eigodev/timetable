@@ -81,6 +81,288 @@ body {
     padding: 20px;
 }
 
+.edit-student-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2001;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.edit-student-modal.is-open {
+    display: flex;
+}
+
+/* Class topic editor modal */
+.class-topic-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2002;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.class-topic-modal.is-open {
+    display: flex;
+}
+
+.class-topic-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.class-topic-dialog {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    max-height: min(90vh, 640px);
+    padding: 22px 22px 18px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.class-topic-title {
+    margin: 0 0 8px;
+    font-size: 1.25rem;
+    color: #3f51b5;
+}
+
+.class-topic-subtitle {
+    margin: 0 0 14px;
+    font-size: 0.88rem;
+    color: #666;
+    line-height: 1.35;
+}
+
+.class-topic-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #444;
+}
+
+.class-topic-textarea {
+    width: 100%;
+    min-height: 180px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 12px 14px;
+    border: 1px solid #c5cae9;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    line-height: 1.45;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.class-topic-textarea:focus {
+    outline: none;
+    border-color: #3f51b5;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
+}
+
+.class-topic-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+    flex-shrink: 0;
+}
+
+.btn-class-topic-cancel,
+.btn-class-topic-save {
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+}
+
+.btn-class-topic-cancel {
+    background: #eceff1;
+    color: #37474f;
+}
+
+.btn-class-topic-cancel:hover {
+    background: #dfe3e6;
+}
+
+.btn-class-topic-save {
+    background: #3f51b5;
+    color: white;
+}
+
+.btn-class-topic-save:hover {
+    background: #32408f;
+}
+
+/* Match date column calendar control: 40×34px — icon only */
+.student-class-report-topic-btn {
+    width: 40px;
+    height: 34px;
+    min-width: 40px;
+    min-height: 34px;
+    padding: 0;
+    margin: 0 auto;
+    border: 1px solid #c5cae9;
+    border-radius: 6px;
+    background: #fff;
+    color: #3f51b5;
+    cursor: pointer;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 0;
+    font-family: inherit;
+}
+
+.student-class-report-topic-btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    pointer-events: none;
+}
+
+.student-class-report-topic-btn-icon svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+.student-class-report-topic-btn:hover {
+    background: #e8eaf6;
+    border-color: #9fa8da;
+}
+
+.student-class-report-topic-btn:focus {
+    outline: none;
+    border-color: #3f51b5;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.15);
+}
+
+.student-class-report-topic-btn[data-has-content] {
+    color: #283593;
+    background: #e8eaf6;
+    border-color: #9fa8da;
+}
+
+.edit-student-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.edit-student-dialog {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    padding: 22px 22px 18px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.edit-student-title {
+    margin: 0 0 18px;
+    font-size: 1.25rem;
+    color: #3f51b5;
+}
+
+.edit-student-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.edit-student-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #444;
+}
+
+.edit-student-label input,
+.edit-student-label select {
+    padding: 10px 12px;
+    border: 1px solid #c5cae9;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.edit-student-label input:focus,
+.edit-student-label select:focus {
+    outline: none;
+    border-color: #3f51b5;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
+}
+
+.edit-student-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.btn-edit-student-delete,
+.btn-edit-student-cancel,
+.btn-edit-student-submit {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+}
+
+.btn-edit-student-delete {
+    margin-right: auto;
+    background: #fbe9e7;
+    color: #b71c1c;
+}
+
+.btn-edit-student-delete:hover {
+    background: #ffcdd2;
+}
+
+.btn-edit-student-cancel {
+    background: #eceff1;
+    color: #37474f;
+}
+
+.btn-edit-student-cancel:hover {
+    background: #dfe3e6;
+}
+
+.btn-edit-student-submit {
+    background: #3f51b5;
+    color: white;
+}
+
+.btn-edit-student-submit:hover {
+    background: #32408f;
+}
+
 .add-student-modal.is-open {
     display: flex;
 }
@@ -177,8 +459,12 @@ body {
 .teacher-list {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     overflow-y: auto;
-    padding: 10px 0;
+    padding: 10px 12px;
+    background: #eef0f5;
     /* Hide scrollbar so it doesn’t reserve width and push row content (e.g. toggle buttons) left */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE / legacy Edge */
@@ -188,12 +474,154 @@ body {
     display: none; /* Chrome, Safari, Opera */
 }
 
+.sidebar-pane {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #e3e6ef;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.sidebar-pane-teachers {
+    flex: 0 0 auto;
+}
+
+.sidebar-pane-teachers-inner {
+    display: block;
+}
+
+.sidebar-pane-students {
+    flex: 0 0 auto;
+}
+
+.sidebar-pane-students-inner {
+    display: block;
+}
+
+.sidebar-pane-class-report {
+    flex: 0 0 auto;
+}
+
+.sidebar-pane-class-report-inner {
+    display: block;
+    min-height: 48px;
+    padding: 12px 14px;
+    background: #fff;
+}
+
+.class-report-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.class-report-group-title {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    color: #555;
+}
+
+.class-report-group--private .class-report-group-title {
+    color: #3f51b5;
+}
+
+.class-report-group--speakon .class-report-group-title {
+    color: #d81b60;
+}
+
+.class-report-student-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.82em;
+    color: #444;
+    line-height: 1.45;
+}
+
+.class-report-student-item {
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 0 -4px;
+    padding-left: 4px;
+    padding-right: 4px;
+    transition: background 0.15s ease;
+}
+
+.class-report-student-item:hover {
+    background: #f5f5f5;
+}
+
+.class-report-student-item:focus {
+    outline: none;
+}
+
+.class-report-student-item:focus-visible {
+    outline: 2px solid #3f51b5;
+    outline-offset: 2px;
+}
+
+.class-report-student-item--active {
+    background: #e8eaf6;
+    font-weight: 600;
+}
+
+.class-report-group--speakon .class-report-student-item--active {
+    background: #fce4ec;
+}
+
+.class-report-student-item:last-child {
+    border-bottom: none;
+}
+
+.class-report-empty {
+    margin: 0;
+    font-size: 0.82em;
+    font-style: italic;
+    color: #999;
+}
+
 .sidebar-category {
     border-top: 1px solid #f2f2f2;
 }
 
 .sidebar-category:first-child {
     border-top: none;
+}
+
+.sidebar-category-private .sidebar-category-items {
+    background: #fff;
+}
+
+.sidebar-category-private .sidebar-section-title {
+    background: #f5f8ff;
+}
+
+.sidebar-category-speakon .sidebar-category-items {
+    background: #fff;
+}
+
+.sidebar-category-speakon .sidebar-section-title {
+    background: #fff3f9;
+}
+
+.sidebar-category-no-title .sidebar-category-items {
+    display: block;
+}
+
+.sidebar-section-header {
+    padding: 12px 20px;
+    font-size: 1.05em;
+    font-weight: 700;
+    color: #fff;
+    background: #3f51b5;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    flex-shrink: 0;
 }
 
 .sidebar-section-title {
@@ -246,12 +674,49 @@ body {
     transform: scaleX(1.15);
 }
 
+/* HomeTeachers: chevron button — navy fill + white border/icon (matches delete theme) */
+.sidebar-category-private .sidebar-section-title::after {
+    color: #fff;
+    background: #3f51b5;
+    border: 2px solid #fff;
+}
+
+.sidebar-category-private .sidebar-section-title:hover::after {
+    background: #32408f;
+    border-color: #fff;
+    color: #fff;
+}
+
+/* SpeakOn: chevron button — magenta fill + white border/icon */
+.sidebar-category-speakon .sidebar-section-title::after {
+    color: #fff;
+    background: #d81b60;
+    border: 2px solid #fff;
+}
+
+.sidebar-category-speakon .sidebar-section-title:hover::after {
+    background: #ad1457;
+    border-color: #fff;
+    color: #fff;
+}
+
 .sidebar-category-items {
     display: block;
+    overflow: hidden;
+    max-height: 1000px;
+    opacity: 1;
+    transform: translateY(0);
+    transition: max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease;
+}
+
+.sidebar-category-items.no-animate {
+    transition: none !important;
 }
 
 .sidebar-category.collapsed .sidebar-category-items {
-    display: none;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
 }
 
 .sidebar-category-items .teacher-item {
@@ -271,7 +736,7 @@ body {
     min-width: 0;
 }
 
-.teacher-item-delete {
+.teacher-item-edit {
     flex-shrink: 0;
     width: 24px;
     height: 24px;
@@ -280,41 +745,43 @@ body {
     border-radius: 6px;
     background: #fff;
     color: #3f51b5;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 700;
     line-height: 1;
     cursor: pointer;
+    /* Mirror pencil glyph (Unicode ✎) so it points the other way */
+    transform: scaleX(-1);
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 /* HomeTeachers: light surface, dark navy border/icon — hover inverts */
-.teacher-item.category-private .teacher-item-delete {
+.teacher-item.category-private .teacher-item-edit {
     border-color: #3f51b5;
     color: #3f51b5;
     background: #fff;
 }
 
-.teacher-item.category-private .teacher-item-delete:hover {
+.teacher-item.category-private .teacher-item-edit:hover {
     background: #3f51b5;
     border-color: #e8eaf6;
     color: #fff;
 }
 
 /* SpeakOn: light surface, magenta border/icon — hover inverts */
-.teacher-item.category-speakon .teacher-item-delete {
+.teacher-item.category-speakon .teacher-item-edit {
     border-color: #d81b60;
     color: #d81b60;
     background: #fff;
 }
 
-.teacher-item.category-speakon .teacher-item-delete:hover {
+.teacher-item.category-speakon .teacher-item-edit:hover {
     background: #d81b60;
     border-color: #fce4ec;
     color: #fff;
 }
 
 /* Fallback: same blue swap if delete appears without a category class */
-.teacher-item-delete:hover {
+.teacher-item-edit:hover {
     background: #3f51b5;
     border-color: #e8eaf6;
     color: #fff;
@@ -369,16 +836,356 @@ body {
 /* Main Content */
 .main-content {
     flex: 1;
+    min-width: 0;
     overflow-y: auto;
 }
 
 .container {
     width: 100%;
+    min-width: 0;
     background: white;
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     padding: 30px;
     height: fit-content;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.main-calendar-view[hidden],
+.student-class-report-panel[hidden] {
+    display: none !important;
+}
+
+.student-class-report-panel {
+    width: 100%;
+    min-width: 0;
+}
+
+.student-class-report-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.student-class-report-title {
+    margin: 0;
+    font-size: 1.5em;
+    color: #3f51b5;
+}
+
+.btn-student-class-report-add {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #3f51b5;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.btn-student-class-report-add:hover {
+    background: #32408f;
+}
+
+.student-class-report-table-scroll {
+    overflow-x: hidden;
+    min-width: 0;
+    max-width: 100%;
+    border: 1px solid #e3e6ef;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+.student-class-report-table {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    background: #fff;
+}
+
+.student-class-report-table th {
+    text-align: center;
+    padding: 10px 8px;
+    background: #3f51b5;
+    color: #fff;
+    font-weight: 600;
+    white-space: normal;
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+.student-class-report-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+    min-width: 0;
+}
+
+.student-class-report-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.student-class-report-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #c5cae9;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.student-class-report-input:focus {
+    outline: none;
+    border-color: #3f51b5;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.15);
+}
+
+/* Date: formatted text left, calendar button right; hidden input for native picker */
+.student-class-report-date-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    min-height: 34px;
+    min-width: 0;
+    position: relative;
+}
+
+.student-class-report-date-display {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 34px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 6px 8px;
+    border: 1px solid #c5cae9;
+    border-radius: 6px;
+    text-align: center;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    background: #fff;
+    color: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.student-class-report-date-wrap:focus-within .student-class-report-date-display {
+    border-color: #3f51b5;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.15);
+}
+
+/* Label looks like a button; real <input type="date"> sits on top (opacity 0) so the native picker opens reliably */
+.student-class-report-date-calendar-btn {
+    position: relative;
+    
+    height: 35px;
+    padding: 0;
+
+    flex-shrink: 0;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    color: #3f51b5;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    margin: 0;
+    overflow: hidden;
+}
+
+.student-class-report-date-calendar-btn:hover {
+    background: #e8eaf6;
+    border-color: #9fa8da;
+}
+
+.student-class-report-date-calendar-btn:focus-within {
+    outline: none;
+    border-color: #3f51b5;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.25);
+}
+
+.student-class-report-date-calendar-btn-icon {
+    position: relative;
+    z-index: 0;
+    font-size: 1.15rem;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+}
+
+.student-class-report-date-picker-native {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.student-class-report-table select.student-class-report-input {
+    cursor: pointer;
+    appearance: auto;
+    background-color: #fff;
+    text-align-last: center;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.student-class-report-day-readonly {
+    background: #f3f4f6 !important;
+    color: #555;
+    cursor: default;
+    text-align: center;
+}
+
+/* Column shares (table-layout: fixed, width 100%) — fits main panel without horizontal scroll */
+.student-class-report-table th.column-date,
+.student-class-report-table td.column-date {
+    width: 21.5%;
+    min-width: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.student-class-report-table th.column-time,
+.student-class-report-table td.column-time {
+    width: 12.5%;
+    min-width: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.student-class-report-table th.column-status,
+.student-class-report-table td.column-status {
+    width: 17.5%;
+    min-width: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.student-class-report-table th.column-level,
+.student-class-report-table td.column-level {
+    width: 17.5%;
+    min-width: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.student-class-report-table th.column-unit,
+.student-class-report-table td.column-unit {
+    width: 12.5%;
+    min-width: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+/* Day name (from date); header can wrap */
+.student-class-report-table th.column-day,
+.student-class-report-table td.column-day {
+    width: 15.5%;
+    box-sizing: border-box;
+    white-space: nowrap;
+    vertical-align: middle;
+    text-align: center;
+}
+
+.student-class-report-table th.column-day {
+    line-height: 1.25;
+    white-space: normal;
+}
+
+.student-class-report-table td.column-day .student-class-report-input {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.student-class-report-table td.column-day .student-class-report-day-readonly {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.student-class-report-table th.column-topic,
+.student-class-report-table td.column-topic {
+    width: 7%;
+    min-width: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+    text-align: center;
+}
+
+.student-class-report-table th.column-actions,
+.student-class-report-table td.column-actions {
+    width: 6%;
+    min-width: 0;
+    text-align: center;
+    box-sizing: border-box;
+    vertical-align: middle;
+}
+
+.student-class-report-remove-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    width: 20px;
+    height: 20px;
+
+    border: 1px solid #e57373;
+    border-radius: 6px;
+    background: #c62828;
+    color: #ffffff;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.student-class-report-remove-row:hover {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.student-class-report-hint {
+    margin: 10px 0 0;
+    font-size: 0.88rem;
+    color: #888;
+    font-style: italic;
 }
 
 header {
@@ -735,8 +1542,15 @@ header h1 {
     
     .teacher-list {
         display: flex;
-        overflow-x: auto;
-        flex-wrap: wrap;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    .sidebar-pane {
+        flex: 0 0 auto;
+        width: 100%;
     }
     
     .teacher-item {
