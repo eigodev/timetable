@@ -1,3 +1,7 @@
+/*Fonts */
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Dongle&display=swap");
+
 * {
     margin: 0;
     padding: 0;
@@ -5,34 +9,43 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #1a1a1a;
-    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    height: 100vh;
+    width: 100vw;
     padding: 20px;
+
+    background: #000000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     color: #333;
 }
 
 .app-container {
     display: flex;
     gap: 20px;
-    max-width: 1800px;
-    margin: 0 auto;
-    height: calc(100vh - 40px);
+    
+    height: 100%;
+    width: 100%;
 }
 
 /* Sidebar Styles */
 .sidebar {
-    width: 250px;
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
+    background: white;
+
+    height: 100%;
+    width: 275px;
+
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     overflow: hidden;
 }
 
 .sidebar-header {
-    padding: 16px 18px;
+    padding: 10px 20px;
     background: #3f51b5;
     color: white;
 }
@@ -50,24 +63,23 @@ body {
 }
 
 .sidebar-add-btn {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: 2px solid rgba(255, 255, 255, 0.85);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    font-size: 1.5rem;
-    font-weight: 300;
-    line-height: 1;
+    height: 25px;
+    width: 25px;
+
+    border: none;
+    border-radius: 25%;
+    outline: none;
+
+    font-size: 1.25em;
+    color: #3f51b5;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition: all 0.5s ease;
 }
 
 .sidebar-add-btn:hover {
-    background: rgba(255, 255, 255, 0.28);
-    border-color: white;
+    border: 1px solid #ffffff;
+    background: #3f51b5;
+    color: #ffffff;
 }
 
 /* Add student modal */
@@ -510,6 +522,24 @@ body {
     background: #fff;
 }
 
+.sidebar-pane-finances {
+    flex: 0 0 auto;
+}
+
+.sidebar-pane-finances-inner {
+    display: block;
+    min-height: 48px;
+    padding: 12px 14px;
+    background: #fff;
+}
+
+.finances-placeholder {
+    margin: 0;
+    font-size: 0.82em;
+    font-style: italic;
+    color: #999;
+}
+
 .class-report-lists {
     display: flex;
     flex-direction: column;
@@ -543,13 +573,10 @@ body {
 }
 
 .class-report-student-item {
-    padding: 5px 0;
+    padding: 10px;
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     border-radius: 4px;
-    margin: 0 -4px;
-    padding-left: 4px;
-    padding-right: 4px;
     transition: background 0.15s ease;
 }
 
@@ -615,13 +642,63 @@ body {
 }
 
 .sidebar-section-header {
-    padding: 12px 20px;
-    font-size: 1.05em;
-    font-weight: 700;
+    padding: 5px 15px;
+    font-family: 'Dongle', sans-serif;
+    font-size: 1.25em;
     color: #fff;
     background: #3f51b5;
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
     flex-shrink: 0;
+    cursor: pointer;
+}
+
+.sidebar-section-header--with-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: default;
+}
+
+.sidebar-section-header-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-class-report-download-btn,
+.sidebar-finances-download-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 25px;
+    height: 25px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: #ffffff;
+    color: #3f51b5;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.5s ease;
+}
+
+.sidebar-class-report-download-btn:hover,
+.sidebar-finances-download-btn:hover {
+    background-color: #3f51b5;
+    color: #ffffff;
+}
+
+.sidebar-class-report-download-btn:focus,
+.sidebar-finances-download-btn:focus {
+    outline: none;
+}
+
+.sidebar-class-report-download-btn:focus-visible,
+.sidebar-finances-download-btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
 }
 
 .sidebar-section-title {
@@ -837,17 +914,65 @@ body {
 .main-content {
     flex: 1;
     min-width: 0;
-    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .container {
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+    gap: 20px;
+    align-items: stretch;
+    align-content: start;
     background: white;
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    padding: 30px;
-    height: fit-content;
+    padding: 25px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.container:has(.summary-panel.summary-panel--has-slots:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.container > .calendar-wrapper {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+}
+
+.container > .summary-panel {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    justify-self: stretch;
+    width: 100%;
+    max-width: min(320px, 100%);
+}
+
+.container > .summary-panel.summary-panel--has-slots {
+    justify-self: stretch;
+    width: max-content;
+    max-width: min(320px, 100%);
+}
+
+.container > .student-class-report-panel {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-width: 0;
+}
+
+.container::-webkit-scrollbar {
+    display: none;
 }
 
 .visually-hidden {
@@ -862,7 +987,8 @@ body {
     border: 0;
 }
 
-.main-calendar-view[hidden],
+.calendar-wrapper[hidden],
+.summary-panel[hidden],
 .student-class-report-panel[hidden] {
     display: none !important;
 }
@@ -870,6 +996,39 @@ body {
 .student-class-report-panel {
     width: 100%;
     min-width: 0;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+}
+
+/* Calendar grid + summary are direct children of .container */
+.calendar-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: visible;
+    min-width: 0;
+}
+
+.calendar-sticky-head {
+    flex-shrink: 0;
+    width: 100%;
+    align-self: stretch;
+    margin-bottom: 2px;
+    background: #3f51b5;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.calendar-sticky-head .calendar-grid {
+    margin-bottom: 0;
+}
+
+.calendar-wrapper .time-slots-container {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 0;
 }
 
 .student-class-report-head {
@@ -1295,7 +1454,7 @@ header h1 {
     display: grid;
     grid-template-columns: 88px repeat(7, 1fr);
     gap: 2px;
-    background: #e0e0e0;
+    background: #3f51b5;
     border-radius: 8px;
     overflow: hidden;
     margin-bottom: 2px;
@@ -1308,37 +1467,46 @@ header h1 {
     text-align: center;
     font-weight: bold;
     font-size: 0.85em;
+    min-width: 0;
 }
 
 .day-header {
     background: #3f51b5;
     color: white;
-    padding: 8px;
+    padding: 8px 10px;
     text-align: center;
     font-weight: bold;
     font-size: 0.9em;
+    min-width: 0;
+    width: max-content;
+    max-width: 100%;
+    justify-self: center;
+    box-sizing: border-box;
 }
 
 .time-slots-container {
     display: grid;
     grid-template-columns: 88px repeat(7, 1fr);
     gap: 2px;
+    width: 100%;
     background: #e0e0e0;
-    border-radius: 8px;
+    border-radius: 10px;
     overflow: hidden;
 }
 
 .time-label {
-    background: #f8f9fa;
-    padding: 8px 6px;
-    text-align: center;
-    font-weight: 600;
-    font-size: 0.82em;
-    color: #495057;
-    border-right: 2px solid #dee2e6;
     display: flex;
     align-items: center;
     justify-content: center;
+
+    height: 27.5px;
+
+    padding: 5px;
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.85em;
+    text-align: center;
+    color: #495057;
 }
 
 .time-slot {
@@ -1410,22 +1578,42 @@ header h1 {
 }
 
 .summary-panel {
-    margin-top: 30px;
-    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 0;
+    margin-left: 0;
+    padding: 20px;
     background: #f8f9fa;
     border-radius: 12px;
     border: 2px solid #e9ecef;
-}
-
-.summary-panel h2 {
-    color: #3f51b5;
-    margin-bottom: 20px;
-    font-size: 1.8em;
+    overflow: hidden;
+    box-sizing: border-box;
+    min-width: 0;
 }
 
 .summary-content {
-    max-height: 300px;
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border-radius: 10px;
+    max-height: min(89vh, 720px);
+    overflow-x: hidden;
     overflow-y: auto;
+    overflow-wrap: break-word;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.summary-panel.summary-panel--has-slots .summary-content {
+    width: max-content;
+    max-width: 100%;
+}
+
+.summary-content::-webkit-scrollbar {
+    display: none;
 }
 
 .day-summary {
@@ -1440,6 +1628,36 @@ header h1 {
     color: #495057;
     margin-bottom: 10px;
     font-size: 1.2em;
+}
+
+.day-summary-available {
+    border-left-color: #6b8e23;
+}
+
+.day-summary-available h3 {
+    color: #6b8e23;
+}
+
+.summary-day-block {
+    margin-bottom: 14px;
+}
+
+.summary-day-block:last-child {
+    margin-bottom: 0;
+}
+
+.summary-day-name {
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 0.95em;
+}
+
+.summary-time-line {
+    padding-left: 5px;
+    color: #444;
+    line-height: 1.55;
+    font-size: 0.92em;
 }
 
 .day-summary .hours {
@@ -1504,6 +1722,33 @@ header h1 {
     height: 1px;
     background: #eee;
     margin: 4px 0;
+}
+
+@media (max-width: 1024px) {
+    .container,
+    .container:has(.summary-panel.summary-panel--has-slots:not([hidden])) {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .container > .calendar-wrapper,
+    .container > .summary-panel {
+        grid-column: 1 / -1;
+    }
+
+    .container > .summary-panel.summary-panel--has-slots {
+        justify-self: stretch;
+        width: 100%;
+        max-width: none;
+    }
+
+    .summary-panel.summary-panel--has-slots .summary-content {
+        width: 100%;
+    }
+
+    .summary-content {
+        max-height: min(70vh, 560px);
+    }
 }
 
 @media (max-width: 1200px) {

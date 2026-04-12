@@ -948,17 +948,55 @@ function renderSidebar() {
     const paneClassReport = document.createElement('div');
     paneClassReport.className = 'sidebar-pane sidebar-pane-class-report';
     const classReportHeader = document.createElement('div');
-    classReportHeader.className = 'sidebar-section-header';
-    classReportHeader.textContent = 'Class Report';
+    classReportHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const classReportHeaderTitle = document.createElement('span');
+    classReportHeaderTitle.className = 'sidebar-section-header-label';
+    classReportHeaderTitle.textContent = 'Class Report';
+    const classReportDownloadBtn = document.createElement('button');
+    classReportDownloadBtn.type = 'button';
+    classReportDownloadBtn.className = 'sidebar-class-report-download-btn';
+    classReportDownloadBtn.setAttribute('aria-label', 'Download class report as PDF');
+    classReportDownloadBtn.setAttribute('title', 'Download class report (PDF)');
+    classReportDownloadBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+    classReportHeader.appendChild(classReportHeaderTitle);
+    classReportHeader.appendChild(classReportDownloadBtn);
     const classReportInner = document.createElement('div');
     classReportInner.className = 'sidebar-pane-class-report-inner';
     classReportInner.setAttribute('aria-label', 'Class report content');
     paneClassReport.appendChild(classReportHeader);
     paneClassReport.appendChild(classReportInner);
 
+    const paneFinances = document.createElement('div');
+    paneFinances.className = 'sidebar-pane sidebar-pane-finances';
+    const financesHeader = document.createElement('div');
+    financesHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const financesHeaderTitle = document.createElement('span');
+    financesHeaderTitle.className = 'sidebar-section-header-label';
+    financesHeaderTitle.textContent = 'Finances';
+    const financesDownloadBtn = document.createElement('button');
+    financesDownloadBtn.type = 'button';
+    financesDownloadBtn.className = 'sidebar-finances-download-btn';
+    financesDownloadBtn.setAttribute('aria-label', 'Download finances as PDF');
+    financesDownloadBtn.setAttribute('title', 'Download finances (PDF)');
+    financesDownloadBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+    financesHeader.appendChild(financesHeaderTitle);
+    financesHeader.appendChild(financesDownloadBtn);
+    const financesInner = document.createElement('div');
+    financesInner.className = 'sidebar-pane-finances-inner';
+    financesInner.setAttribute('aria-label', 'Finances');
+    const financesPlaceholder = document.createElement('p');
+    financesPlaceholder.className = 'finances-placeholder';
+    financesPlaceholder.textContent = 'No finance items yet.';
+    financesInner.appendChild(financesPlaceholder);
+    paneFinances.appendChild(financesHeader);
+    paneFinances.appendChild(financesInner);
+
     teacherList.appendChild(paneTeachers);
     teacherList.appendChild(paneStudents);
     teacherList.appendChild(paneClassReport);
+    teacherList.appendChild(paneFinances);
 
     const categories = [
         { title: 'Teachers', names: teachersList, itemClass: 'category-teachers', deletable: false, parent: teachersInner, collapsible: false },
@@ -1027,7 +1065,7 @@ function renderSidebar() {
                 if (e.target.closest('.teacher-item-edit')) {
                     return;
                 }
-                selectTeacher(name);
+                selectTeacher(name, { view: 'calendar' });
             });
 
             sectionItems.appendChild(teacherItem);
@@ -1052,6 +1090,9 @@ function renderSidebar() {
 function populateClassReportStudentLists(container) {
     if (!container) return;
     container.textContent = '';
+
+    const reportPanel = document.getElementById('studentClassReportPanel');
+    const classReportVisible = reportPanel && !reportPanel.hidden;
 
     const wrap = document.createElement('div');
     wrap.className = 'class-report-lists';
@@ -1086,14 +1127,14 @@ function populateClassReportStudentLists(container) {
             li.setAttribute('role', 'button');
             li.tabIndex = 0;
             li.textContent = name;
-            if (currentTeacher === name && isStudentName(name)) {
+            if (classReportVisible && currentTeacher === name && isStudentName(name)) {
                 li.classList.add('class-report-student-item--active');
             }
-            li.addEventListener('click', () => selectTeacher(name));
+            li.addEventListener('click', () => selectTeacher(name, { view: 'classReport' }));
             li.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    selectTeacher(name);
+                    selectTeacher(name, { view: 'classReport' });
                 }
             });
             ul.appendChild(li);
@@ -1165,18 +1206,28 @@ async function initTeachers() {
     }
 }
 
-// Select a teacher and load their schedule
-function selectTeacher(teacherName) {
-    // Save current teacher's schedule before switching
+/**
+ * @param {string} teacherName
+ * @param {{ view?: 'calendar' | 'classReport' }} [opts]
+ */
+function selectTeacher(teacherName, opts) {
     if (currentTeacher) {
         saveTeacherSchedule(currentTeacher);
     }
-    
-    // Update current teacher
+
+    const requested = opts && opts.view;
+    let showClassReport = false;
+    if (requested === 'calendar') {
+        showClassReport = false;
+    } else if (requested === 'classReport') {
+        showClassReport = isStudentName(teacherName);
+    } else {
+        showClassReport = isStudentName(teacherName);
+    }
+
     currentTeacher = teacherName;
-    
-    // Update UI
-    document.querySelectorAll('.teacher-item').forEach(item => {
+
+    document.querySelectorAll('.teacher-item').forEach((item) => {
         item.classList.remove('active');
         if (item.dataset.teacher === teacherName) {
             item.classList.add('active');
@@ -1186,24 +1237,26 @@ function selectTeacher(teacherName) {
     document.querySelectorAll('.class-report-student-item').forEach((li) => {
         li.classList.toggle(
             'class-report-student-item--active',
-            !!teacherName && li.dataset.studentName === teacherName && isStudentName(teacherName)
+            showClassReport && !!teacherName && li.dataset.studentName === teacherName
         );
     });
-    
-    // Load teacher's schedule
+
     loadTeacherSchedule(teacherName);
 
-    const mainCal = document.getElementById('mainCalendarView');
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
 
-    if (isStudentName(teacherName)) {
-        if (mainCal) mainCal.hidden = true;
+    if (showClassReport) {
+        if (calendarWrapper) calendarWrapper.hidden = true;
+        if (summaryPanel) summaryPanel.hidden = true;
         if (reportPanel) {
             reportPanel.hidden = false;
             renderStudentClassReportTable(teacherName);
         }
     } else {
-        if (mainCal) mainCal.hidden = false;
+        if (calendarWrapper) calendarWrapper.hidden = false;
+        if (summaryPanel) summaryPanel.hidden = false;
         if (reportPanel) reportPanel.hidden = true;
         refreshCalendarDisplay();
         updateSummary();
@@ -1698,13 +1751,13 @@ function hideContextMenu() {
 // Update the summary panel - show only Available slots
 function updateSummary() {
     if (!currentTeacher) return;
-    
+
     const summaryContent = document.getElementById('summaryContent');
-    
-    // Only collect available slots
+    const summaryPanel = document.getElementById('summaryPanel');
+
     const availableSlots = {};
-    
-    DAYS.forEach(day => {
+
+    DAYS.forEach((day) => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const state = getSlotState(day, hour);
             if (state === 'available') {
@@ -1715,39 +1768,44 @@ function updateSummary() {
             }
         }
     });
-    
-    // Check if there are any available slots
-    const hasAvailable = Object.values(availableSlots).some(hours => hours.length > 0);
-    
+
+    const hasAvailable = Object.values(availableSlots).some((hours) => hours.length > 0);
+
     if (!hasAvailable) {
-        summaryContent.innerHTML = '<p class="empty-message">No available hours selected yet. Left-click to mark available time slots.</p>';
-        return;
-    }
-    
-    let html = '';
-    
-    // Only show Available section
-    html += '<div class="day-summary" style="border-left-color: #6b8e23;">';
-    html += '<h3 style="color: #6b8e23;">Available</h3>';
-    
-    DAYS.forEach(day => {
-        if (availableSlots[day] && availableSlots[day].length > 0) {
-            html += `<div style="margin-bottom: 8px;"><strong>${day}:</strong> `;
+        summaryContent.innerHTML =
+            '<div class="day-summary day-summary-available">' +
+            '<h3>Available</h3>' +
+            '<p class="empty-message">No available hours selected yet. Left-click to mark available time slots.</p>' +
+            '</div>';
+    } else {
+        let html = '';
+        html += '<div class="day-summary day-summary-available">';
+        html += '<h3>Available</h3>';
+
+        DAYS.forEach((day) => {
+            if (!availableSlots[day] || availableSlots[day].length === 0) return;
             const ranges = groupConsecutiveHours(availableSlots[day]);
-            html += ranges.map(range => {
-                if (range.start === range.end) {
-                    return formatHour(range.start);
-                } else {
-                    return `<strong><em>from</em></strong> ${formatHour(range.start)} <strong><em>to</em></strong> ${formatHour(range.end + 1)}`;
+            const hoursFlat = [];
+            for (const range of ranges) {
+                for (let h = range.start; h <= range.end; h++) {
+                    hoursFlat.push(h);
                 }
-            }).join(', ');
+            }
+            html += '<div class="summary-day-block">';
+            html += `<div class="summary-day-name">${day}:</div>`;
+            for (const h of hoursFlat) {
+                html += `<div class="summary-time-line">\u2014 ${formatHour(h)}</div>`;
+            }
             html += '</div>';
-        }
-    });
-    
-    html += '</div>';
-    
-    summaryContent.innerHTML = html;
+        });
+
+        html += '</div>';
+        summaryContent.innerHTML = html;
+    }
+
+    if (summaryPanel) {
+        summaryPanel.classList.toggle('summary-panel--has-slots', hasAvailable);
+    }
 }
 
 // Group consecutive hours into ranges
