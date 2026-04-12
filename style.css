@@ -1,6 +1,7 @@
 /*Fonts */
 @import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Dongle&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Titan+One&display=swap");
 
 * {
     margin: 0;
@@ -547,9 +548,10 @@ body {
 }
 
 .class-report-group-title {
-    font-size: 0.72em;
+    padding: 10px 0px;
+    border-bottom: 1px solid currentColor;
+    font-size: 0.75em;
     font-weight: 700;
-    letter-spacing: 0.04em;
     text-transform: uppercase;
     margin-bottom: 6px;
     color: #555;
@@ -627,6 +629,7 @@ body {
 
 .sidebar-category-private .sidebar-section-title {
     background: #f5f8ff;
+    color: #3f51b5;
 }
 
 .sidebar-category-speakon .sidebar-category-items {
@@ -635,6 +638,7 @@ body {
 
 .sidebar-category-speakon .sidebar-section-title {
     background: #fff3f9;
+    color: #d81b60;
 }
 
 .sidebar-category-no-title .sidebar-category-items {
@@ -702,20 +706,17 @@ body {
 }
 
 .sidebar-section-title {
-    width: 100%;
-    border: none;
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-    padding: 10px 20px 8px;
-    font-size: 0.78em;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #777;
     display: flex;
     align-items: center;
     justify-content: space-between;
+
+    width: 100%;
+    border: none;
+    padding: 10px 20px 8px;
+    font-family: 'Titan One', cursive;
+    text-align: left;
+    color: #191f41;
+    cursor: pointer;
 }
 
 .sidebar-section-title::after {
@@ -1015,9 +1016,9 @@ body {
     flex-shrink: 0;
     width: 100%;
     align-self: stretch;
-    margin-bottom: 2px;
+    margin-bottom: 15px;
     background: #3f51b5;
-    border-radius: 8px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
@@ -1301,7 +1302,7 @@ body {
 
 .student-class-report-table th.column-topic,
 .student-class-report-table td.column-topic {
-    width: 7%;
+    width: 7.5%;
     min-width: 0;
     box-sizing: border-box;
     vertical-align: middle;
@@ -1310,7 +1311,7 @@ body {
 
 .student-class-report-table th.column-actions,
 .student-class-report-table td.column-actions {
-    width: 6%;
+    width: 5%;
     min-width: 0;
     text-align: center;
     box-sizing: border-box;
@@ -1322,17 +1323,15 @@ body {
     align-items: center;
     justify-content: center;
     
+    height: auto;
     width: 20px;
-    height: 20px;
 
     border: 1px solid #e57373;
-    border-radius: 6px;
+    border-radius: 5px;
     background: #c62828;
     color: #ffffff;
-    font-size: 1.1rem;
-    line-height: 1;
     cursor: pointer;
-    font-family: inherit;
+    transition: all 0.5s ease;
 }
 
 .student-class-report-remove-row:hover {

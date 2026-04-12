@@ -19,21 +19,18 @@ const DEFAULT_PRIVATE_STUDENTS = [
     'Fernanda Penteado',
     'Lorena Albergoni',
     'Lucas Tonholi',
-    'Maiza Camargo',
     'Matheus Santos',
     'Michele Miranda',
     'Rosangela de Paula',
-    'Talita Freire',
     'Vinicios Santos'
 ];
 const DEFAULT_SPEAKON_STUDENTS = [
     'Adelcio Souza',
-    'Alessandra Ramos',
-    'Ana Tereza Candeloro',
+    'Ana Candeloro',
     'Bruna Santos',
+    'Carolina Cecilio',
     'Eliane Marcon',
     'Fernando Yeshua',
-    'Maria Carolina Cecilio',
     'Maria Ribeiro',
     'Marisa Nogueira',
     'Neide de Paula',
