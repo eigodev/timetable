@@ -7,6 +7,47 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const STORAGE_KEY = 'timetable_schedules';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
+const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
+/** When set in sessionStorage, skip auto-login until the next successful manual login (same tab). */
+const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
+const PROFILE_AVATARS_STORAGE_KEY = 'timetable_profile_avatars';
+const SCHOOL_THEME_COLORS = [
+    '#c2185b',
+    '#f57c00',
+    '#fbc02d',
+    '#388e3c',
+    '#009688',
+    '#7b1fa2',
+    '#e91e63',
+    '#ef6c00',
+    '#afb42b',
+    '#26a69a',
+    '#5c6bc0',
+    '#6d4c41',
+    '#d32f2f',
+    '#7cb342',
+    '#9575cd',
+    '#757575',
+    '#e57373',
+    '#43a047',
+    '#42a5f5',
+    '#7986cb',
+    '#616161',
+    '#ef9a9a',
+    '#fdd835',
+    '#66bb6a',
+    '#1e88e5',
+    '#5e35b1',
+    '#bdbdbd'
+];
+const SCHOOL_THEME_PALETTE_GROUPS = [
+    { label: 'Reds & Pinks', colors: ['#c2185b', '#e91e63', '#d32f2f', '#e57373', '#ef9a9a'] },
+    { label: 'Oranges & Yellows', colors: ['#ef6c00', '#f57c00', '#fbc02d', '#fdd835'] },
+    { label: 'Greens & Teals', colors: ['#388e3c', '#43a047', '#7cb342', '#afb42b', '#009688', '#26a69a', '#66bb6a'] },
+    { label: 'Blues & Purples', colors: ['#1e88e5', '#42a5f5', '#5c6bc0', '#7986cb', '#9575cd', '#5e35b1', '#7b1fa2'] },
+    { label: 'Neutrals', colors: ['#6d4c41', '#616161', '#757575', '#bdbdbd'] }
+];
+const SCHOOL_THEME_COLOR_SET = new Set(SCHOOL_THEME_COLORS.map((c) => c.toLowerCase()));
 
 /** @type {Record<string, Array<Record<string, string>>>} */
 let studentClassReportRows = {};
@@ -37,11 +78,52 @@ const DEFAULT_SPEAKON_STUDENTS = [
     'Raquel Guedes',
     'Tamires Busichia'
 ];
+const DEFAULT_PASSPORT_STUDENTS = [];
+const DEFAULT_TEACHER_ACCOUNTS = {
+    'Samuel Öettinger': {
+        email: 'samoettinger_@outlook.com',
+        password: '@Senha847136'
+    }
+};
 
 let teachersList = [];
 let privateStudentsList = [];
 let speakonStudentsList = [];
+let passportStudentsList = [];
+let passportFollowupLinks = {};
+let passportHeaderPageLink = '';
+let studentSchoolByName = {};
+let teacherEmailsByName = {};
+let teacherPasswordsByName = {};
+/** School titles to show in sidebar with no students yet (persisted). */
+let customSchoolsList = [];
+/** Per-school external URLs (spreadsheet etc.), keyed by normalized school title. */
+let schoolExternalLinks = {};
+/** Per-school UI colors (primary/secondary), keyed by normalized school title. */
+let schoolThemeColors = {};
+let addStudentModalMode = 'student';
+let addStudentTargetSchool = '';
 let editStudentEscHandlerBound = false;
+let pendingDeleteSchoolTitle = '';
+let pendingSchoolSettingsTitle = '';
+let schoolSettingsColorTarget = '';
+let schoolSettingsColorPopupHideTimer = null;
+let addSchoolColorTarget = '';
+let addSchoolColorPopupHideTimer = null;
+let calendarToolbarExternalLink = '';
+/** @type {Record<string, { classDay: string, classHour: string, extraDay: string, extraHour: string }>} */
+let speakonStudentWeeklyClass = {};
+let isTeacherLoggedIn = false;
+let loggedInTeacherName = '';
+let classReportCollapsedBySchool = {};
+let sidebarPaneCollapsedState = {
+    teachers: false,
+    schools: false,
+    classReport: false,
+    finances: false
+};
+let profileAvatarsByKey = {};
+let profileAvatarsLoaded = false;
 
 function loadRosterFromStorage() {
     try {
@@ -53,19 +135,631 @@ function loadRosterFromStorage() {
     }
 }
 
+function getThemeByRosterKind(kind) {
+    const k = String(kind || '').trim().toLowerCase();
+    if (k === 'passport') return { primary: '#d32f2f', secondary: '#e57373' };
+    if (k === 'speakon') return { primary: '#c2185b', secondary: '#ef9a9a' };
+    return { primary: '#1e88e5', secondary: '#5c6bc0' };
+}
+
+function normalizeSchoolTheme(theme, schoolTitle = '') {
+    const fallback = getThemeByRosterKind(rosterKindFromSchoolName(schoolTitle));
+    const rawPrimary = String(theme?.primary || '').trim().toLowerCase();
+    const rawSecondary = String(theme?.secondary || '').trim().toLowerCase();
+    const primary = SCHOOL_THEME_COLOR_SET.has(rawPrimary) ? rawPrimary : fallback.primary;
+    let secondary = SCHOOL_THEME_COLOR_SET.has(rawSecondary) ? rawSecondary : fallback.secondary;
+    if (secondary === primary) {
+        secondary = SCHOOL_THEME_COLORS.find((c) => c.toLowerCase() !== primary) || fallback.secondary;
+    }
+    return { primary, secondary };
+}
+
+function hexToRgb(hex) {
+    const normalized = String(hex || '').trim().replace('#', '');
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return { r: 63, g: 81, b: 181 };
+    const int = Number.parseInt(normalized, 16);
+    return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+}
+
+function rgbaFromHex(hex, alpha) {
+    const { r, g, b } = hexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function schoolThemeKey(displayTitle) {
+    return String(displayTitle || '').trim().toLowerCase();
+}
+
+function compactSchoolThemeKey(displayTitle) {
+    return schoolThemeKey(displayTitle).replace(/[^a-z0-9]+/g, '');
+}
+
+function isCustomizedThemeForSchool(theme, schoolTitle) {
+    const normalized = normalizeSchoolTheme(theme, schoolTitle);
+    const fallback = getThemeByRosterKind(rosterKindFromSchoolName(schoolTitle));
+    return normalized.primary !== fallback.primary || normalized.secondary !== fallback.secondary;
+}
+
+function getStoredSchoolThemeByDisplayTitle(displayTitle) {
+    const key = schoolThemeKey(displayTitle);
+    const exact = key ? schoolThemeColors[key] : null;
+    const compact = compactSchoolThemeKey(displayTitle);
+    if (!compact) return exact || null;
+    const compactMatches = Object.keys(schoolThemeColors)
+        .filter((k) => compactSchoolThemeKey(k) === compact)
+        .map((k) => schoolThemeColors[k])
+        .filter(Boolean);
+    if (exact && isCustomizedThemeForSchool(exact, displayTitle)) {
+        return exact;
+    }
+    const customizedCompact = compactMatches.find((theme) => isCustomizedThemeForSchool(theme, displayTitle));
+    if (customizedCompact) return customizedCompact;
+    return exact || compactMatches[0] || null;
+}
+
+function getSchoolTheme(displayTitle) {
+    const stored = getStoredSchoolThemeByDisplayTitle(displayTitle);
+    return normalizeSchoolTheme(stored, displayTitle);
+}
+
+function applySchoolThemeCssVars(el, displayTitle) {
+    if (!el) return;
+    const theme = getSchoolTheme(displayTitle);
+    el.style.setProperty('--school-primary', theme.primary);
+    el.style.setProperty('--school-secondary', theme.secondary);
+    el.style.setProperty('--school-primary-soft', rgbaFromHex(theme.primary, 0.12));
+    el.style.setProperty('--school-secondary-soft', rgbaFromHex(theme.secondary, 0.18));
+    el.style.setProperty('--school-primary-border', rgbaFromHex(theme.primary, 0.3));
+    el.style.setProperty('--school-primary-hover', rgbaFromHex(theme.primary, 0.2));
+}
+
+function applyColorSelectPreview(selectEl) {
+    if (!selectEl) return;
+    const color = String(selectEl.value || '').trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+    selectEl.style.setProperty('--theme-select-color', color);
+}
+
+function initColorThemeSelect(selectEl) {
+    if (!selectEl) return;
+    if (selectEl.dataset.themePreviewBound !== '1') {
+        selectEl.dataset.themePreviewBound = '1';
+        selectEl.classList.add('color-theme-select');
+        selectEl.addEventListener('change', () => applyColorSelectPreview(selectEl));
+    }
+    applyColorSelectPreview(selectEl);
+}
+
+function renderSchoolSettingsThemeSquares() {
+    const primaryInput = document.getElementById('schoolSettingsPrimaryColor');
+    const secondaryInput = document.getElementById('schoolSettingsSecondaryColor');
+    const primarySquare = document.querySelector('.school-settings-theme-square--primary');
+    const secondarySquare = document.querySelector('.school-settings-theme-square--secondary');
+    const primary = String(primaryInput?.value || '').trim().toLowerCase();
+    const secondary = String(secondaryInput?.value || '').trim().toLowerCase();
+    if (primarySquare && /^#[0-9a-f]{6}$/i.test(primary)) {
+        primarySquare.style.background = primary;
+    }
+    if (secondarySquare && /^#[0-9a-f]{6}$/i.test(secondary)) {
+        secondarySquare.style.background = secondary;
+    }
+}
+
+function closeSchoolSettingsColorPopup() {
+    const popup = document.getElementById('schoolSettingsColorPopup');
+    if (!popup) return;
+    popup.classList.remove('is-open');
+    popup.setAttribute('aria-hidden', 'true');
+    if (schoolSettingsColorPopupHideTimer) {
+        clearTimeout(schoolSettingsColorPopupHideTimer);
+        schoolSettingsColorPopupHideTimer = null;
+    }
+    schoolSettingsColorPopupHideTimer = window.setTimeout(() => {
+        popup.hidden = true;
+        schoolSettingsColorPopupHideTimer = null;
+    }, 200);
+    schoolSettingsColorTarget = '';
+}
+
+function openSchoolSettingsColorPopup(target, anchorEl) {
+    const popup = document.getElementById('schoolSettingsColorPopup');
+    const options = document.getElementById('schoolSettingsColorPopupOptions');
+    const primaryInput = document.getElementById('schoolSettingsPrimaryColor');
+    const secondaryInput = document.getElementById('schoolSettingsSecondaryColor');
+    const dialog = document.querySelector('.school-settings-dialog');
+    if (!popup || !options || !anchorEl || !dialog || !primaryInput || !secondaryInput) return;
+    schoolSettingsColorTarget = target === 'secondary' ? 'secondary' : 'primary';
+    options.innerHTML = '';
+    SCHOOL_THEME_PALETTE_GROUPS.forEach((group) => {
+        const section = document.createElement('div');
+        section.className = 'school-settings-color-popup-group';
+        const title = document.createElement('p');
+        title.className = 'school-settings-color-popup-group-title';
+        title.textContent = String(group.label || '').trim();
+        section.appendChild(title);
+        const grid = document.createElement('div');
+        grid.className = 'school-settings-color-popup-group-options';
+        (group.colors || []).forEach((hex) => {
+            const color = String(hex || '').trim().toLowerCase();
+            if (!SCHOOL_THEME_COLOR_SET.has(color)) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'school-settings-color-popup-option';
+            btn.style.setProperty('--swatch', color);
+            btn.setAttribute('aria-label', color);
+            btn.title = color.toUpperCase();
+            btn.addEventListener('click', () => {
+                if (schoolSettingsColorTarget === 'secondary') {
+                    secondaryInput.value = color;
+                } else {
+                    primaryInput.value = color;
+                }
+                renderSchoolSettingsThemeSquares();
+                closeSchoolSettingsColorPopup();
+            });
+            grid.appendChild(btn);
+        });
+        section.appendChild(grid);
+        options.appendChild(section);
+    });
+
+    const dialogRect = dialog.getBoundingClientRect();
+    const anchorRect = anchorEl.getBoundingClientRect();
+    popup.hidden = false;
+    if (schoolSettingsColorPopupHideTimer) {
+        clearTimeout(schoolSettingsColorPopupHideTimer);
+        schoolSettingsColorPopupHideTimer = null;
+    }
+    options.style.maxHeight = '220px';
+    // Measure after un-hiding so coordinates follow actual popup size.
+    const popupWidth = popup.offsetWidth || 220;
+    const popupHeight = popup.offsetHeight || 220;
+    const horizontalPad = 10;
+    const verticalPad = 10;
+    const anchorLeft = anchorRect.left - dialogRect.left;
+    let left = anchorLeft - 4;
+    left = Math.max(horizontalPad, Math.min(left, dialogRect.width - popupWidth - horizontalPad));
+    const anchorBottom = anchorRect.bottom - dialogRect.top;
+    const anchorTop = anchorRect.top - dialogRect.top;
+    const availableBelow = Math.max(0, dialogRect.height - anchorBottom - verticalPad - 8);
+    const availableAbove = Math.max(0, anchorTop - verticalPad - 8);
+    const minPopupHeight = 140;
+    let top = anchorBottom + 8;
+
+    if (availableBelow < minPopupHeight && availableAbove > availableBelow) {
+        top = Math.max(verticalPad, anchorTop - popupHeight - 8);
+    } else {
+        const targetHeight = Math.max(minPopupHeight, Math.min(availableBelow, 260));
+        options.style.maxHeight = `${Math.round(targetHeight)}px`;
+    }
+
+    top = Math.max(verticalPad, Math.min(top, dialogRect.height - popupHeight - verticalPad));
+    popup.style.left = `${Math.round(left)}px`;
+    popup.style.top = `${Math.round(top)}px`;
+    requestAnimationFrame(() => popup.classList.add('is-open'));
+    popup.setAttribute('aria-hidden', 'false');
+}
+
+function renderAddSchoolThemeSquares() {
+    const primaryInput = document.getElementById('addSchoolPrimaryColor');
+    const secondaryInput = document.getElementById('addSchoolSecondaryColor');
+    const primarySquare = document.querySelector('.add-school-theme-square--primary');
+    const secondarySquare = document.querySelector('.add-school-theme-square--secondary');
+    const primary = String(primaryInput?.value || '').trim().toLowerCase();
+    const secondary = String(secondaryInput?.value || '').trim().toLowerCase();
+    if (primarySquare && /^#[0-9a-f]{6}$/i.test(primary)) {
+        primarySquare.style.background = primary;
+    }
+    if (secondarySquare && /^#[0-9a-f]{6}$/i.test(secondary)) {
+        secondarySquare.style.background = secondary;
+    }
+}
+
+function closeAddSchoolColorPopup() {
+    const popup = document.getElementById('addSchoolColorPopup');
+    if (!popup) return;
+    popup.classList.remove('is-open');
+    popup.setAttribute('aria-hidden', 'true');
+    if (addSchoolColorPopupHideTimer) {
+        clearTimeout(addSchoolColorPopupHideTimer);
+        addSchoolColorPopupHideTimer = null;
+    }
+    addSchoolColorPopupHideTimer = window.setTimeout(() => {
+        popup.hidden = true;
+        addSchoolColorPopupHideTimer = null;
+    }, 200);
+    addSchoolColorTarget = '';
+}
+
+function openAddSchoolColorPopup(target, anchorEl) {
+    const popup = document.getElementById('addSchoolColorPopup');
+    const options = document.getElementById('addSchoolColorPopupOptions');
+    const primaryInput = document.getElementById('addSchoolPrimaryColor');
+    const secondaryInput = document.getElementById('addSchoolSecondaryColor');
+    const dialog = document.querySelector('.add-student-dialog');
+    if (!popup || !options || !anchorEl || !dialog || !primaryInput || !secondaryInput) return;
+    addSchoolColorTarget = target === 'secondary' ? 'secondary' : 'primary';
+    options.innerHTML = '';
+    SCHOOL_THEME_PALETTE_GROUPS.forEach((group) => {
+        const section = document.createElement('div');
+        section.className = 'school-settings-color-popup-group';
+        const title = document.createElement('p');
+        title.className = 'school-settings-color-popup-group-title';
+        title.textContent = String(group.label || '').trim();
+        section.appendChild(title);
+        const grid = document.createElement('div');
+        grid.className = 'school-settings-color-popup-group-options';
+        (group.colors || []).forEach((hex) => {
+            const color = String(hex || '').trim().toLowerCase();
+            if (!SCHOOL_THEME_COLOR_SET.has(color)) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'school-settings-color-popup-option';
+            btn.style.setProperty('--swatch', color);
+            btn.setAttribute('aria-label', color);
+            btn.title = color.toUpperCase();
+            btn.addEventListener('click', () => {
+                if (addSchoolColorTarget === 'secondary') {
+                    secondaryInput.value = color;
+                } else {
+                    primaryInput.value = color;
+                }
+                renderAddSchoolThemeSquares();
+                closeAddSchoolColorPopup();
+            });
+            grid.appendChild(btn);
+        });
+        section.appendChild(grid);
+        options.appendChild(section);
+    });
+
+    const dialogRect = dialog.getBoundingClientRect();
+    const anchorRect = anchorEl.getBoundingClientRect();
+    popup.hidden = false;
+    if (addSchoolColorPopupHideTimer) {
+        clearTimeout(addSchoolColorPopupHideTimer);
+        addSchoolColorPopupHideTimer = null;
+    }
+    options.style.maxHeight = '220px';
+    const popupWidth = popup.offsetWidth || 220;
+    const popupHeight = popup.offsetHeight || 220;
+    const horizontalPad = 10;
+    const verticalPad = 10;
+    const anchorLeft = anchorRect.left - dialogRect.left;
+    let left = anchorLeft - 4;
+    left = Math.max(horizontalPad, Math.min(left, dialogRect.width - popupWidth - horizontalPad));
+    const anchorBottom = anchorRect.bottom - dialogRect.top;
+    const anchorTop = anchorRect.top - dialogRect.top;
+    const availableBelow = Math.max(0, dialogRect.height - anchorBottom - verticalPad - 8);
+    const availableAbove = Math.max(0, anchorTop - verticalPad - 8);
+    const minPopupHeight = 140;
+    let top = anchorBottom + 8;
+
+    if (availableBelow < minPopupHeight && availableAbove > availableBelow) {
+        top = Math.max(verticalPad, anchorTop - popupHeight - 8);
+    } else {
+        const targetHeight = Math.max(minPopupHeight, Math.min(availableBelow, 260));
+        options.style.maxHeight = `${Math.round(targetHeight)}px`;
+    }
+
+    top = Math.max(verticalPad, Math.min(top, dialogRect.height - popupHeight - verticalPad));
+    popup.style.left = `${Math.round(left)}px`;
+    popup.style.top = `${Math.round(top)}px`;
+    requestAnimationFrame(() => popup.classList.add('is-open'));
+    popup.setAttribute('aria-hidden', 'false');
+}
+
+function loadSavedLoginCredentials() {
+    try {
+        const raw = localStorage.getItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return {
+            email: String(parsed.email || '').trim(),
+            password: String(parsed.password || '')
+        };
+    } catch {
+        return null;
+    }
+}
+
+function saveLoginCredentials(email, password) {
+    try {
+        localStorage.setItem(
+            LOGIN_CREDENTIALS_STORAGE_KEY,
+            JSON.stringify({
+                email: String(email || '').trim(),
+                password: String(password || '')
+            })
+        );
+    } catch (error) {
+        console.error('Error saving login credentials to localStorage:', error);
+    }
+}
+
+function clearSavedLoginCredentials() {
+    try {
+        localStorage.removeItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+    } catch (error) {
+        console.error('Error clearing saved login credentials from localStorage:', error);
+    }
+}
+
+/**
+ * If the user previously chose to save credentials, validate them against the roster
+ * and restore an authenticated teacher session (same rules as the login form).
+ * @returns {string|null} teacher name when session was restored, otherwise null
+ */
+function tryRestoreTeacherSessionFromSavedCredentials() {
+    try {
+        if (sessionStorage.getItem(LOGIN_SESSION_SUPPRESS_KEY) === '1') return null;
+    } catch {
+        /* sessionStorage may be unavailable in some environments */
+    }
+    const saved = loadSavedLoginCredentials();
+    if (!saved) return null;
+    const email = String(saved.email || '').trim().toLowerCase();
+    const password = String(saved.password || '').trim();
+    if (!email || !password || password.length < 8) return null;
+
+    const teacherNameByEmail = teachersList.find((name) => {
+        const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
+        return teacherEmail && teacherEmail === email;
+    });
+    if (!teacherNameByEmail) return null;
+
+    const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
+    if (!expectedPassword || password !== expectedPassword) return null;
+
+    isTeacherLoggedIn = true;
+    loggedInTeacherName = teacherNameByEmail;
+    return teacherNameByEmail;
+}
+
+function isTeacherSelectionAllowed(name) {
+    const requested = String(name || '').trim();
+    if (!requested) return false;
+    if (!isTeacherLoggedIn) return false;
+    if (!loggedInTeacherName) return true;
+    return requested.toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase();
+}
+
+function getActiveTeacherProfileName() {
+    if (!isTeacherLoggedIn) return '';
+    const logged = String(loggedInTeacherName || '').trim();
+    if (logged) return logged;
+    const current = String(currentTeacher || '').trim();
+    if (current && isActiveTeacherName(current)) return current;
+    return String(teachersList[0] || '').trim();
+}
+
+function getCurrentProfileKey() {
+    const name = isTeacherLoggedIn ? getActiveTeacherProfileName() : 'guest';
+    return name.toLowerCase();
+}
+
+function loadProfileAvatars() {
+    try {
+        const raw = localStorage.getItem(PROFILE_AVATARS_STORAGE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function saveProfileAvatars(avatars) {
+    try {
+        localStorage.setItem(PROFILE_AVATARS_STORAGE_KEY, JSON.stringify(avatars || {}));
+        return true;
+    } catch (error) {
+        console.error('Error saving profile avatars to localStorage:', error);
+        return false;
+    }
+}
+
+function getProfileAvatarDataUrl(profileKey) {
+    if (!profileAvatarsLoaded) {
+        profileAvatarsByKey = loadProfileAvatars();
+        profileAvatarsLoaded = true;
+    }
+    return String(profileAvatarsByKey[String(profileKey || '').toLowerCase()] || '');
+}
+
+function setProfileAvatarDataUrl(profileKey, dataUrl) {
+    const key = String(profileKey || '').toLowerCase();
+    if (!key) return;
+    if (!profileAvatarsLoaded) {
+        profileAvatarsByKey = loadProfileAvatars();
+        profileAvatarsLoaded = true;
+    }
+    profileAvatarsByKey[key] = String(dataUrl || '');
+    const persisted = saveProfileAvatars(profileAvatarsByKey);
+    if (!persisted) {
+        showAppMessage('Profile picture previewed, but could not be saved permanently (storage limit).');
+    }
+}
+
 function initRoster() {
     const saved = loadRosterFromStorage();
     if (!saved) {
         teachersList = [...DEFAULT_TEACHERS];
         privateStudentsList = [...DEFAULT_PRIVATE_STUDENTS];
         speakonStudentsList = [...DEFAULT_SPEAKON_STUDENTS];
+        passportStudentsList = [...DEFAULT_PASSPORT_STUDENTS];
+        passportFollowupLinks = {};
+        passportHeaderPageLink = '';
+        studentSchoolByName = {};
+        privateStudentsList.forEach((name) => { studentSchoolByName[name] = 'HomeTeachers'; });
+        speakonStudentsList.forEach((name) => { studentSchoolByName[name] = 'SpeakOn'; });
+        passportStudentsList.forEach((name) => { studentSchoolByName[name] = 'Passport'; });
+        teacherEmailsByName = {};
+        teacherPasswordsByName = {};
+        customSchoolsList = [];
+        schoolExternalLinks = {};
+        schoolThemeColors = {};
+        calendarToolbarExternalLink = '';
+        const changedDefaults = applyDefaultTeacherAccounts();
+        if (changedDefaults) saveRoster();
+        speakonStudentWeeklyClass = {};
         loadStudentClassReportRows();
         return;
     }
     teachersList = Array.isArray(saved.teachers) && saved.teachers.length > 0 ? [...saved.teachers] : [...DEFAULT_TEACHERS];
     privateStudentsList = Array.isArray(saved.private) ? [...saved.private] : [...DEFAULT_PRIVATE_STUDENTS];
     speakonStudentsList = Array.isArray(saved.speakon) ? [...saved.speakon] : [...DEFAULT_SPEAKON_STUDENTS];
+    passportStudentsList = Array.isArray(saved.passport) ? [...saved.passport] : [...DEFAULT_PASSPORT_STUDENTS];
+    passportFollowupLinks =
+        saved.passportLinks && typeof saved.passportLinks === 'object' && !Array.isArray(saved.passportLinks)
+            ? { ...saved.passportLinks }
+            : {};
+    passportHeaderPageLink = String(saved.passportHeaderPageLink || '').trim();
+    const fromStorage =
+        saved.studentSchools && typeof saved.studentSchools === 'object' && !Array.isArray(saved.studentSchools)
+            ? { ...saved.studentSchools }
+            : {};
+    studentSchoolByName = {};
+    privateStudentsList.forEach((name) => {
+        studentSchoolByName[name] = String(fromStorage[name] || 'HomeTeachers').trim() || 'HomeTeachers';
+    });
+    speakonStudentsList.forEach((name) => {
+        studentSchoolByName[name] = String(fromStorage[name] || 'SpeakOn').trim() || 'SpeakOn';
+    });
+    passportStudentsList.forEach((name) => {
+        studentSchoolByName[name] = String(fromStorage[name] || 'Passport').trim() || 'Passport';
+    });
+    const emailsRaw =
+        saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
+            ? { ...saved.teacherEmails }
+            : {};
+    teacherEmailsByName = {};
+    teachersList.forEach((name) => {
+        const e = String(emailsRaw[name] || '').trim();
+        if (e) teacherEmailsByName[name] = e;
+    });
+    const passwordsRaw =
+        saved.teacherPasswords && typeof saved.teacherPasswords === 'object' && !Array.isArray(saved.teacherPasswords)
+            ? { ...saved.teacherPasswords }
+            : {};
+    teacherPasswordsByName = {};
+    teachersList.forEach((name) => {
+        const p = String(passwordsRaw[name] || '');
+        if (p) teacherPasswordsByName[name] = p;
+    });
+    customSchoolsList = Array.isArray(saved.customSchools)
+        ? [...new Set(saved.customSchools.map((s) => String(s || '').trim()).filter(Boolean))]
+        : [];
+    customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const linksRaw =
+        saved.schoolExternalLinks && typeof saved.schoolExternalLinks === 'object' && !Array.isArray(saved.schoolExternalLinks)
+            ? saved.schoolExternalLinks
+            : {};
+    schoolExternalLinks = {};
+    Object.keys(linksRaw).forEach((key) => {
+        const k = String(key || '').trim().toLowerCase();
+        if (!k) return;
+        schoolExternalLinks[k] = String(linksRaw[key] || '').trim();
+    });
+    const themesRaw =
+        saved.schoolThemeColors && typeof saved.schoolThemeColors === 'object' && !Array.isArray(saved.schoolThemeColors)
+            ? saved.schoolThemeColors
+            : {};
+    schoolThemeColors = {};
+    Object.keys(themesRaw).forEach((key) => {
+        const k = String(key || '').trim().toLowerCase();
+        if (!k) return;
+        schoolThemeColors[k] = normalizeSchoolTheme(themesRaw[key] || {}, key);
+    });
+    calendarToolbarExternalLink = String(saved.calendarToolbarExternalLink || '').trim();
+    const swcRaw =
+        saved.speakonWeeklyClass && typeof saved.speakonWeeklyClass === 'object' && !Array.isArray(saved.speakonWeeklyClass)
+            ? saved.speakonWeeklyClass
+            : {};
+    speakonStudentWeeklyClass = {};
+    Object.keys(swcRaw).forEach((k) => {
+        const v = swcRaw[k];
+        if (!v || typeof v !== 'object') return;
+        const nameKey = String(k || '').trim();
+        if (!nameKey) return;
+        speakonStudentWeeklyClass[nameKey] = {
+            classDay: String(v.classDay || '').trim(),
+            classHour: String(v.classHour ?? '').trim(),
+            extraDay: String(v.extraDay || '').trim(),
+            extraHour: String(v.extraHour ?? '').trim()
+        };
+    });
+    const changedDefaults = applyDefaultTeacherAccounts();
+    if (changedDefaults) saveRoster();
+    normalizeCustomSchoolsList();
     loadStudentClassReportRows();
+}
+
+function applyDefaultTeacherAccounts() {
+    let changed = false;
+    teachersList.forEach((name) => {
+        const defaults = DEFAULT_TEACHER_ACCOUNTS[name];
+        if (!defaults) return;
+        const currentEmail = String(teacherEmailsByName[name] || '').trim();
+        const currentPassword = String(teacherPasswordsByName[name] || '');
+        if (!currentEmail) {
+            teacherEmailsByName[name] = defaults.email;
+            changed = true;
+        }
+        if (!currentPassword) {
+            teacherPasswordsByName[name] = defaults.password;
+            changed = true;
+        }
+    });
+    return changed;
+}
+
+function normalizeCustomSchoolsList() {
+    const keys = new Set();
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        keys.add((getStudentSchoolName(name) || '').trim().toLowerCase());
+    });
+    customSchoolsList = customSchoolsList.filter((s) => {
+        const k = String(s || '').trim().toLowerCase();
+        return k && !keys.has(k);
+    });
+}
+
+function getAvailableSchoolNames() {
+    const schools = new Set();
+    Object.keys(studentSchoolByName).forEach((studentName) => {
+        const school = String(studentSchoolByName[studentName] || '').trim();
+        if (school) schools.add(school);
+    });
+    customSchoolsList.forEach((school) => {
+        const s = String(school || '').trim();
+        if (s) schools.add(s);
+    });
+    return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function refreshAddStudentSchoolSelect(selectedSchool = '') {
+    const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    if (!schoolSelect) return;
+    const selected = String(selectedSchool || '').trim();
+    const options = getAvailableSchoolNames();
+    schoolSelect.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a school';
+    placeholder.disabled = true;
+    placeholder.hidden = true;
+    schoolSelect.appendChild(placeholder);
+    options.forEach((school) => {
+        const option = document.createElement('option');
+        option.value = school;
+        option.textContent = school;
+        schoolSelect.appendChild(option);
+    });
+    const hasSelected = options.includes(selected);
+    schoolSelect.value = hasSelected ? selected : '';
+    placeholder.selected = !hasSelected;
 }
 
 function loadStudentClassReportRows() {
@@ -92,8 +786,699 @@ function isStudentName(name) {
     if (!n) return false;
     return (
         privateStudentsList.some((x) => x.trim().toLowerCase() === n) ||
-        speakonStudentsList.some((x) => x.trim().toLowerCase() === n)
+        speakonStudentsList.some((x) => x.trim().toLowerCase() === n) ||
+        passportStudentsList.some((x) => x.trim().toLowerCase() === n)
     );
+}
+
+function getStudentSchoolName(name) {
+    const key = String(name || '').trim();
+    if (!key) return '';
+    const stored = String(studentSchoolByName[key] || '').trim();
+    if (stored) return stored;
+    const n = key.toLowerCase();
+    if (privateStudentsList.some((x) => x.trim().toLowerCase() === n)) return 'HomeTeachers';
+    if (speakonStudentsList.some((x) => x.trim().toLowerCase() === n)) return 'SpeakOn';
+    if (passportStudentsList.some((x) => x.trim().toLowerCase() === n)) return 'Passport';
+    return '';
+}
+
+function rosterKindFromSchoolName(schoolName) {
+    const s = String(schoolName || '').trim().toLowerCase();
+    if (!s) return '';
+    if (s.includes('passport')) return 'passport';
+    if (s.includes('speakon')) return 'speakon';
+    return 'private';
+}
+
+function schoolLinkKey(displayTitle) {
+    return String(displayTitle || '').trim().toLowerCase();
+}
+
+function getSchoolExternalLinkUrl(displayTitle) {
+    const k = schoolLinkKey(displayTitle);
+    if (!k) return '';
+    return String(schoolExternalLinks[k] || '').trim();
+}
+
+function schoolSectionUsesPassportStyleHeader(displayTitle) {
+    return !!getSchoolSpreadsheetUrl(displayTitle);
+}
+
+function getSchoolSpreadsheetUrl(displayTitle) {
+    const per = getSchoolExternalLinkUrl(displayTitle);
+    if (per) return per;
+    if (rosterKindFromSchoolName(displayTitle) === 'passport') {
+        return String(passportHeaderPageLink || '').trim();
+    }
+    return '';
+}
+
+function parseHttpUrlInput(value) {
+    const next = String(value || '').trim();
+    if (!next) return { error: 'empty' };
+    try {
+        const parsed = new URL(next);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+            return { error: 'protocol' };
+        }
+        return { url: next };
+    } catch {
+        return { error: 'invalid' };
+    }
+}
+
+function getStudentRosterKind(name) {
+    return rosterKindFromSchoolName(getStudentSchoolName(name));
+}
+
+function isSpeakOnStudentName(name) {
+    return isStudentName(name) && getStudentRosterKind(name) === 'speakon';
+}
+
+/** Match roster name to key in speakonStudentWeeklyClass (handles case / stray spacing in saved JSON). */
+function getSpeakonWeeklyClassStorageKey(studentName) {
+    const want = String(studentName || '').trim().toLowerCase();
+    if (!want) return '';
+    const exact = String(studentName || '').trim();
+    if (speakonStudentWeeklyClass[exact] != null) {
+        return exact;
+    }
+    const found = Object.keys(speakonStudentWeeklyClass).find((k) => String(k || '').trim().toLowerCase() === want);
+    return found || '';
+}
+
+function getSpeakonWeeklyClassEntry(studentName) {
+    const key = getSpeakonWeeklyClassStorageKey(studentName);
+    const raw = key ? speakonStudentWeeklyClass[key] : null;
+    if (!raw || typeof raw !== 'object') {
+        return { classDay: '', classHour: '', extraDay: '', extraHour: '' };
+    }
+    return {
+        classDay: String(raw.classDay || '').trim(),
+        classHour: String(raw.classHour ?? '').trim(),
+        extraDay: String(raw.extraDay || '').trim(),
+        extraHour: String(raw.extraHour ?? '').trim()
+    };
+}
+
+function fillSpeakOnDaySelect(selectEl) {
+    if (!selectEl) return;
+    const prev = selectEl.value;
+    selectEl.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '— None —';
+    selectEl.appendChild(none);
+    DAYS.forEach((d) => {
+        const o = document.createElement('option');
+        o.value = d;
+        o.textContent = d;
+        selectEl.appendChild(o);
+    });
+    if (prev && [...selectEl.options].some((opt) => opt.value === prev)) {
+        selectEl.value = prev;
+    }
+}
+
+function fillSpeakOnHourSelect(selectEl) {
+    if (!selectEl) return;
+    const prev = selectEl.value;
+    selectEl.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '— None —';
+    selectEl.appendChild(none);
+    for (let h = START_HOUR; h < END_HOUR; h++) {
+        const o = document.createElement('option');
+        o.value = String(h);
+        o.textContent = formatHour(h);
+        selectEl.appendChild(o);
+    }
+    if (prev && [...selectEl.options].some((opt) => opt.value === prev)) {
+        selectEl.value = prev;
+    }
+}
+
+/**
+ * SpeakOn class/extra slots come only from weekly picks; strip old overlay states then apply.
+ * @param {Record<string, string | null | undefined>} sched
+ * @param {string} studentName
+ */
+function mergeSpeakonWeeklyClassIntoScheduleCopy(sched, studentName) {
+    if (!isSpeakOnStudentName(studentName)) {
+        return { ...sched };
+    }
+    const c = getSpeakonWeeklyClassEntry(studentName);
+    const hasCfg =
+        (c.classDay && String(c.classHour || '').trim() !== '') ||
+        (c.extraDay && String(c.extraHour || '').trim() !== '');
+    if (!hasCfg) {
+        return { ...sched };
+    }
+    const out = { ...sched };
+    const states = getStudentOverlayStates(studentName);
+    Object.keys(out).forEach((k) => {
+        const val = String(out[k] || '').trim().toLowerCase();
+        if (val === states.classState || val === states.extraState || val === 'magenta' || val === 'salmon') {
+            delete out[k];
+        }
+    });
+    const ch = Number.parseInt(String(c.classHour || ''), 10);
+    const eh = Number.parseInt(String(c.extraHour || ''), 10);
+    if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
+        out[`${c.classDay}-${ch}`] = states.classState;
+    }
+    if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
+        out[`${c.extraDay}-${eh}`] = states.extraState;
+    }
+    return out;
+}
+
+function stripSpeakonColorsFromScheduleCopy(sched) {
+    const out = { ...sched };
+    Object.keys(out).forEach((k) => {
+        const v = String(out[k] || '').trim().toLowerCase();
+        if (v === 'magenta' || v === 'salmon' || parseSchoolStateToken(v) || isLegacyOverlayState(v)) {
+            delete out[k];
+        }
+    });
+    return out;
+}
+
+function isActiveTeacherName(name) {
+    const n = String(name || '').trim().toLowerCase();
+    if (!n) return false;
+    return teachersList.some((t) => String(t || '').trim().toLowerCase() === n);
+}
+
+function makeSchoolStateToken(schoolTitle, variant) {
+    const key = schoolThemeKey(schoolTitle) || schoolThemeKey('HomeTeachers');
+    const kind = variant === 'extra' ? 'extra' : 'class';
+    return `school::${key}::${kind}`;
+}
+
+function parseSchoolStateToken(state) {
+    const raw = String(state || '').trim().toLowerCase();
+    const m = /^school::(.+)::(class|extra)$/.exec(raw);
+    if (!m) return null;
+    return { schoolKey: m[1], variant: m[2] };
+}
+
+function getSchoolTitleByKey(schoolKey) {
+    const key = schoolThemeKey(schoolKey);
+    if (!key) return '';
+    const found = getAvailableSchoolNames().find((name) => schoolThemeKey(name) === key);
+    return found || '';
+}
+
+function isLegacyOverlayState(state) {
+    return ['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(String(state || '').trim().toLowerCase());
+}
+
+function resolveSchoolTokenInfoFromState(state) {
+    const token = parseSchoolStateToken(state);
+    if (token) {
+        const title = getSchoolTitleByKey(token.schoolKey) || token.schoolKey;
+        const theme = getSchoolTheme(title);
+        const color = token.variant === 'extra' ? theme.secondary : theme.primary;
+        return { token: `school::${token.schoolKey}::${token.variant}`, color };
+    }
+    const legacy = String(state || '').trim().toLowerCase();
+    const legacyMap = {
+        navy: { school: 'HomeTeachers', variant: 'class' },
+        cyan: { school: 'HomeTeachers', variant: 'extra' },
+        magenta: { school: 'SpeakOn', variant: 'class' },
+        salmon: { school: 'SpeakOn', variant: 'extra' },
+        special: { school: 'Passport', variant: 'class' }
+    };
+    const cfg = legacyMap[legacy];
+    if (!cfg) return null;
+    const tokenValue = makeSchoolStateToken(cfg.school, cfg.variant);
+    const schoolTheme = getSchoolTheme(cfg.school);
+    const color = cfg.variant === 'extra' ? schoolTheme.secondary : schoolTheme.primary;
+    return { token: tokenValue, color };
+}
+
+function getStudentOverlayStates(studentName) {
+    const schoolTitle = getStudentSchoolName(studentName) || (getStudentRosterKind(studentName) === 'speakon' ? 'SpeakOn' : (getStudentRosterKind(studentName) === 'passport' ? 'Passport' : 'HomeTeachers'));
+    const kind = getStudentRosterKind(studentName);
+    if (kind === 'passport') {
+        return { classState: makeSchoolStateToken(schoolTitle, 'class'), extraState: '' };
+    }
+    return {
+        classState: makeSchoolStateToken(schoolTitle, 'class'),
+        extraState: makeSchoolStateToken(schoolTitle, 'extra')
+    };
+}
+
+/**
+ * Teacher schedules aggregate class/extra overlays from all student grids.
+ * SpeakOn weekly template remains supported as fallback.
+ * @param {Record<string, string | null | undefined>} sched
+ */
+function applyAllSpeakOnStudentColorsToTeacherScheduleCopy(sched) {
+    const out = { ...sched };
+    Object.keys(out).forEach((k) => {
+        const current = String(out[k] || '').trim();
+        if (parseSchoolStateToken(current) || isLegacyOverlayState(current)) {
+            delete out[k];
+        }
+    });
+    const keyBest = {};
+    const classPriorityByKind = { speakon: 3, private: 2, passport: 1 };
+    const extraPriorityByKind = { speakon: 2, private: 1, passport: 0 };
+    const keyClassPriority = {};
+    const keyExtraPriority = {};
+    const students = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    for (const studentName of students) {
+        const { classState, extraState } = getStudentOverlayStates(studentName);
+        const kind = getStudentRosterKind(studentName) || 'private';
+        const st = teacherSchedules[studentName] || {};
+        for (const [k, v] of Object.entries(st)) {
+            const rawVal = String(v || '').trim().toLowerCase();
+            let val = '';
+            if (rawVal === classState || rawVal === extraState) {
+                val = rawVal;
+            } else if (rawVal === 'magenta' || rawVal === 'special' || rawVal === 'navy') {
+                val = classState;
+            } else if (rawVal === 'salmon' || rawVal === 'cyan') {
+                val = extraState;
+            } else {
+                const resolved = resolveSchoolTokenInfoFromState(rawVal);
+                val = resolved?.token || '';
+            }
+            if (val !== classState && val !== extraState) continue;
+            if (val === classState) {
+                const currScore = keyClassPriority[k] || 0;
+                const nextScore = classPriorityByKind[kind] || 0;
+                if (nextScore >= currScore) {
+                    keyBest[k] = val;
+                    keyClassPriority[k] = nextScore;
+                }
+            } else if (val === extraState) {
+                if ((keyClassPriority[k] || 0) > 0) continue;
+                const currScore = keyExtraPriority[k] || 0;
+                const nextScore = extraPriorityByKind[kind] || 0;
+                if (nextScore >= currScore) {
+                    keyBest[k] = val;
+                    keyExtraPriority[k] = nextScore;
+                }
+            }
+        }
+    }
+
+    for (const studentName of speakonStudentsList) {
+        const states = getStudentOverlayStates(studentName);
+        const c = getSpeakonWeeklyClassEntry(studentName);
+        const hasCfg =
+            (c.classDay && String(c.classHour || '').trim() !== '') ||
+            (c.extraDay && String(c.extraHour || '').trim() !== '');
+        if (!hasCfg) continue;
+        const ch = Number.parseInt(String(c.classHour || ''), 10);
+        const eh = Number.parseInt(String(c.extraHour || ''), 10);
+        if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
+            const ek = `${c.extraDay}-${eh}`;
+            if (!(keyClassPriority[ek] || 0) && !(keyExtraPriority[ek] || 0)) {
+                keyBest[ek] = states.extraState;
+                keyExtraPriority[ek] = extraPriorityByKind.speakon;
+            }
+        }
+        if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
+            const ck = `${c.classDay}-${ch}`;
+            const curr = keyClassPriority[ck] || 0;
+            if (curr <= classPriorityByKind.speakon) {
+                keyBest[ck] = states.classState;
+                keyClassPriority[ck] = classPriorityByKind.speakon;
+            }
+        }
+    }
+
+    Object.keys(keyBest).forEach((k) => {
+        out[k] = keyBest[k];
+    });
+    return out;
+}
+
+/** Recompute SpeakOn magenta/salmon on every teacher profile from student grids + roster. */
+function syncSpeakOnWeeklyToAllTeacherSchedules() {
+    teachersList.forEach((tName) => {
+        const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
+        teacherSchedules[tName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
+    });
+    if (currentTeacher && isActiveTeacherName(currentTeacher)) {
+        slotStates = { ...teacherSchedules[currentTeacher] };
+        if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+            refreshCalendarDisplay();
+            updateSummary();
+        }
+    }
+}
+
+let calendarStudentPopoverOpen = false;
+let calendarStudentNamesInCellsVisible = false;
+let calendarLinkPopoverOpen = false;
+let calendarNameVisibleSchoolKeys = new Set();
+
+function getAllRosterStudentNamesSorted() {
+    const names = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
+        .map((n) => String(n || '').trim())
+        .filter(Boolean);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function getStudentSchoolKey(name) {
+    return schoolThemeKey(getStudentSchoolName(name) || 'HomeTeachers');
+}
+
+function isStudentNameVisibleBySchoolFilter(name) {
+    if (!calendarStudentNamesInCellsVisible) return false;
+    if (calendarNameVisibleSchoolKeys.size === 0) return false;
+    return calendarNameVisibleSchoolKeys.has(getStudentSchoolKey(name));
+}
+
+function ensureCalendarSchoolFilterSelection() {
+    if (calendarNameVisibleSchoolKeys.size > 0) return;
+    getAvailableSchoolNames().forEach((schoolName) => {
+        const k = schoolThemeKey(schoolName);
+        if (k) calendarNameVisibleSchoolKeys.add(k);
+    });
+}
+
+function getStudentNamesForTeacherSlot(day, hour, state) {
+    if (!state || !currentTeacher || !isActiveTeacherName(currentTeacher)) return [];
+    const resolvedState = resolveSchoolTokenInfoFromState(state);
+    const normalizedState = resolvedState?.token || String(state || '').trim().toLowerCase();
+    if (!parseSchoolStateToken(normalizedState) && !isLegacyOverlayState(normalizedState)) return [];
+    const key = `${day}-${hour}`;
+    const students = getAllRosterStudentNamesSorted();
+    const names = [];
+    const used = new Set();
+    for (const studentName of students) {
+        const { classState, extraState } = getStudentOverlayStates(studentName);
+        const st = teacherSchedules[studentName] || {};
+        const rawStudentState = String(st[key] || '').trim().toLowerCase();
+        let studentState = '';
+        if (rawStudentState === classState || rawStudentState === extraState) {
+            studentState = rawStudentState;
+        } else if (rawStudentState === 'magenta' || rawStudentState === 'special' || rawStudentState === 'navy') {
+            studentState = classState;
+        } else if (rawStudentState === 'salmon' || rawStudentState === 'cyan') {
+            studentState = extraState;
+        } else {
+            studentState = resolveSchoolTokenInfoFromState(rawStudentState)?.token || rawStudentState;
+        }
+        if (studentState === classState || (extraState && studentState === extraState)) {
+            if (!used.has(studentName) && isStudentNameVisibleBySchoolFilter(studentName)) {
+                used.add(studentName);
+                names.push(studentName);
+            }
+            continue;
+        }
+        if (getStudentRosterKind(studentName) !== 'speakon') continue;
+        const weekly = getSpeakonWeeklyClassEntry(studentName);
+        const classHour = Number.parseInt(String(weekly.classHour || ''), 10);
+        const extraHour = Number.parseInt(String(weekly.extraHour || ''), 10);
+        const isClass = normalizedState === classState && weekly.classDay === day && classHour === hour;
+        const isExtra = normalizedState === extraState && weekly.extraDay === day && extraHour === hour;
+        if ((isClass || isExtra) && !used.has(studentName) && isStudentNameVisibleBySchoolFilter(studentName)) {
+            used.add(studentName);
+            names.push(studentName);
+        }
+    }
+    return names;
+}
+
+function renderStudentNamesInSlot(slotEl, day, hour, state) {
+    if (!slotEl) return;
+    if (!calendarStudentNamesInCellsVisible) {
+        slotEl.textContent = '';
+        slotEl.title = '';
+        slotEl.classList.remove('time-slot--with-student-names');
+        return;
+    }
+    const names = getStudentNamesForTeacherSlot(day, hour, state);
+    const label = names.join(', ');
+    slotEl.textContent = '';
+    if (label) {
+        const textEl = document.createElement('span');
+        textEl.className = 'time-slot-student-names-text';
+        textEl.textContent = label;
+        slotEl.appendChild(textEl);
+    }
+    slotEl.title = label;
+    slotEl.classList.toggle('time-slot--with-student-names', names.length > 0);
+}
+
+function setCalendarStudentNamesInCellsVisible(visible) {
+    calendarStudentNamesInCellsVisible = !!visible;
+    const btn = document.getElementById('calendarToolbarStudentsBtn');
+    if (btn) {
+        btn.classList.toggle('is-active', calendarStudentNamesInCellsVisible);
+        btn.setAttribute('aria-pressed', calendarStudentNamesInCellsVisible ? 'true' : 'false');
+    }
+    refreshCalendarDisplay();
+}
+
+function isCustomContextMenuEnabledForCurrentSelection() {
+    return !!currentTeacher && !isActiveTeacherName(currentTeacher);
+}
+
+function applyStateVisualToSlot(slot, state) {
+    if (!slot) return;
+    slot.classList.remove('state-available', 'state-unavailable', 'state-school');
+    slot.style.removeProperty('--slot-school-bg');
+    slot.style.removeProperty('--slot-school-border');
+    slot.style.removeProperty('--slot-school-shadow');
+    if (!state) return;
+    const normalized = String(state || '').trim().toLowerCase();
+    if (normalized === 'available') {
+        slot.classList.add('state-available');
+        return;
+    }
+    if (normalized === 'unavailable') {
+        slot.classList.add('state-unavailable');
+        return;
+    }
+    const resolved = resolveSchoolTokenInfoFromState(normalized);
+    if (!resolved) return;
+    const color = resolved.color;
+    slot.classList.add('state-school');
+    slot.style.setProperty('--slot-school-bg', color);
+    slot.style.setProperty('--slot-school-border', color);
+    slot.style.setProperty('--slot-school-shadow', rgbaFromHex(color, 0.4));
+}
+
+function renderCalendarStudentNamesList() {
+    const title = document.getElementById('calendarStudentNamesPopoverTitle');
+    const ul = document.getElementById('calendarStudentNamesList');
+    if (!ul) return;
+    if (title) title.textContent = 'Schools';
+    ensureCalendarSchoolFilterSelection();
+    ul.innerHTML = '';
+    const schools = getAvailableSchoolNames();
+    if (schools.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = 'No schools found.';
+        li.style.color = '#666';
+        ul.appendChild(li);
+        return;
+    }
+    schools.forEach((schoolName) => {
+        const key = schoolThemeKey(schoolName);
+        const checked = calendarNameVisibleSchoolKeys.has(key);
+        const theme = getSchoolTheme(schoolName);
+        const li = document.createElement('li');
+        li.className = 'calendar-school-filter-item';
+        const label = document.createElement('label');
+        label.className = 'calendar-school-filter-option';
+        label.style.setProperty('--menu-option-color', theme.primary);
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = checked;
+        input.dataset.schoolKey = key;
+        input.addEventListener('change', () => {
+            const schoolKey = String(input.dataset.schoolKey || '').trim();
+            if (!schoolKey) return;
+            if (input.checked) calendarNameVisibleSchoolKeys.add(schoolKey);
+            else calendarNameVisibleSchoolKeys.delete(schoolKey);
+            setCalendarStudentNamesInCellsVisible(calendarNameVisibleSchoolKeys.size > 0);
+        });
+        const text = document.createElement('span');
+        text.textContent = schoolName;
+        label.appendChild(input);
+        label.appendChild(text);
+        li.appendChild(label);
+        ul.appendChild(li);
+    });
+}
+
+function positionCalendarStudentPopover(anchorEl) {
+    const pop = document.getElementById('calendarStudentNamesPopover');
+    if (!pop || !anchorEl) return;
+    const r = anchorEl.getBoundingClientRect();
+    const pad = 8;
+    let left = r.left;
+    let top = r.bottom + pad;
+    const w = pop.offsetWidth || 240;
+    const h = pop.offsetHeight || 200;
+    if (left + w > window.innerWidth - pad) {
+        left = Math.max(pad, window.innerWidth - w - pad);
+    }
+    if (top + h > window.innerHeight - pad) {
+        top = Math.max(pad, r.top - h - pad);
+    }
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+}
+
+function closeCalendarStudentNamesPopover() {
+    const pop = document.getElementById('calendarStudentNamesPopover');
+    const btn = document.getElementById('calendarToolbarStudentsBtn');
+    if (pop) {
+        pop.hidden = true;
+    }
+    if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    calendarStudentPopoverOpen = false;
+}
+
+function toggleCalendarStudentNamesPopover(anchorEl) {
+    const pop = document.getElementById('calendarStudentNamesPopover');
+    if (!pop) return;
+    if (calendarStudentPopoverOpen) {
+        closeCalendarStudentNamesPopover();
+        return;
+    }
+    renderCalendarStudentNamesList();
+    setCalendarStudentNamesInCellsVisible(true);
+    pop.hidden = false;
+    calendarStudentPopoverOpen = true;
+    anchorEl?.setAttribute('aria-expanded', 'true');
+    positionCalendarStudentPopover(anchorEl);
+    requestAnimationFrame(() => positionCalendarStudentPopover(anchorEl));
+}
+
+function positionCalendarLinkPopover(anchorEl) {
+    const pop = document.getElementById('calendarLinkPopover');
+    if (!pop || !anchorEl) return;
+    const r = anchorEl.getBoundingClientRect();
+    const pad = 8;
+    let left = r.left;
+    let top = r.bottom + pad;
+    const w = pop.offsetWidth || 320;
+    const h = pop.offsetHeight || 220;
+    if (left + w > window.innerWidth - pad) {
+        left = Math.max(pad, window.innerWidth - w - pad);
+    }
+    if (top + h > window.innerHeight - pad) {
+        top = Math.max(pad, r.top - h - pad);
+    }
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+}
+
+function closeCalendarLinkPopover() {
+    const pop = document.getElementById('calendarLinkPopover');
+    if (pop) pop.hidden = true;
+    calendarLinkPopoverOpen = false;
+}
+
+function openCalendarLinkPopover(anchorEl) {
+    const pop = document.getElementById('calendarLinkPopover');
+    const input = document.getElementById('calendarLinkInput');
+    if (!pop || !input) return;
+    closeCalendarStudentNamesPopover();
+    input.value = String(calendarToolbarExternalLink || '').trim();
+    pop.hidden = false;
+    calendarLinkPopoverOpen = true;
+    positionCalendarLinkPopover(anchorEl);
+    requestAnimationFrame(() => positionCalendarLinkPopover(anchorEl));
+    window.setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 0);
+}
+
+function saveCalendarToolbarLinkFromPopover() {
+    const input = document.getElementById('calendarLinkInput');
+    if (!input) return;
+    const raw = String(input.value || '').trim();
+    if (!raw) {
+        showAppMessage('Please provide a calendar URL link.');
+        input.focus();
+        return;
+    }
+    const parsed = parseHttpUrlInput(raw);
+    if (parsed.error === 'protocol') {
+        showAppMessage('Please provide a valid http(s) link.');
+        input.focus();
+        return;
+    }
+    if (parsed.error === 'invalid' || !parsed.url) {
+        showAppMessage('Please provide a valid URL link.');
+        input.focus();
+        return;
+    }
+    calendarToolbarExternalLink = parsed.url;
+    saveRoster();
+    closeCalendarLinkPopover();
+    window.open(calendarToolbarExternalLink, '_blank', 'noopener,noreferrer');
+}
+
+function setupCalendarStudentPopoverDismiss() {
+    if (document.body.dataset.calendarPopoverDismiss === '1') return;
+    document.body.dataset.calendarPopoverDismiss = '1';
+    document.addEventListener('click', (e) => {
+        const pop = document.getElementById('calendarStudentNamesPopover');
+        const linkPop = document.getElementById('calendarLinkPopover');
+        const t = e.target;
+        if (!pop || pop.hidden) return;
+        if (pop.contains(t) || (linkPop && linkPop.contains(t))) return;
+        const btn = document.getElementById('calendarToolbarStudentsBtn');
+        if (btn && btn.contains(t)) return;
+        closeCalendarStudentNamesPopover();
+    });
+    document.addEventListener('click', (e) => {
+        const pop = document.getElementById('calendarLinkPopover');
+        const t = e.target;
+        if (!pop || pop.hidden) return;
+        if (pop.contains(t)) return;
+        const btn = document.getElementById('calendarToolbarCalendarBtn');
+        if (btn && btn.contains(t)) return;
+        closeCalendarLinkPopover();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeCalendarStudentNamesPopover();
+            closeCalendarLinkPopover();
+        }
+    });
+    window.addEventListener('resize', () => {
+        const btn = document.getElementById('calendarToolbarStudentsBtn');
+        if (calendarStudentPopoverOpen && btn) {
+            positionCalendarStudentPopover(btn);
+        }
+        const linkBtn = document.getElementById('calendarToolbarCalendarBtn');
+        if (calendarLinkPopoverOpen && linkBtn) {
+            positionCalendarLinkPopover(linkBtn);
+        }
+    });
+    const saveBtn = document.getElementById('calendarLinkSaveBtn');
+    const cancelBtn = document.getElementById('calendarLinkCancelBtn');
+    const input = document.getElementById('calendarLinkInput');
+    saveBtn?.addEventListener('click', () => saveCalendarToolbarLinkFromPopover());
+    cancelBtn?.addEventListener('click', () => closeCalendarLinkPopover());
+    input?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveCalendarToolbarLinkFromPopover();
+        }
+    });
 }
 
 function renameStudentClassReportRows(oldName, newName) {
@@ -102,6 +1487,22 @@ function renameStudentClassReportRows(oldName, newName) {
     studentClassReportRows[newName] = studentClassReportRows[oldName];
     delete studentClassReportRows[oldName];
     saveStudentClassReportRows();
+}
+
+function getPreferredPassportStudentName() {
+    if (currentTeacher && passportStudentsList.includes(currentTeacher)) {
+        return currentTeacher;
+    }
+    return passportStudentsList[0] || '';
+}
+
+function openSchoolExternalLinkFromSidebar(displayTitle) {
+    const link = getSchoolSpreadsheetUrl(displayTitle);
+    if (!link) {
+        alert('No external link is saved for this school yet.');
+        return;
+    }
+    window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 const STUDENT_CLASS_REPORT_FIELDS = [
@@ -114,15 +1515,53 @@ const STUDENT_CLASS_REPORT_FIELDS = [
     'classTopic'
 ];
 
-/** Inline SVG pencil (currentColor); matches row control height */
+/** Outlined pencil-on-square (Heroicons-style); stroke currentColor — all edit controls */
+const EDIT_ICON_SVG_OUTLINE =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/></svg>';
+const EDIT_ICON_SVG_SOLID =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z" /><path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" /></svg>';
+
 const CLASS_TOPIC_PENCIL_ICON_HTML =
-    '<span class="student-class-report-topic-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></span>';
+    `<span class="student-class-report-topic-btn-icon">${EDIT_ICON_SVG_OUTLINE}</span>`;
+
+/** Plus for sidebar add buttons; stroke inherits button color */
+const SIDEBAR_ADD_PLUS_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+
+const SIDEBAR_ADD_SCHOOL_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"/></svg>';
+
+const SIDEBAR_ADD_TEACHER_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5"/></svg>';
+
+const SIDEBAR_LOGIN_TEACHER_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25"/></svg>';
+const SIDEBAR_LOGOUT_TEACHER_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15"/></svg>';
+
+const PASSWORD_SHOW_ICON_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>';
+const PASSWORD_HIDE_ICON_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>';
+
+/** Solid 6-tooth cog (Heroicons cog-6-tooth); fill inherits currentColor */
+const SETTINGS_GEAR_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z"/></svg>';
+
+const ADD_STUDENT_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8.5 4.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 13c.552 0 1.01-.452.9-.994a5.002 5.002 0 0 0-9.802 0c-.109.542.35.994.902.994h8ZM12.5 3.5a.75.75 0 0 1 .75.75v1h1a.75.75 0 0 1 0 1.5h-1v1a.75.75 0 0 1-1.5 0v-1h-1a.75.75 0 0 1 0-1.5h1v-1a.75.75 0 0 1 .75-.75Z"/></svg>';
+
+const CALENDAR_TOOLBAR_CALENDAR_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
+    '<path d="M12 11.993a.75.75 0 0 0-.75.75v.006c0 .414.336.75.75.75h.006a.75.75 0 0 0 .75-.75v-.006a.75.75 0 0 0-.75-.75H12ZM12 16.494a.75.75 0 0 0-.75.75v.005c0 .414.335.75.75.75h.005a.75.75 0 0 0 .75-.75v-.005a.75.75 0 0 0-.75-.75H12ZM8.999 17.244a.75.75 0 0 1 .75-.75h.006a.75.75 0 0 1 .75.75v.006a.75.75 0 0 1-.75.75h-.006a.75.75 0 0 1-.75-.75v-.006ZM7.499 16.494a.75.75 0 0 0-.75.75v.005c0 .414.336.75.75.75h.005a.75.75 0 0 0 .75-.75v-.005a.75.75 0 0 0-.75-.75H7.5ZM13.499 14.997a.75.75 0 0 1 .75-.75h.006a.75.75 0 0 1 .75.75v.005a.75.75 0 0 1-.75.75h-.006a.75.75 0 0 1-.75-.75v-.005ZM14.25 16.494a.75.75 0 0 0-.75.75v.006c0 .414.335.75.75.75h.005a.75.75 0 0 0 .75-.75v-.006a.75.75 0 0 0-.75-.75h-.005ZM15.75 14.995a.75.75 0 0 1 .75-.75h.005a.75.75 0 0 1 .75.75v.006a.75.75 0 0 1-.75.75H16.5a.75.75 0 0 1-.75-.75v-.006ZM13.498 12.743a.75.75 0 0 1 .75-.75h2.25a.75.75 0 1 1 0 1.5h-2.25a.75.75 0 0 1-.75-.75ZM6.748 14.993a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Z" />' +
+    '<path fill-rule="evenodd" d="M18 2.993a.75.75 0 0 0-1.5 0v1.5h-9V2.994a.75.75 0 1 0-1.5 0v1.497h-.752a3 3 0 0 0-3 3v11.252a3 3 0 0 0 3 3h13.5a3 3 0 0 0 3-3V7.492a3 3 0 0 0-3-3H18V2.993ZM3.748 18.743v-7.5a1.5 1.5 0 0 1 1.5-1.5h13.5a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5h-13.5a1.5 1.5 0 0 1-1.5-1.5Z" clip-rule="evenodd" />' +
+    '</svg>';
 
 const CLASS_REPORT_STATUS_OPTIONS = [
+    '—',
     'Class Given',
     'Class Canceled',
-    'Rescheduled',
-    'PostPoned',
+    'Class Rescheduled',
     'Bonus Class'
 ];
 
@@ -136,6 +1575,14 @@ const CLASS_REPORT_LEVEL_OPTIONS = [
 ];
 
 const CLASS_REPORT_UNIT_OPTIONS = Array.from({ length: 16 }, (_, i) => `Unit ${i + 1}`);
+const CLASS_TOPIC_EXERCISE_OPTIONS = [
+    'Speaking',
+    'Grammar',
+    'Pronunciation/Listening',
+    'Writing/Reading',
+    'Interchange Activity',
+    'Free Conversation'
+];
 
 const CLASS_REPORT_TIME_START_HOUR = 7;
 const CLASS_REPORT_TIME_END_HOUR = 23;
@@ -148,7 +1595,8 @@ function emptyStudentClassReportRow() {
         status: '',
         level: '',
         unit: '',
-        classTopic: ''
+        classTopic: '',
+        exercises: []
     };
 }
 
@@ -179,6 +1627,11 @@ function formatClassReportDateDisplay(isoDate) {
     const month = CLASS_REPORT_MONTH_NAMES[d.getMonth()];
     const day = d.getDate();
     return `${month}, ${day}${ordinalSuffix(day)}`;
+}
+
+function classReportMonthKeyFromIso(isoDate) {
+    if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
+    return isoDate.slice(0, 7);
 }
 
 function dayOfWeekFromIso(isoDate) {
@@ -216,7 +1669,7 @@ function appendClassReportFieldCell(tr, field, merged) {
 
         const display = document.createElement('span');
         display.className = 'student-class-report-date-display';
-        display.textContent = formatClassReportDateDisplay(iso) || '\u2014';
+        display.textContent = formatClassReportDateDisplay(iso) || '';
 
         const calLabel = document.createElement('label');
         calLabel.className = 'student-class-report-date-calendar-btn';
@@ -238,8 +1691,8 @@ function appendClassReportFieldCell(tr, field, merged) {
         calLabel.appendChild(calIcon);
         calLabel.appendChild(pick);
 
-        wrap.appendChild(display);
         wrap.appendChild(calLabel);
+        wrap.appendChild(display);
         td.appendChild(wrap);
     } else if (field === 'time') {
         td.classList.add('column-time');
@@ -248,7 +1701,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         sel.dataset.field = 'time';
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = '\u2014';
+        placeholder.textContent = '';
         sel.appendChild(placeholder);
         for (let h = CLASS_REPORT_TIME_START_HOUR; h <= CLASS_REPORT_TIME_END_HOUR; h++) {
             const opt = document.createElement('option');
@@ -276,7 +1729,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         sel.dataset.field = 'status';
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = '\u2014';
+        placeholder.textContent = '';
         sel.appendChild(placeholder);
         CLASS_REPORT_STATUS_OPTIONS.forEach((label) => {
             const opt = document.createElement('option');
@@ -294,7 +1747,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         sel.dataset.field = 'level';
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = '\u2014';
+        placeholder.textContent = '';
         sel.appendChild(placeholder);
         CLASS_REPORT_LEVEL_OPTIONS.forEach((label) => {
             const opt = document.createElement('option');
@@ -312,7 +1765,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         sel.dataset.field = 'unit';
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = '\u2014';
+        placeholder.textContent = '';
         sel.appendChild(placeholder);
         CLASS_REPORT_UNIT_OPTIONS.forEach((label) => {
             const opt = document.createElement('option');
@@ -334,6 +1787,16 @@ function appendClassReportFieldCell(tr, field, merged) {
             if (!trEl || trEl.dataset.rowIndex == null) return;
             const idx = parseInt(trEl.dataset.rowIndex, 10);
             if (!currentTeacher || !isStudentName(currentTeacher)) return;
+            const kind = getStudentRosterKind(currentTeacher);
+            if (kind === 'passport') {
+                const link = String(passportFollowupLinks[currentTeacher] || '').trim();
+                if (!link) {
+                    alert('No follow-up spreadsheet link found for this Passport student.');
+                    return;
+                }
+                window.open(link, '_blank', 'noopener,noreferrer');
+                return;
+            }
             openClassTopicEditor(currentTeacher, idx);
         });
         td.appendChild(btn);
@@ -370,12 +1833,15 @@ function persistClassReportRowField(tr, el) {
         }
         const disp = trEl.querySelector('.student-class-report-date-display');
         if (disp) {
-            disp.textContent = formatClassReportDateDisplay(iso) || '\u2014';
+            disp.textContent = formatClassReportDateDisplay(iso) || '';
         }
     } else {
         list[idx][field] = fieldEl.value;
     }
     saveStudentClassReportRows();
+    if (field === 'date') {
+        renderStudentClassReportTable(sel);
+    }
 }
 
 function renderStudentClassReportTable(studentName) {
@@ -390,13 +1856,43 @@ function renderStudentClassReportTable(studentName) {
 
     const rawList = studentClassReportRows[studentName];
     const list = Array.isArray(rawList) ? rawList : [];
-
+    const totalColumns = STUDENT_CLASS_REPORT_FIELDS.length + 1;
     tbody.textContent = '';
+    let previousMonthKey = '';
 
-    list.forEach((row, index) => {
+    const indexedRows = list.map((row, index) => ({ row, index }));
+    indexedRows.sort((a, b) => {
+        const aIso = normalizeClassReportDateValue(a.row?.date);
+        const bIso = normalizeClassReportDateValue(b.row?.date);
+        if (aIso && bIso) {
+            if (aIso < bIso) return -1;
+            if (aIso > bIso) return 1;
+            return a.index - b.index;
+        }
+        if (aIso) return -1;
+        if (bIso) return 1;
+        return a.index - b.index;
+    });
+
+    indexedRows.forEach(({ row, index: sourceIndex }) => {
         const merged = { ...emptyStudentClassReportRow(), ...row };
+        const monthKey = classReportMonthKeyFromIso(normalizeClassReportDateValue(merged.date));
+
+        if (monthKey && monthKey !== previousMonthKey) {
+            const monthTr = document.createElement('tr');
+            monthTr.className = 'student-class-report-month-separator-row';
+            monthTr.setAttribute('aria-hidden', 'true');
+            const monthTd = document.createElement('td');
+            monthTd.className = 'student-class-report-month-separator-cell';
+            monthTd.colSpan = totalColumns;
+            monthTd.textContent = '';
+            monthTr.appendChild(monthTd);
+            tbody.appendChild(monthTr);
+            previousMonthKey = monthKey;
+        }
+
         const tr = document.createElement('tr');
-        tr.dataset.rowIndex = String(index);
+        tr.dataset.rowIndex = String(sourceIndex);
 
         STUDENT_CLASS_REPORT_FIELDS.forEach((field) => {
             appendClassReportFieldCell(tr, field, merged);
@@ -411,7 +1907,7 @@ function renderStudentClassReportTable(studentName) {
         rm.setAttribute('aria-label', 'Remove row');
         rm.addEventListener('click', (e) => {
             e.stopPropagation();
-            removeStudentClassReportRowAt(studentName, index);
+            removeStudentClassReportRowAt(studentName, sourceIndex);
         });
         tdAct.appendChild(rm);
         tr.appendChild(tdAct);
@@ -441,6 +1937,80 @@ let studentClassReportPanelSetup = false;
 
 /** @type {{ studentName: string, rowIndex: number } | null} */
 let classTopicEditContext = null;
+let classTopicDraftExercises = [];
+
+function getExerciseChipLabel(item) {
+    if (item && typeof item === 'object') {
+        const numberRaw = parseInt(String(item.number || ''), 10);
+        const number = Number.isNaN(numberRaw) ? null : numberRaw;
+        const topic = String(item.topic || '').trim();
+        if (number != null && topic) return `${number} - ${topic}`;
+        if (topic) return topic;
+        if (item.title) return String(item.title);
+    }
+    return String(item || '').trim();
+}
+
+function normalizeExerciseDraftItem(item) {
+    if (item && typeof item === 'object') {
+        const numberRaw = parseInt(String(item.number || ''), 10);
+        const number = Number.isNaN(numberRaw) ? null : numberRaw;
+        return {
+            number,
+            topic: String(item.topic || '').trim(),
+            title: String(item.title || '').trim(),
+            description: String(item.description || '').trim()
+        };
+    }
+    const text = String(item || '').trim();
+    if (!text) return null;
+    const match = text.match(/^(\d+)\s*[-:]\s*(.+)$/);
+    if (match) {
+        return {
+            number: parseInt(match[1], 10),
+            topic: match[2].trim(),
+            title: '',
+            description: ''
+        };
+    }
+    return { number: null, topic: text, title: '', description: '' };
+}
+
+function syncClassTopicExerciseOverlayHeight() {
+    const wrap = document.querySelector('.class-topic-textarea-wrap');
+    if (!wrap) return;
+    wrap.style.setProperty('--class-topic-chips-space', '64px');
+}
+
+function renderClassTopicExerciseDraftList() {
+    const listEl = document.getElementById('classTopicExerciseList');
+    if (!listEl) return;
+    listEl.textContent = '';
+    classTopicDraftExercises.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.className = 'class-topic-exercise-item';
+        const text = document.createElement('span');
+        const label = getExerciseChipLabel(item);
+        text.textContent = label;
+        if (item && typeof item === 'object' && item.title) {
+            const ttl = String(item.title).trim();
+            text.title = ttl || label;
+        }
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'class-topic-exercise-remove';
+        rm.setAttribute('aria-label', `Remove ${label}`);
+        rm.textContent = '\u00D7';
+        rm.addEventListener('click', () => {
+            classTopicDraftExercises.splice(index, 1);
+            renderClassTopicExerciseDraftList();
+        });
+        li.appendChild(text);
+        li.appendChild(rm);
+        listEl.appendChild(li);
+    });
+    syncClassTopicExerciseOverlayHeight();
+}
 
 function updateClassTopicButtonFromText(btn, rawText) {
     const t = String(rawText || '').trim();
@@ -462,10 +2032,16 @@ function openClassTopicEditor(studentName, rowIndex) {
     const modal = document.getElementById('classTopicModal');
     const ta = document.getElementById('classTopicTextarea');
     const subtitle = document.getElementById('classTopicModalSubtitle');
-    if (!modal || !ta) return;
+    const exerciseSelect = document.getElementById('classTopicExerciseSelect');
+    if (!modal || !ta || !exerciseSelect) return;
     classTopicEditContext = { studentName, rowIndex };
     const row = list[rowIndex];
     ta.value = row.classTopic != null ? String(row.classTopic) : '';
+    classTopicDraftExercises = Array.isArray(row.exercises)
+        ? row.exercises.map((x) => String(x || '').trim()).filter(Boolean)
+        : [];
+    exerciseSelect.value = '';
+    renderClassTopicExerciseDraftList();
     if (subtitle) {
         subtitle.textContent = `Student: ${studentName}`;
     }
@@ -480,6 +2056,8 @@ function closeClassTopicModal() {
         modal.classList.remove('is-open');
         modal.setAttribute('aria-hidden', 'true');
     }
+    classTopicDraftExercises = [];
+    syncClassTopicExerciseOverlayHeight();
     classTopicEditContext = null;
 }
 
@@ -496,6 +2074,7 @@ function saveClassTopicFromModal() {
         return;
     }
     list[rowIndex].classTopic = ta.value;
+    list[rowIndex].exercises = [...classTopicDraftExercises];
     saveStudentClassReportRows();
     const tbody = document.getElementById('studentClassReportBody');
     const tr = tbody?.querySelector(`tr[data-row-index="${rowIndex}"]`);
@@ -518,12 +2097,34 @@ function setupClassTopicModal() {
     const backdrop = document.getElementById('classTopicModalBackdrop');
     const cancel = document.getElementById('classTopicModalCancel');
     const save = document.getElementById('classTopicModalSave');
+    const exerciseSelect = document.getElementById('classTopicExerciseSelect');
+    const exerciseAdd = document.getElementById('classTopicExerciseAdd');
+    if (exerciseSelect && exerciseSelect.options.length <= 1) {
+        CLASS_TOPIC_EXERCISE_OPTIONS.forEach((label) => {
+            const opt = document.createElement('option');
+            opt.value = label;
+            opt.textContent = label;
+            exerciseSelect.appendChild(opt);
+        });
+    }
+    exerciseAdd?.addEventListener('click', () => {
+        const selected = String(exerciseSelect?.value || '').trim();
+        if (!selected) return;
+        classTopicDraftExercises.push(selected);
+        if (exerciseSelect) exerciseSelect.value = '';
+        renderClassTopicExerciseDraftList();
+    });
     backdrop?.addEventListener('click', closeClassTopicModal);
     cancel?.addEventListener('click', closeClassTopicModal);
     save?.addEventListener('click', saveClassTopicFromModal);
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && modal.classList.contains('is-open')) {
             closeClassTopicModal();
+        }
+    });
+    window.addEventListener('resize', () => {
+        if (modal.classList.contains('is-open')) {
+            syncClassTopicExerciseOverlayHeight();
         }
     });
 }
@@ -565,11 +2166,23 @@ function setupStudentClassReportPanel() {
 }
 
 function saveRoster() {
+    normalizeCustomSchoolsList();
     try {
         localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify({
             teachers: teachersList,
             private: privateStudentsList,
-            speakon: speakonStudentsList
+            speakon: speakonStudentsList,
+            passport: passportStudentsList,
+            studentSchools: studentSchoolByName,
+            teacherEmails: teacherEmailsByName,
+            teacherPasswords: teacherPasswordsByName,
+            customSchools: customSchoolsList,
+            schoolExternalLinks,
+            schoolThemeColors,
+            calendarToolbarExternalLink,
+            passportLinks: passportFollowupLinks,
+            passportHeaderPageLink,
+            speakonWeeklyClass: speakonStudentWeeklyClass
         }));
     } catch (error) {
         console.error('Error saving roster to localStorage:', error);
@@ -585,8 +2198,8 @@ let currentTeacher = null;
 // Store slot states for current teacher (working copy)
 let slotStates = {};
 
-// State cycling order for left-click
-const STATE_CYCLE = [null, 'available', 'unavailable'];
+// Left-click toggles only availability (no red step)
+const STATE_CYCLE = [null, 'available'];
 
 // Context menu
 let contextMenu = null;
@@ -747,13 +2360,7 @@ function startPolling() {
                             // Update local schedules with remote data
                             Object.assign(teacherSchedules, data.schedules);
                             lastUpdateTimestamp = data.lastUpdated;
-                            
-                            // If current teacher is selected, refresh their calendar
-                            if (currentTeacher) {
-                                loadTeacherSchedule(currentTeacher);
-                                refreshCalendarDisplay();
-                                updateSummary();
-                            }
+                            syncSpeakOnWeeklyToAllTeacherSchedules();
                             
                             updateSyncStatus('synced', '✓ Updated from cloud');
                             setTimeout(() => {
@@ -905,9 +2512,107 @@ function saveAllSchedulesLocal() {
     }
 }
 
+function getSidebarProfileInitials(fullName) {
+    const cleaned = String(fullName || '').trim().replace(/\s+/g, ' ');
+    if (!cleaned) return 'T';
+    const parts = cleaned.split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+}
+
+function renderSidebarHeaderProfile() {
+    const nameEl = document.getElementById('sidebarProfileName');
+    const roleEl = document.getElementById('sidebarProfileRole');
+    const avatarEl = document.getElementById('sidebarProfileAvatar');
+    if (!nameEl || !roleEl || !avatarEl) return;
+
+    const activeTeacherName = getActiveTeacherProfileName();
+    const displayName = isTeacherLoggedIn
+        ? String(activeTeacherName || 'Teacher').trim()
+        : 'Guest profile';
+    const displayRole = isTeacherLoggedIn ? 'Teacher' : 'Guest';
+
+    nameEl.textContent = displayName;
+    roleEl.textContent = displayRole;
+    avatarEl.textContent = getSidebarProfileInitials(displayName);
+    const avatarUrl = getProfileAvatarDataUrl(getCurrentProfileKey());
+    avatarEl.classList.toggle('has-image', !!avatarUrl);
+    avatarEl.style.backgroundImage = avatarUrl ? `url("${avatarUrl}")` : '';
+
+    const headerRow = avatarEl.closest('.sidebar-header-row');
+    if (headerRow) {
+        if (isTeacherLoggedIn) {
+            headerRow.removeAttribute('aria-hidden');
+        } else {
+            headerRow.setAttribute('aria-hidden', 'true');
+        }
+    }
+    avatarEl.tabIndex = isTeacherLoggedIn ? 0 : -1;
+}
+
+function setupSidebarProfileAvatarUpload() {
+    const avatarBtn = document.getElementById('sidebarProfileAvatar');
+    const avatarInput = document.getElementById('sidebarProfileAvatarInput');
+    if (!avatarBtn || !avatarInput) return;
+
+    avatarBtn.addEventListener('click', () => {
+        avatarInput.click();
+    });
+
+    avatarInput.addEventListener('change', () => {
+        const file = avatarInput.files && avatarInput.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showAppMessage('Please select an image file.');
+            avatarInput.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = String(reader.result || '');
+            if (!dataUrl) return;
+            setProfileAvatarDataUrl(getCurrentProfileKey(), dataUrl);
+            renderSidebarHeaderProfile();
+        };
+        reader.readAsDataURL(file);
+        avatarInput.value = '';
+    });
+}
+
+function setupSidebarPaneHeaderToggle(paneEl, paneInnerEl, headerLabelEl, paneKey) {
+    if (!paneEl || !paneInnerEl || !headerLabelEl || !paneKey) return;
+    const applyPaneCollapsedVisual = (collapsed) => {
+        paneEl.classList.toggle('is-collapsed', collapsed);
+        paneInnerEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        headerLabelEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        sidebarPaneCollapsedState[paneKey] = collapsed;
+    };
+    const isCollapsed = !!sidebarPaneCollapsedState[paneKey];
+    applyPaneCollapsedVisual(isCollapsed);
+    headerLabelEl.setAttribute('role', 'button');
+    headerLabelEl.tabIndex = 0;
+    const toggle = () => {
+        const next = !paneEl.classList.contains('is-collapsed');
+        applyPaneCollapsedVisual(next);
+    };
+    headerLabelEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggle();
+    });
+    headerLabelEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+        }
+    });
+}
+
 function renderSidebar() {
     const teacherList = document.getElementById('teacherList');
     if (!teacherList) return;
+    const sidebarRoot = teacherList.closest('.sidebar');
+    sidebarRoot?.classList.toggle('is-logged-in', !!isTeacherLoggedIn);
+    renderSidebarHeaderProfile();
 
     const collapsedByTitle = {};
     teacherList.querySelectorAll('.sidebar-category').forEach((sec) => {
@@ -922,10 +2627,57 @@ function renderSidebar() {
     const paneTeachers = document.createElement('div');
     paneTeachers.className = 'sidebar-pane sidebar-pane-teachers';
     const teachersHeader = document.createElement('div');
-    teachersHeader.className = 'sidebar-section-header';
-    teachersHeader.textContent = 'Teachers';
+    teachersHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const teachersHeaderLabel = document.createElement('span');
+    teachersHeaderLabel.className = 'sidebar-section-header-label';
+    teachersHeaderLabel.textContent = 'Teachers';
+    const addTeacherBtn = document.createElement('button');
+    addTeacherBtn.type = 'button';
+    addTeacherBtn.id = 'addTeacherProfileBtn';
+    addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher';
+    addTeacherBtn.setAttribute('aria-label', 'Add teacher profile');
+    addTeacherBtn.setAttribute('title', 'Add teacher profile');
+    addTeacherBtn.innerHTML = SIDEBAR_ADD_TEACHER_SVG;
+    addTeacherBtn.addEventListener('click', () => openAddStudentModal('teacher'));
+    const loginTeacherBtn = document.createElement('button');
+    loginTeacherBtn.type = 'button';
+    loginTeacherBtn.className = 'sidebar-add-btn sidebar-add-btn--with-text sidebar-section-add-btn sidebar-auth-btn';
+    if (isTeacherLoggedIn) {
+        loginTeacherBtn.classList.add('sidebar-auth-btn--logout');
+        loginTeacherBtn.setAttribute('aria-label', 'Teacher logout');
+        loginTeacherBtn.setAttribute('title', 'Teacher logout');
+        loginTeacherBtn.innerHTML = `${SIDEBAR_LOGOUT_TEACHER_SVG}<span class="sidebar-add-btn-label">Log Out</span>`;
+        loginTeacherBtn.addEventListener('click', () => {
+            isTeacherLoggedIn = false;
+            loggedInTeacherName = '';
+            currentTeacher = null;
+            try {
+                sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
+            } catch {
+                /* ignore */
+            }
+            renderSidebar();
+            setLoggedOutDashboard();
+        });
+    } else {
+        loginTeacherBtn.classList.add('sidebar-auth-btn--login');
+        loginTeacherBtn.setAttribute('aria-label', 'Teacher login');
+        loginTeacherBtn.setAttribute('title', 'Teacher login');
+        loginTeacherBtn.innerHTML = `<span class="sidebar-add-btn-label">Log In</span>${SIDEBAR_LOGIN_TEACHER_SVG}`;
+        loginTeacherBtn.addEventListener('click', () => {
+            if (teachersList.length === 0) {
+                showAppMessage('No teacher profile found yet. Click the academic icon to create your profile.');
+                return;
+            }
+            openTeacherLoginModal();
+        });
+    }
+    teachersHeader.appendChild(teachersHeaderLabel);
+    teachersHeader.appendChild(loginTeacherBtn);
+    teachersHeader.appendChild(addTeacherBtn);
     const teachersInner = document.createElement('div');
     teachersInner.className = 'sidebar-pane-teachers-inner';
+    setupSidebarPaneHeaderToggle(paneTeachers, teachersInner, teachersHeaderLabel, 'teachers');
     paneTeachers.appendChild(teachersHeader);
     paneTeachers.appendChild(teachersInner);
 
@@ -933,11 +2685,33 @@ function renderSidebar() {
     paneStudents.className = 'sidebar-pane sidebar-pane-students';
 
     const studentsHeader = document.createElement('div');
-    studentsHeader.className = 'sidebar-section-header';
-    studentsHeader.textContent = 'Free Time';
+    studentsHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const studentsHeaderLabel = document.createElement('span');
+    studentsHeaderLabel.className = 'sidebar-section-header-label';
+    studentsHeaderLabel.textContent = 'Schools';
+    const addStudentEntryBtn = document.createElement('button');
+    addStudentEntryBtn.type = 'button';
+    addStudentEntryBtn.id = 'addStudentEntryBtn';
+    addStudentEntryBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--student-entry';
+    addStudentEntryBtn.setAttribute('aria-label', 'Add student');
+    addStudentEntryBtn.setAttribute('title', 'Add student');
+    addStudentEntryBtn.innerHTML = ADD_STUDENT_SVG;
+    addStudentEntryBtn.addEventListener('click', () => openAddStudentModal('student-global'));
+    const addStudentBtn = document.createElement('button');
+    addStudentBtn.type = 'button';
+    addStudentBtn.id = 'addSchoolBtn';
+    addStudentBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--school';
+    addStudentBtn.setAttribute('aria-label', 'Add school');
+    addStudentBtn.setAttribute('title', 'Add school');
+    addStudentBtn.innerHTML = SIDEBAR_ADD_SCHOOL_SVG;
+    addStudentBtn.addEventListener('click', () => openAddStudentModal('student'));
+    studentsHeader.appendChild(studentsHeaderLabel);
+    studentsHeader.appendChild(addStudentEntryBtn);
+    studentsHeader.appendChild(addStudentBtn);
 
     const studentsInner = document.createElement('div');
     studentsInner.className = 'sidebar-pane-students-inner';
+    setupSidebarPaneHeaderToggle(paneStudents, studentsInner, studentsHeaderLabel, 'schools');
 
     paneStudents.appendChild(studentsHeader);
     paneStudents.appendChild(studentsInner);
@@ -961,6 +2735,7 @@ function renderSidebar() {
     const classReportInner = document.createElement('div');
     classReportInner.className = 'sidebar-pane-class-report-inner';
     classReportInner.setAttribute('aria-label', 'Class report content');
+    setupSidebarPaneHeaderToggle(paneClassReport, classReportInner, classReportHeaderTitle, 'classReport');
     paneClassReport.appendChild(classReportHeader);
     paneClassReport.appendChild(classReportInner);
 
@@ -983,6 +2758,7 @@ function renderSidebar() {
     const financesInner = document.createElement('div');
     financesInner.className = 'sidebar-pane-finances-inner';
     financesInner.setAttribute('aria-label', 'Finances');
+    setupSidebarPaneHeaderToggle(paneFinances, financesInner, financesHeaderTitle, 'finances');
     const financesPlaceholder = document.createElement('p');
     financesPlaceholder.className = 'finances-placeholder';
     financesPlaceholder.textContent = 'No finance items yet.';
@@ -995,10 +2771,69 @@ function renderSidebar() {
     teacherList.appendChild(paneClassReport);
     teacherList.appendChild(paneFinances);
 
+    if (!isTeacherLoggedIn) {
+        const teachersEmpty = document.createElement('p');
+        teachersEmpty.className = 'class-report-empty';
+        teachersEmpty.textContent = 'Create your profile or log in.';
+        teachersInner.appendChild(teachersEmpty);
+
+        const schoolsEmpty = document.createElement('p');
+        schoolsEmpty.className = 'class-report-empty';
+        schoolsEmpty.textContent = "No school's info to show.";
+        studentsInner.appendChild(schoolsEmpty);
+
+        const classReportEmpty = document.createElement('p');
+        classReportEmpty.className = 'class-report-empty';
+        classReportEmpty.textContent = "No student's info to show.";
+        classReportInner.appendChild(classReportEmpty);
+        return;
+    }
+
+    const studentGroups = new Map();
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    allStudents.forEach((name) => {
+        const school = getStudentSchoolName(name) || 'HomeTeachers';
+        const key = school.trim().toLowerCase();
+        if (!studentGroups.has(key)) {
+            studentGroups.set(key, {
+                title: school,
+                names: [],
+                rosterKey: rosterKindFromSchoolName(school)
+            });
+        }
+        studentGroups.get(key).names.push(name);
+    });
+    customSchoolsList.forEach((raw) => {
+        const school = String(raw || '').trim();
+        if (!school) return;
+        const key = school.toLowerCase();
+        if (!studentGroups.has(key)) {
+            studentGroups.set(key, {
+                title: school,
+                names: [],
+                rosterKey: rosterKindFromSchoolName(school)
+            });
+        }
+    });
+    const studentCategories = [...studentGroups.values()]
+        .map((group) => ({
+            title: group.title,
+            names: group.names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
+            rosterKey: group.rosterKey,
+            schoolTheme: getSchoolTheme(group.title),
+            itemClass: group.rosterKey === 'passport' ? 'category-passport' : (group.rosterKey === 'speakon' ? 'category-speakon' : 'category-private'),
+            deletable: true,
+            parent: studentsInner,
+            usesSchoolLinkHeader: schoolSectionUsesPassportStyleHeader(group.title)
+        }))
+        .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+
+    const visibleTeachers = isTeacherLoggedIn && loggedInTeacherName
+        ? teachersList.filter((name) => String(name || '').trim().toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase())
+        : teachersList;
     const categories = [
-        { title: 'Teachers', names: teachersList, itemClass: 'category-teachers', deletable: false, parent: teachersInner, collapsible: false },
-        { title: 'HomeTeachers', names: privateStudentsList, itemClass: 'category-private', deletable: true, rosterKey: 'private', parent: studentsInner },
-        { title: 'SpeakOn', names: speakonStudentsList, itemClass: 'category-speakon', deletable: true, rosterKey: 'speakon', parent: studentsInner }
+        { title: 'Teachers', names: visibleTeachers, itemClass: 'category-teachers', deletable: false, parent: teachersInner, collapsible: false },
+        ...studentCategories
     ];
 
     categories.forEach((category) => {
@@ -1009,20 +2844,84 @@ function renderSidebar() {
 
         const section = document.createElement('div');
         section.className = 'sidebar-category';
-        if (category.itemClass === 'category-private') {
+        if (category.schoolTheme) {
+            section.classList.add('sidebar-category-school');
+            applySchoolThemeCssVars(section, category.title);
+        } else if (category.itemClass === 'category-private') {
             section.classList.add('sidebar-category-private');
         } else if (category.itemClass === 'category-speakon') {
             section.classList.add('sidebar-category-speakon');
+        } else if (category.itemClass === 'category-passport') {
+            section.classList.add('sidebar-category-passport');
         }
         if (collapsed) {
             section.classList.add('collapsed');
         }
 
-        if (isCollapsible) {
-            const sectionTitle = document.createElement('button');
+        if (category.usesSchoolLinkHeader) {
+            const titleRow = document.createElement('div');
+            titleRow.className = 'sidebar-section-title sidebar-section-title-passport';
+            const label = document.createElement('span');
+            label.textContent = category.title;
+            const actions = document.createElement('span');
+            actions.className = 'sidebar-section-title-passport-actions';
+
+            const offsiteBtn = document.createElement('button');
+            offsiteBtn.type = 'button';
+            offsiteBtn.className = 'sidebar-section-title-passport-btn sidebar-section-title-passport-btn--offsite';
+            offsiteBtn.setAttribute('aria-label', 'Open spreadsheet or external link');
+            offsiteBtn.setAttribute('title', 'Open external link');
+            offsiteBtn.innerHTML =
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>';
+            offsiteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openSchoolExternalLinkFromSidebar(category.title);
+            });
+
+            const settingsBtn = document.createElement('button');
+            settingsBtn.type = 'button';
+            settingsBtn.className = 'sidebar-section-title-passport-btn sidebar-section-title-passport-btn--settings';
+            settingsBtn.setAttribute(
+                'aria-label',
+                `School settings for ${category.title}`
+            );
+            settingsBtn.setAttribute('title', 'School settings');
+            settingsBtn.innerHTML = SETTINGS_GEAR_SVG;
+            settingsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                removeSchoolFromSidebar(category.title);
+            });
+
+            actions.appendChild(offsiteBtn);
+            actions.appendChild(settingsBtn);
+            titleRow.appendChild(label);
+            titleRow.appendChild(actions);
+            section.appendChild(titleRow);
+        } else if (isCollapsible) {
+            const sectionTitle = document.createElement('div');
             sectionTitle.className = 'sidebar-section-title';
-            sectionTitle.type = 'button';
-            sectionTitle.textContent = category.title;
+            if (category.deletable) {
+                sectionTitle.classList.add('sidebar-section-title--with-settings');
+                const label = document.createElement('span');
+                label.textContent = category.title;
+                const actions = document.createElement('span');
+                actions.className = 'sidebar-section-title-passport-actions';
+                const settingsBtn = document.createElement('button');
+                settingsBtn.type = 'button';
+                settingsBtn.className = 'sidebar-section-title-passport-btn sidebar-section-title-passport-btn--settings';
+                settingsBtn.setAttribute('aria-label', `School settings for ${category.title}`);
+                settingsBtn.setAttribute('title', 'School settings');
+                settingsBtn.innerHTML = SETTINGS_GEAR_SVG;
+                settingsBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeSchoolFromSidebar(category.title);
+                });
+                actions.appendChild(settingsBtn);
+                sectionTitle.appendChild(label);
+                sectionTitle.appendChild(actions);
+            } else {
+                sectionTitle.textContent = category.title;
+            }
             section.appendChild(sectionTitle);
         } else {
             section.classList.add('sidebar-category-no-title');
@@ -1039,6 +2938,10 @@ function renderSidebar() {
             const teacherItem = document.createElement('div');
             teacherItem.className = 'teacher-item';
             teacherItem.classList.add(category.itemClass);
+            if (category.schoolTheme) {
+                teacherItem.classList.add('teacher-item--school-theme');
+                applySchoolThemeCssVars(teacherItem, category.title);
+            }
             teacherItem.dataset.teacher = name;
 
             const nameEl = document.createElement('span');
@@ -1054,7 +2957,7 @@ function renderSidebar() {
                 editBtn.setAttribute('title', `Edit ${name}`);
                 editBtn.setAttribute('data-student-name', name);
                 editBtn.setAttribute('data-roster-kind', category.rosterKey);
-                editBtn.textContent = '\u270E';
+                editBtn.innerHTML = EDIT_ICON_SVG_SOLID;
                 teacherItem.appendChild(editBtn);
             }
 
@@ -1094,14 +2997,22 @@ function populateClassReportStudentLists(container) {
     const wrap = document.createElement('div');
     wrap.className = 'class-report-lists';
 
-    const makeGroup = (heading, names, variant) => {
+    const makeGroup = (heading, names, variant, groupKey) => {
         const group = document.createElement('div');
-        group.className = `class-report-group class-report-group--${variant}`;
+        group.className = 'class-report-group';
+        group.classList.add('class-report-group--school');
+        applySchoolThemeCssVars(group, heading);
 
         const title = document.createElement('div');
         title.className = 'class-report-group-title';
         title.textContent = heading;
+        title.setAttribute('role', 'button');
+        title.tabIndex = 0;
+        title.setAttribute('aria-expanded', 'true');
         group.appendChild(title);
+
+        const body = document.createElement('div');
+        body.className = 'class-report-group-body';
 
         const sorted = [...names].sort((a, b) =>
             a.localeCompare(b, undefined, { sensitivity: 'base' })
@@ -1111,38 +3022,130 @@ function populateClassReportStudentLists(container) {
             const empty = document.createElement('p');
             empty.className = 'class-report-empty';
             empty.textContent = 'No students yet.';
-            group.appendChild(empty);
-            return group;
-        }
-
-        const ul = document.createElement('ul');
-        ul.className = 'class-report-student-list';
-        sorted.forEach((name) => {
-            const li = document.createElement('li');
-            li.className = 'class-report-student-item';
-            li.dataset.studentName = name;
-            li.setAttribute('role', 'button');
-            li.tabIndex = 0;
-            li.textContent = name;
-            if (classReportVisible && currentTeacher === name && isStudentName(name)) {
-                li.classList.add('class-report-student-item--active');
-            }
-            li.addEventListener('click', () => selectTeacher(name, { view: 'classReport' }));
-            li.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selectTeacher(name, { view: 'classReport' });
+            body.appendChild(empty);
+        } else {
+            const ul = document.createElement('ul');
+            ul.className = 'class-report-student-list';
+            sorted.forEach((name) => {
+                const li = document.createElement('li');
+                li.className = 'class-report-student-item';
+                li.dataset.studentName = name;
+                li.setAttribute('role', 'button');
+                li.tabIndex = 0;
+                li.textContent = name;
+                if (classReportVisible && currentTeacher === name && isStudentName(name)) {
+                    li.classList.add('class-report-student-item--active');
                 }
+                li.addEventListener('click', () => selectTeacher(name, { view: 'classReport' }));
+                li.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectTeacher(name, { view: 'classReport' });
+                    }
+                });
+                ul.appendChild(li);
             });
-            ul.appendChild(li);
+            body.appendChild(ul);
+        }
+        group.appendChild(body);
+
+        const setCollapsed = (collapsed, animate = true) => {
+            if (!animate) {
+                const prevTransition = body.style.transition;
+                body.style.transition = 'none';
+                group.classList.toggle('collapsed', collapsed);
+                body.style.maxHeight = collapsed ? '0px' : '';
+                body.style.opacity = collapsed ? '0' : '1';
+                body.style.transform = collapsed ? 'translateY(-4px)' : 'translateY(0)';
+                // Force style flush before restoring transition.
+                void body.offsetHeight;
+                body.style.transition = prevTransition;
+                return;
+            }
+
+            if (collapsed) {
+                body.style.maxHeight = `${body.scrollHeight}px`;
+                body.style.opacity = '1';
+                body.style.transform = 'translateY(0)';
+                requestAnimationFrame(() => {
+                    group.classList.add('collapsed');
+                    body.style.maxHeight = '0px';
+                    body.style.opacity = '0';
+                    body.style.transform = 'translateY(-4px)';
+                });
+                return;
+            }
+
+            group.classList.remove('collapsed');
+            body.style.maxHeight = '0px';
+            body.style.opacity = '0';
+            body.style.transform = 'translateY(-4px)';
+            requestAnimationFrame(() => {
+                body.style.maxHeight = `${body.scrollHeight}px`;
+                body.style.opacity = '1';
+                body.style.transform = 'translateY(0)';
+            });
+            const onTransitionEnd = (e) => {
+                if (e.propertyName !== 'max-height') return;
+                if (!group.classList.contains('collapsed')) {
+                    body.style.maxHeight = '';
+                }
+                body.removeEventListener('transitionend', onTransitionEnd);
+            };
+            body.addEventListener('transitionend', onTransitionEnd);
+        };
+
+        const isCollapsed = !!classReportCollapsedBySchool[groupKey];
+        title.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+        setCollapsed(isCollapsed, false);
+        const toggleGroup = () => {
+            const nextCollapsed = !group.classList.contains('collapsed');
+            classReportCollapsedBySchool[groupKey] = nextCollapsed;
+            title.setAttribute('aria-expanded', nextCollapsed ? 'false' : 'true');
+            setCollapsed(nextCollapsed, true);
+        };
+        title.addEventListener('click', toggleGroup);
+        title.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleGroup();
+            }
         });
-        group.appendChild(ul);
         return group;
     };
 
-    wrap.appendChild(makeGroup('HomeTeachers', privateStudentsList, 'private'));
-    wrap.appendChild(makeGroup('SpeakOn', speakonStudentsList, 'speakon'));
+    const grouped = new Map();
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const school = getStudentSchoolName(name) || 'HomeTeachers';
+        const key = school.trim().toLowerCase();
+        if (!grouped.has(key)) {
+            grouped.set(key, { title: school, names: [], kind: rosterKindFromSchoolName(school) });
+        }
+        grouped.get(key).names.push(name);
+    });
+    customSchoolsList.forEach((raw) => {
+        const school = String(raw || '').trim();
+        if (!school) return;
+        const key = school.toLowerCase();
+        if (!grouped.has(key)) {
+            grouped.set(key, { title: school, names: [], kind: rosterKindFromSchoolName(school) });
+        }
+    });
+    [...grouped.values()]
+        .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+        .forEach((group) => {
+            wrap.appendChild(makeGroup(group.title, group.names, group.kind, group.title.trim().toLowerCase()));
+        });
     container.appendChild(wrap);
+}
+
+function setLoggedOutDashboard() {
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const summaryPanel = document.getElementById('summaryPanel');
+    const reportPanel = document.getElementById('studentClassReportPanel');
+    if (calendarWrapper) calendarWrapper.hidden = true;
+    if (summaryPanel) summaryPanel.hidden = true;
+    if (reportPanel) reportPanel.hidden = true;
 }
 
 function setSidebarSectionCollapsed(section, collapsed, animate = true) {
@@ -1191,15 +3194,518 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
     }
 }
 
+function removeSchoolFromSidebar(displayTitle) {
+    const schoolTitle = String(displayTitle || '').trim();
+    const schoolKey = schoolTitle.toLowerCase();
+    if (!schoolTitle || !schoolKey) return;
+
+    openSchoolSettingsModal(schoolTitle);
+}
+
+function deleteSchoolFromSidebarConfirmed(displayTitle) {
+    const schoolTitle = String(displayTitle || '').trim();
+    const schoolKey = schoolTitle.toLowerCase();
+    if (!schoolTitle || !schoolKey) return;
+
+    const studentsInSchool = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter((name) => {
+        return (getStudentSchoolName(name) || '').trim().toLowerCase() === schoolKey;
+    });
+
+    const removedKeys = new Set(studentsInSchool.map((name) => name.trim().toLowerCase()));
+    privateStudentsList = privateStudentsList.filter((name) => !removedKeys.has(name.trim().toLowerCase()));
+    speakonStudentsList = speakonStudentsList.filter((name) => !removedKeys.has(name.trim().toLowerCase()));
+    passportStudentsList = passportStudentsList.filter((name) => !removedKeys.has(name.trim().toLowerCase()));
+
+    studentsInSchool.forEach((name) => {
+        delete teacherSchedules[name];
+        delete studentClassReportRows[name];
+        delete passportFollowupLinks[name];
+        delete studentSchoolByName[name];
+    });
+
+    customSchoolsList = customSchoolsList.filter((school) => String(school || '').trim().toLowerCase() !== schoolKey);
+    delete schoolExternalLinks[schoolKey];
+    delete schoolThemeColors[schoolKey];
+
+    if (currentTeacher && removedKeys.has(currentTeacher.trim().toLowerCase())) {
+        currentTeacher = null;
+        slotStates = {};
+    }
+
+    saveRoster();
+    saveStudentClassReportRows();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+    renderSidebar();
+
+    const fallbackTeacher = currentTeacher
+        || teachersList[0]
+        || privateStudentsList[0]
+        || speakonStudentsList[0]
+        || passportStudentsList[0]
+        || '';
+    if (fallbackTeacher) {
+        selectTeacher(fallbackTeacher);
+    }
+}
+
+function openDeleteSchoolModal(schoolTitle, studentCount = 0) {
+    const modal = document.getElementById('deleteSchoolModal');
+    const message = document.getElementById('deleteSchoolModalMessage');
+    const warning = document.getElementById('deleteSchoolModalWarning');
+    const confirmBtn = document.getElementById('deleteSchoolConfirm');
+    if (!modal || !message || !warning || !confirmBtn) return;
+
+    pendingDeleteSchoolTitle = String(schoolTitle || '').trim();
+    if (!pendingDeleteSchoolTitle) return;
+
+    message.textContent = `Are you sure you want to delete "${pendingDeleteSchoolTitle}"?`;
+    warning.textContent = studentCount > 0
+        ? `${studentCount} student${studentCount === 1 ? '' : 's'} will also be deleted.`
+        : 'This school has no students yet.';
+    confirmBtn.textContent = studentCount > 0 ? 'Delete school and students' : 'Delete school';
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeDeleteSchoolModal() {
+    const modal = document.getElementById('deleteSchoolModal');
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    pendingDeleteSchoolTitle = '';
+}
+
+function setupDeleteSchoolModal() {
+    const modal = document.getElementById('deleteSchoolModal');
+    const cancelBtn = document.getElementById('deleteSchoolCancel');
+    const confirmBtn = document.getElementById('deleteSchoolConfirm');
+    const backdrop = document.getElementById('deleteSchoolModalBackdrop');
+    if (!modal || !confirmBtn) return;
+
+    cancelBtn?.addEventListener('click', () => closeDeleteSchoolModal());
+    backdrop?.addEventListener('click', () => closeDeleteSchoolModal());
+    confirmBtn.addEventListener('click', () => {
+        const title = pendingDeleteSchoolTitle;
+        closeDeleteSchoolModal();
+        if (title) {
+            deleteSchoolFromSidebarConfirmed(title);
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeDeleteSchoolModal();
+        }
+    });
+}
+
+function openSchoolSettingsModal(schoolTitle) {
+    const modal = document.getElementById('schoolSettingsModal');
+    const nameEl = document.getElementById('schoolSettingsModalSchoolName');
+    const externalCheckbox = document.getElementById('schoolSettingsExternalCheckbox');
+    const externalPanel = document.getElementById('schoolSettingsExternalPanel');
+    const externalUrl = document.getElementById('schoolSettingsExternalUrl');
+    const primaryColorSelect = document.getElementById('schoolSettingsPrimaryColor');
+    const secondaryColorSelect = document.getElementById('schoolSettingsSecondaryColor');
+    if (!modal || !nameEl || !externalCheckbox || !externalPanel || !externalUrl || !primaryColorSelect || !secondaryColorSelect) return;
+    initColorThemeSelect(primaryColorSelect);
+    initColorThemeSelect(secondaryColorSelect);
+
+    pendingSchoolSettingsTitle = String(schoolTitle || '').trim();
+    if (!pendingSchoolSettingsTitle) return;
+
+    const existingUrl = getSchoolSpreadsheetUrl(pendingSchoolSettingsTitle);
+    const enabled = !!existingUrl;
+    const theme = getSchoolTheme(pendingSchoolSettingsTitle);
+    nameEl.value = pendingSchoolSettingsTitle;
+    primaryColorSelect.value = theme.primary;
+    secondaryColorSelect.value = theme.secondary;
+    applyColorSelectPreview(primaryColorSelect);
+    applyColorSelectPreview(secondaryColorSelect);
+    renderSchoolSettingsThemeSquares();
+    closeSchoolSettingsColorPopup();
+    externalCheckbox.checked = enabled;
+    externalPanel.classList.toggle('is-collapsed', !enabled);
+    externalPanel.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+    externalUrl.value = existingUrl;
+
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    if (enabled) {
+        externalUrl.focus();
+    } else {
+        externalCheckbox.focus();
+    }
+}
+
+function closeSchoolSettingsModal() {
+    const modal = document.getElementById('schoolSettingsModal');
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    closeSchoolSettingsColorPopup();
+    pendingSchoolSettingsTitle = '';
+}
+
+function saveSchoolSettingsFromModal() {
+    const schoolTitle = String(pendingSchoolSettingsTitle || '').trim();
+    const schoolNameInput = document.getElementById('schoolSettingsModalSchoolName');
+    const nextSchoolTitle = String(schoolNameInput?.value || '').trim();
+    const schoolKey = schoolTitle.toLowerCase();
+    const nextSchoolKey = nextSchoolTitle.toLowerCase();
+    const externalCheckbox = document.getElementById('schoolSettingsExternalCheckbox');
+    const externalUrlInput = document.getElementById('schoolSettingsExternalUrl');
+    const primaryColorSelect = document.getElementById('schoolSettingsPrimaryColor');
+    const secondaryColorSelect = document.getElementById('schoolSettingsSecondaryColor');
+    if (!schoolTitle || !schoolKey || !externalCheckbox || !externalUrlInput || !primaryColorSelect || !secondaryColorSelect) return;
+    if (!nextSchoolTitle) {
+        showAppMessage("Please enter the school's name.");
+        schoolNameInput?.focus();
+        return;
+    }
+    const duplicateSchoolExists = getAvailableSchoolNames().some((name) => {
+        const k = String(name || '').trim().toLowerCase();
+        return k && k !== schoolKey && k === nextSchoolKey;
+    });
+    if (duplicateSchoolExists) {
+        showAppMessage('Another school with this name already exists.');
+        schoolNameInput?.focus();
+        return;
+    }
+    const currentTheme = getSchoolTheme(nextSchoolTitle || schoolTitle);
+
+    if (nextSchoolKey !== schoolKey) {
+        Object.keys(studentSchoolByName).forEach((studentName) => {
+            const currentSchool = String(studentSchoolByName[studentName] || '').trim();
+            if (currentSchool.toLowerCase() === schoolKey) {
+                studentSchoolByName[studentName] = nextSchoolTitle;
+            }
+        });
+        customSchoolsList = customSchoolsList
+            .map((name) => {
+                const n = String(name || '').trim();
+                return n.toLowerCase() === schoolKey ? nextSchoolTitle : n;
+            })
+            .filter(Boolean);
+        customSchoolsList = [...new Set(customSchoolsList)];
+        customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
+
+    if (externalCheckbox.checked) {
+        const urlRaw = String(externalUrlInput.value || '').trim();
+        if (!urlRaw) {
+            alert('Please paste the spreadsheet or external URL.');
+            externalUrlInput.focus();
+            return;
+        }
+        const parsed = parseHttpUrlInput(urlRaw);
+        if (parsed.error === 'protocol') {
+            alert('Please provide a valid http(s) link.');
+            externalUrlInput.focus();
+            return;
+        }
+        if (parsed.error === 'invalid') {
+            alert('Please provide a valid URL link.');
+            externalUrlInput.focus();
+            return;
+        }
+        schoolExternalLinks[nextSchoolKey] = parsed.url;
+    } else {
+        delete schoolExternalLinks[nextSchoolKey];
+        if (rosterKindFromSchoolName(nextSchoolTitle) === 'passport') {
+            passportHeaderPageLink = '';
+        }
+    }
+    if (nextSchoolKey !== schoolKey) {
+        delete schoolExternalLinks[schoolKey];
+    }
+
+    schoolThemeColors[nextSchoolKey] = normalizeSchoolTheme(
+        {
+            primary: String(primaryColorSelect.value || currentTheme.primary || '').trim(),
+            secondary: String(secondaryColorSelect.value || currentTheme.secondary || '').trim()
+        },
+        nextSchoolTitle
+    );
+    if (nextSchoolKey !== schoolKey) {
+        delete schoolThemeColors[schoolKey];
+        const oldCollapsedKey = schoolKey;
+        const nextCollapsedKey = nextSchoolKey;
+        if (Object.prototype.hasOwnProperty.call(classReportCollapsedBySchool, oldCollapsedKey)) {
+            classReportCollapsedBySchool[nextCollapsedKey] = !!classReportCollapsedBySchool[oldCollapsedKey];
+            delete classReportCollapsedBySchool[oldCollapsedKey];
+        }
+    }
+    pendingSchoolSettingsTitle = nextSchoolTitle;
+
+    saveRoster();
+    refreshContextMenuTheme();
+    renderSidebar();
+    if (currentTeacher) {
+        selectTeacher(currentTeacher);
+    } else if (teachersList[0]) {
+        selectTeacher(teachersList[0]);
+    }
+    closeSchoolSettingsModal();
+}
+
+function setupSchoolSettingsModal() {
+    const modal = document.getElementById('schoolSettingsModal');
+    const cancelBtn = document.getElementById('schoolSettingsCancel');
+    const saveBtn = document.getElementById('schoolSettingsSave');
+    const deleteBtn = document.getElementById('schoolSettingsDelete');
+    const backdrop = document.getElementById('schoolSettingsModalBackdrop');
+    const externalCheckbox = document.getElementById('schoolSettingsExternalCheckbox');
+    const externalPanel = document.getElementById('schoolSettingsExternalPanel');
+    const externalUrl = document.getElementById('schoolSettingsExternalUrl');
+    const primaryColorSelect = document.getElementById('schoolSettingsPrimaryColor');
+    const secondaryColorSelect = document.getElementById('schoolSettingsSecondaryColor');
+    const primarySquare = document.querySelector('.school-settings-theme-square--primary');
+    const secondarySquare = document.querySelector('.school-settings-theme-square--secondary');
+    const colorPopup = document.getElementById('schoolSettingsColorPopup');
+    if (!modal || !saveBtn || !externalCheckbox || !externalPanel) return;
+    initColorThemeSelect(primaryColorSelect);
+    initColorThemeSelect(secondaryColorSelect);
+
+    cancelBtn?.addEventListener('click', () => closeSchoolSettingsModal());
+    backdrop?.addEventListener('click', () => closeSchoolSettingsModal());
+    saveBtn.addEventListener('click', () => saveSchoolSettingsFromModal());
+    deleteBtn?.addEventListener('click', () => {
+        const title = String(pendingSchoolSettingsTitle || '').trim();
+        if (!title) return;
+        closeSchoolSettingsModal();
+        const studentsInSchool = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter((name) => {
+            return (getStudentSchoolName(name) || '').trim().toLowerCase() === title.toLowerCase();
+        });
+        openDeleteSchoolModal(title, studentsInSchool.length);
+    });
+    primarySquare?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSchoolSettingsColorPopup('primary', primarySquare);
+    });
+    secondarySquare?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSchoolSettingsColorPopup('secondary', secondarySquare);
+    });
+    colorPopup?.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => {
+        if (!modal.classList.contains('is-open')) return;
+        closeSchoolSettingsColorPopup();
+    });
+    externalCheckbox.addEventListener('change', () => {
+        const on = !!externalCheckbox.checked;
+        externalPanel.classList.toggle('is-collapsed', !on);
+        externalPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
+        if (on) {
+            window.setTimeout(() => externalUrl?.focus(), 220);
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeSchoolSettingsModal();
+        }
+    });
+}
+
+function openAppMessageModal(title, message) {
+    const modal = document.getElementById('appMessageModal');
+    const titleEl = document.getElementById('appMessageModalTitle');
+    const bodyEl = document.getElementById('appMessageModalBody');
+    const okBtn = document.getElementById('appMessageModalOk');
+    if (!modal || !titleEl || !bodyEl) return;
+    titleEl.textContent = String(title || 'Notice').trim() || 'Notice';
+    bodyEl.textContent = String(message || '').trim();
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    window.setTimeout(() => okBtn?.focus(), 0);
+}
+
+function closeAppMessageModal() {
+    const modal = document.getElementById('appMessageModal');
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function showAppMessage(message, title = 'Notice') {
+    openAppMessageModal(title, message);
+}
+
+function setupAppMessageModal() {
+    const modal = document.getElementById('appMessageModal');
+    const okBtn = document.getElementById('appMessageModalOk');
+    const backdrop = document.getElementById('appMessageModalBackdrop');
+    if (!modal || !okBtn) return;
+    okBtn.addEventListener('click', () => closeAppMessageModal());
+    backdrop?.addEventListener('click', () => closeAppMessageModal());
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeAppMessageModal();
+        }
+    });
+}
+
+function setPasswordToggleVisual(inputEl, btnEl) {
+    if (!inputEl || !btnEl) return;
+    const showing = inputEl.type === 'text';
+    const iconWrap = btnEl.querySelector('.password-toggle-btn-icon');
+    if (iconWrap) {
+        iconWrap.innerHTML = showing ? PASSWORD_HIDE_ICON_SVG : PASSWORD_SHOW_ICON_SVG;
+    }
+    btnEl.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+    btnEl.setAttribute('title', showing ? 'Hide password' : 'Show password');
+    btnEl.setAttribute('aria-pressed', showing ? 'true' : 'false');
+}
+
+function setupPasswordToggle(inputId, buttonId) {
+    const inputEl = document.getElementById(inputId);
+    const btnEl = document.getElementById(buttonId);
+    if (!inputEl || !btnEl) return;
+    setPasswordToggleVisual(inputEl, btnEl);
+    btnEl.addEventListener('click', () => {
+        inputEl.type = inputEl.type === 'password' ? 'text' : 'password';
+        setPasswordToggleVisual(inputEl, btnEl);
+        inputEl.focus();
+    });
+}
+
+function setupPasswordToggles() {
+    setupPasswordToggle('addTeacherPassword', 'addTeacherPasswordToggle');
+    setupPasswordToggle('teacherLoginPassword', 'teacherLoginPasswordToggle');
+}
+
+function openTeacherLoginModal() {
+    const modal = document.getElementById('teacherLoginModal');
+    const emailInput = document.getElementById('teacherLoginEmail');
+    const passwordInput = document.getElementById('teacherLoginPassword');
+    const passwordToggleBtn = document.getElementById('teacherLoginPasswordToggle');
+    const saveCredentialsCheckbox = document.getElementById('teacherLoginSaveCredentials');
+    const errorEl = document.getElementById('teacherLoginError');
+    if (!modal || !emailInput || !passwordInput || !errorEl) return;
+
+    const savedCredentials = loadSavedLoginCredentials();
+    errorEl.textContent = '';
+    emailInput.value = savedCredentials?.email || '';
+    passwordInput.value = savedCredentials?.password || '';
+    if (saveCredentialsCheckbox) saveCredentialsCheckbox.checked = !!savedCredentials;
+    passwordInput.type = 'password';
+    setPasswordToggleVisual(passwordInput, passwordToggleBtn);
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    window.setTimeout(() => (emailInput.value ? passwordInput.focus() : emailInput.focus()), 0);
+}
+
+function closeTeacherLoginModal() {
+    const modal = document.getElementById('teacherLoginModal');
+    const errorEl = document.getElementById('teacherLoginError');
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    if (errorEl) errorEl.textContent = '';
+}
+
+function setupTeacherLoginModal() {
+    const modal = document.getElementById('teacherLoginModal');
+    const form = document.getElementById('teacherLoginForm');
+    const cancelBtn = document.getElementById('teacherLoginCancel');
+    const backdrop = document.getElementById('teacherLoginModalBackdrop');
+    const emailInput = document.getElementById('teacherLoginEmail');
+    const passwordInput = document.getElementById('teacherLoginPassword');
+    const saveCredentialsCheckbox = document.getElementById('teacherLoginSaveCredentials');
+    const errorEl = document.getElementById('teacherLoginError');
+    if (!modal || !form || !emailInput || !passwordInput || !errorEl) return;
+
+    const setError = (message) => {
+        errorEl.textContent = String(message || '').trim();
+    };
+
+    cancelBtn?.addEventListener('click', () => closeTeacherLoginModal());
+    backdrop?.addEventListener('click', () => closeTeacherLoginModal());
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = String(emailInput.value || '').trim().toLowerCase();
+        const password = String(passwordInput.value || '').trim();
+
+        if (!email) {
+            setError('Email is required to log in.');
+            emailInput.focus();
+            return;
+        }
+        if (!password) {
+            setError('Password is required to log in.');
+            passwordInput.focus();
+            return;
+        }
+        if (password.length < 8) {
+            setError('Password must have at least 8 characters.');
+            passwordInput.focus();
+            return;
+        }
+
+        const teacherNameByEmail = teachersList.find((name) => {
+            const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
+            return teacherEmail && teacherEmail === email;
+        });
+        if (!teacherNameByEmail) {
+            setError('Email not found. Make sure you created your profile with this email.');
+            emailInput.focus();
+            return;
+        }
+        const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
+        if (!expectedPassword) {
+            setError('This profile has no password saved. Please create it again.');
+            return;
+        }
+        if (password !== expectedPassword) {
+            setError('Incorrect password.');
+            passwordInput.focus();
+            return;
+        }
+
+        if (saveCredentialsCheckbox?.checked) {
+            saveLoginCredentials(email, password);
+        } else {
+            clearSavedLoginCredentials();
+        }
+
+        try {
+            sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+        } catch {
+            /* ignore */
+        }
+
+        closeTeacherLoginModal();
+        isTeacherLoggedIn = true;
+        loggedInTeacherName = teacherNameByEmail;
+        renderSidebar();
+        selectTeacher(teacherNameByEmail, { view: 'calendar' });
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeTeacherLoginModal();
+        }
+    });
+}
+
 // Initialize teachers sidebar
 async function initTeachers() {
     await loadAllSchedules();
     initRoster();
+    syncSpeakOnWeeklyToAllTeacherSchedules();
+    const restoredTeacher = tryRestoreTeacherSessionFromSavedCredentials();
     renderSidebar();
     setupTeacherListEditDelegation();
 
+    if (!isTeacherLoggedIn) {
+        setLoggedOutDashboard();
+        return;
+    }
+
     if (teachersList.length > 0) {
-        selectTeacher(teachersList[0]);
+        const initialTeacher = restoredTeacher || loggedInTeacherName || teachersList[0];
+        selectTeacher(initialTeacher, restoredTeacher ? { view: 'calendar' } : undefined);
     }
 }
 
@@ -1208,6 +3714,16 @@ async function initTeachers() {
  * @param {{ view?: 'calendar' | 'classReport' }} [opts]
  */
 function selectTeacher(teacherName, opts) {
+    if (!isTeacherLoggedIn) {
+        setLoggedOutDashboard();
+        return;
+    }
+
+    if (isActiveTeacherName(teacherName) && !isTeacherSelectionAllowed(teacherName)) {
+        showAppMessage('You can only access the logged-in teacher profile.');
+        return;
+    }
+
     if (currentTeacher) {
         saveTeacherSchedule(currentTeacher);
     }
@@ -1223,6 +3739,7 @@ function selectTeacher(teacherName, opts) {
     }
 
     currentTeacher = teacherName;
+    renderSidebarHeaderProfile();
 
     document.querySelectorAll('.teacher-item').forEach((item) => {
         item.classList.remove('active');
@@ -1239,6 +3756,8 @@ function selectTeacher(teacherName, opts) {
     });
 
     loadTeacherSchedule(teacherName);
+    applyCalendarStatePaletteCssVars();
+    refreshContextMenuTheme();
 
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
@@ -1262,7 +3781,9 @@ function selectTeacher(teacherName, opts) {
 
 function removeStudentFromRoster(name, rosterKey) {
     const kind = String(rosterKey || '').trim();
-    const list = kind === 'private' ? privateStudentsList : speakonStudentsList;
+    const list = kind === 'private'
+        ? privateStudentsList
+        : (kind === 'speakon' ? speakonStudentsList : passportStudentsList);
     let idx = list.indexOf(name);
     if (idx === -1) {
         const trimmed = name.trim();
@@ -1273,18 +3794,23 @@ function removeStudentFromRoster(name, rosterKey) {
         return;
     }
 
+    const removedName = list[idx];
     list.splice(idx, 1);
     saveRoster();
 
-    const wasCurrent = currentTeacher === name;
+    const wasCurrent = currentTeacher === removedName;
     if (wasCurrent) {
         currentTeacher = null;
         slotStates = {};
     }
 
-    delete teacherSchedules[name];
-    delete studentClassReportRows[name];
+    delete teacherSchedules[removedName];
+    delete speakonStudentWeeklyClass[removedName];
+    delete studentClassReportRows[removedName];
+    delete passportFollowupLinks[removedName];
+    delete studentSchoolByName[removedName];
     saveStudentClassReportRows();
+    syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
 
@@ -1330,23 +3856,43 @@ function splitName(fullName) {
     };
 }
 
+function refreshEditStudentSchoolSelect(selectedSchool = '') {
+    const schoolSelect = document.getElementById('editStudentSchool');
+    if (!schoolSelect) return;
+    const selected = String(selectedSchool || '').trim();
+    const options = getAvailableSchoolNames();
+    if (selected && !options.includes(selected)) {
+        options.push(selected);
+        options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
+    schoolSelect.innerHTML = '';
+    options.forEach((school) => {
+        const option = document.createElement('option');
+        option.value = school;
+        option.textContent = school;
+        schoolSelect.appendChild(option);
+    });
+    schoolSelect.value = selected && options.includes(selected) ? selected : (options[0] || '');
+}
+
 function openEditStudentModal(studentName, rosterKey) {
     const modal = document.getElementById('editStudentModal');
     const firstInput = document.getElementById('editStudentFirst');
     const lastInput = document.getElementById('editStudentLast');
-    const categorySelect = document.getElementById('editStudentCategory');
+    const schoolSelect = document.getElementById('editStudentSchool');
     const originalNameInput = document.getElementById('editStudentOriginalName');
     const originalCategoryInput = document.getElementById('editStudentOriginalCategory');
-    if (!modal || !firstInput || !lastInput || !categorySelect || !originalNameInput || !originalCategoryInput) {
+    if (!modal || !firstInput || !lastInput || !schoolSelect || !originalNameInput || !originalCategoryInput) {
         return;
     }
 
     const parsed = splitName(studentName);
+    const currentSchool = getStudentSchoolName(studentName) || (rosterKey === 'passport' ? 'Passport' : (rosterKey === 'speakon' ? 'SpeakOn' : 'HomeTeachers'));
     firstInput.value = parsed.first;
     lastInput.value = parsed.last;
-    categorySelect.value = rosterKey === 'private' ? 'private' : 'speakon';
+    refreshEditStudentSchoolSelect(currentSchool);
     originalNameInput.value = studentName;
-    originalCategoryInput.value = categorySelect.value;
+    originalCategoryInput.value = rosterKey;
 
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
@@ -1365,7 +3911,9 @@ function upsertStudentFromEditForm(action = 'save') {
     const originalKind = document.getElementById('editStudentOriginalCategory')?.value || '';
     const first = document.getElementById('editStudentFirst')?.value || '';
     const last = document.getElementById('editStudentLast')?.value || '';
-    const nextKind = document.getElementById('editStudentCategory')?.value || '';
+    const schoolName = document.getElementById('editStudentSchool')?.value || '';
+    const nextSchool = String(schoolName || '').trim();
+    const nextKind = rosterKindFromSchoolName(nextSchool);
 
     if (!originalName || !originalKind) {
         return;
@@ -1382,12 +3930,14 @@ function upsertStudentFromEditForm(action = 'save') {
         alert('Please enter first and last name.');
         return;
     }
-    if (!['private', 'speakon'].includes(nextKind)) {
-        alert('Please choose HomeTeachers or SpeakOn.');
+    if (!nextSchool) {
+        alert("Please select the school's name.");
         return;
     }
 
-    const oldList = originalKind === 'private' ? privateStudentsList : speakonStudentsList;
+    const oldList = originalKind === 'private'
+        ? privateStudentsList
+        : (originalKind === 'speakon' ? speakonStudentsList : passportStudentsList);
     const oldIdx = oldList.findIndex((n) => n.trim().toLowerCase() === originalName.trim().toLowerCase());
     if (oldIdx === -1) {
         alert('Student was not found in the list.');
@@ -1395,7 +3945,7 @@ function upsertStudentFromEditForm(action = 'save') {
         return;
     }
 
-    const duplicateExists = [...privateStudentsList, ...speakonStudentsList].some((n) => {
+    const duplicateExists = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((n) => {
         const sameAsOriginal = n.trim().toLowerCase() === originalName.trim().toLowerCase();
         return !sameAsOriginal && n.trim().toLowerCase() === fullName.toLowerCase();
     });
@@ -1405,9 +3955,12 @@ function upsertStudentFromEditForm(action = 'save') {
     }
 
     oldList.splice(oldIdx, 1);
-    const newList = nextKind === 'private' ? privateStudentsList : speakonStudentsList;
+    const newList = nextKind === 'private'
+        ? privateStudentsList
+        : (nextKind === 'speakon' ? speakonStudentsList : passportStudentsList);
     newList.push(fullName);
     newList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    studentSchoolByName[fullName] = nextSchool;
 
     if (originalName !== fullName) {
         if (teacherSchedules[originalName] && !teacherSchedules[fullName]) {
@@ -1417,13 +3970,83 @@ function upsertStudentFromEditForm(action = 'save') {
         }
         delete teacherSchedules[originalName];
         renameStudentClassReportRows(originalName, fullName);
+        if (originalKind === 'passport' && passportFollowupLinks[originalName]) {
+            passportFollowupLinks[fullName] = passportFollowupLinks[originalName];
+            delete passportFollowupLinks[originalName];
+        }
+        delete studentSchoolByName[originalName];
     } else if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
+    }
+    if (originalKind === 'passport' && nextKind !== 'passport') {
+        delete passportFollowupLinks[fullName];
     }
 
     if (currentTeacher && currentTeacher.trim().toLowerCase() === originalName.trim().toLowerCase()) {
         currentTeacher = fullName;
     }
+
+    if (nextKind === 'speakon') {
+        if (originalName !== fullName && speakonStudentWeeklyClass[originalName]) {
+            speakonStudentWeeklyClass[fullName] = speakonStudentWeeklyClass[originalName];
+            delete speakonStudentWeeklyClass[originalName];
+        }
+        const classDayInput = document.getElementById('editStudentSpeakonClassDay');
+        const classHourInput = document.getElementById('editStudentSpeakonClassHour');
+        const extraDayInput = document.getElementById('editStudentSpeakonExtraDay');
+        const extraHourInput = document.getElementById('editStudentSpeakonExtraHour');
+        const hasScheduleInputs = !!(classDayInput && classHourInput && extraDayInput && extraHourInput);
+        const bucket = hasScheduleInputs
+            ? {
+                classDay: String(classDayInput.value || '').trim(),
+                classHour: String(classHourInput.value || '').trim(),
+                extraDay: String(extraDayInput.value || '').trim(),
+                extraHour: String(extraHourInput.value || '').trim()
+            }
+            : getSpeakonWeeklyClassEntry(originalName !== fullName ? originalName : fullName);
+        const templateEmpty =
+            !bucket.classDay &&
+            !String(bucket.classHour || '').trim() &&
+            !bucket.extraDay &&
+            !String(bucket.extraHour || '').trim();
+        const speakonCanonical =
+            speakonStudentsList.find((n) => n.trim().toLowerCase() === fullName.trim().toLowerCase()) || fullName;
+        if (templateEmpty) {
+            Object.keys(speakonStudentWeeklyClass).forEach((k) => {
+                if (String(k || '').trim().toLowerCase() === fullName.trim().toLowerCase()) {
+                    delete speakonStudentWeeklyClass[k];
+                }
+            });
+            const ts = { ...(teacherSchedules[fullName] || {}) };
+            teacherSchedules[fullName] = stripSpeakonColorsFromScheduleCopy(ts);
+        } else {
+            Object.keys(speakonStudentWeeklyClass).forEach((k) => {
+                if (
+                    k !== speakonCanonical &&
+                    String(k || '').trim().toLowerCase() === speakonCanonical.trim().toLowerCase()
+                ) {
+                    delete speakonStudentWeeklyClass[k];
+                }
+            });
+            speakonStudentWeeklyClass[speakonCanonical] = bucket;
+        }
+    } else {
+        delete speakonStudentWeeklyClass[fullName];
+        delete speakonStudentWeeklyClass[originalName];
+        const ts = { ...(teacherSchedules[fullName] || {}) };
+        teacherSchedules[fullName] = stripSpeakonColorsFromScheduleCopy(ts);
+    }
+
+    if (teacherSchedules[fullName]) {
+        teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy(teacherSchedules[fullName], fullName);
+    } else {
+        teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy({}, fullName);
+    }
+    if (currentTeacher && currentTeacher.trim().toLowerCase() === fullName.trim().toLowerCase()) {
+        slotStates = { ...teacherSchedules[fullName] };
+    }
+
+    syncSpeakOnWeeklyToAllTeacherSchedules();
 
     saveRoster();
     saveAllSchedulesLocal();
@@ -1431,6 +4054,9 @@ function upsertStudentFromEditForm(action = 'save') {
 
     renderSidebar();
     selectTeacher(currentTeacher || teachersList[0] || fullName);
+    syncSpeakOnWeeklyToAllTeacherSchedules();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
     closeEditStudentModal();
 }
 
@@ -1469,36 +4095,101 @@ function setupEditStudentModal() {
     }
 }
 
-function addStudentFromForm(firstName, lastName, rosterKey) {
-    const first = String(firstName || '').trim();
-    const last = String(lastName || '').trim();
-    const kind = String(rosterKey || '').trim();
-
-    if (!first || !last) {
-        alert('Please enter both first and last name.');
+function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw) {
+    const schoolName = String(schoolNameRaw || '').trim();
+    if (!schoolName) {
+        alert("Please enter the school's name.");
         return;
     }
 
-    if (!['teacher', 'private', 'speakon'].includes(kind)) {
-        alert('Please choose Teacher, HomeTeachers, or SpeakOn.');
+    normalizeCustomSchoolsList();
+    const k = schoolName.toLowerCase();
+    const usedByStudent = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        return (getStudentSchoolName(name) || '').trim().toLowerCase() === k;
+    });
+    if (usedByStudent || customSchoolsList.some((s) => s.trim().toLowerCase() === k)) {
+        alert('That school is already listed.');
+        return;
+    }
+
+    const extCb = document.getElementById('addSchoolExternalCheckbox');
+    const extUrlInput = document.getElementById('addSchoolExternalUrl');
+    if (extCb && extCb.checked) {
+        const urlRaw = String(extUrlInput?.value || '').trim();
+        if (!urlRaw) {
+            alert('Please paste the spreadsheet or external URL.');
+            extUrlInput?.focus();
+            return;
+        }
+        const parsed = parseHttpUrlInput(urlRaw);
+        if (parsed.error === 'protocol') {
+            alert('Please provide a valid http(s) link.');
+            extUrlInput?.focus();
+            return;
+        }
+        if (parsed.error === 'invalid') {
+            alert('Please provide a valid URL link.');
+            extUrlInput?.focus();
+            return;
+        }
+        schoolExternalLinks[k] = parsed.url;
+    }
+    schoolThemeColors[k] = normalizeSchoolTheme(
+        { primary: primaryColorRaw, secondary: secondaryColorRaw },
+        schoolName
+    );
+
+    customSchoolsList.push(schoolName);
+    customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    saveRoster();
+    refreshContextMenuTheme();
+    renderSidebar();
+    if (currentTeacher) {
+        selectTeacher(currentTeacher);
+    } else if (teachersList[0]) {
+        selectTeacher(teachersList[0]);
+    }
+
+    closeAddStudentModal();
+}
+
+function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
+    const first = String(firstName || '').trim();
+    const last = String(lastName || '').trim();
+    const email = String(emailRaw || '').trim();
+    const password = String(passwordRaw || '');
+    if (!first || !last) {
+        showAppMessage('Please enter both first and last name.');
+        return;
+    }
+    if (!email) {
+        showAppMessage('Please enter an email address.');
+        return;
+    }
+    if (password.length < 8) {
+        showAppMessage('Password must have at least 8 characters.');
+        return;
+    }
+    const emailInput = document.getElementById('addTeacherEmail');
+    if (emailInput && typeof emailInput.checkValidity === 'function' && !emailInput.checkValidity()) {
+        emailInput.reportValidity();
         return;
     }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
-    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList].some(
+    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
         (n) => n.trim().toLowerCase() === fullName.toLowerCase()
     );
     if (nameTaken) {
-        alert('That name is already in the list.');
+        showAppMessage('That name is already in the list.');
         return;
     }
 
-    const list = kind === 'teacher'
-        ? teachersList
-        : (kind === 'private' ? privateStudentsList : speakonStudentsList);
-    list.push(fullName);
-    list.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-
+    teachersList.push(fullName);
+    teachersList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    teacherEmailsByName[fullName] = email;
+    teacherPasswordsByName[fullName] = password;
     if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
@@ -1506,29 +4197,248 @@ function addStudentFromForm(firstName, lastName, rosterKey) {
     saveRoster();
     saveAllSchedulesLocal();
     saveAllSchedules();
-
     renderSidebar();
-    selectTeacher(currentTeacher || teachersList[0]);
-
+    if (isTeacherLoggedIn) {
+        selectTeacher(fullName);
+    } else {
+        setLoggedOutDashboard();
+    }
     closeAddStudentModal();
 }
 
-function openAddStudentModal() {
-    const modal = document.getElementById('addStudentModal');
-    const firstInput = document.getElementById('addStudentFirst');
-    const lastInput = document.getElementById('addStudentLast');
-    const categorySelect = document.getElementById('addStudentCategory');
-    if (!modal || !firstInput || !lastInput || !categorySelect) {
+function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
+    const first = String(firstName || '').trim();
+    const last = String(lastName || '').trim();
+    const schoolName = String(schoolNameRaw || '').trim();
+    if (!first || !last) {
+        alert('Please enter both first and last name.');
+        return;
+    }
+    if (!schoolName) {
+        alert("Please enter the school's name.");
         return;
     }
 
-    firstInput.value = '';
-    lastInput.value = '';
-    categorySelect.selectedIndex = 0;
+    const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
+    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
+        (n) => n.trim().toLowerCase() === fullName.toLowerCase()
+    );
+    if (nameTaken) {
+        alert('That name is already in the list.');
+        return;
+    }
+
+    const rosterKey = rosterKindFromSchoolName(schoolName);
+    const roster = rosterKey === 'passport'
+        ? passportStudentsList
+        : (rosterKey === 'speakon' ? speakonStudentsList : privateStudentsList);
+    roster.push(fullName);
+    roster.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    studentSchoolByName[fullName] = schoolName;
+    if (!teacherSchedules[fullName]) {
+        teacherSchedules[fullName] = {};
+    }
+
+    saveRoster();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+    renderSidebar();
+    selectTeacher(fullName, { view: 'classReport' });
+    closeAddStudentModal();
+}
+
+function updateAddStudentPassportFieldVisibility() {
+    const nameRow = document.getElementById('addTeacherNameRow');
+    const firstInput = document.getElementById('addStudentFirst');
+    const lastInput = document.getElementById('addStudentLast');
+    const phoneInput = document.getElementById('addStudentPhone');
+    const schoolWrap = document.getElementById('addStudentSchoolWrap');
+    const cityInput = document.getElementById('addStudentCity');
+    const stateInput = document.getElementById('addStudentState');
+    const schoolInput = document.getElementById('addStudentSchool');
+    const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    const teacherEmailWrap = document.getElementById('addTeacherEmailWrap');
+    const teacherEmailInput = document.getElementById('addTeacherEmail');
+    const teacherPasswordInput = document.getElementById('addTeacherPassword');
+    const passportLinkWrap = document.getElementById('addStudentPassportLinkWrap');
+    const passportLinkInput = document.getElementById('addStudentPassportLink');
+    const addSchoolExternalWrap = document.getElementById('addSchoolExternalWrap');
+    const addSchoolThemeWrap = document.getElementById('addSchoolThemeWrap');
+    const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
+    const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
+    const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
+    const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
+    const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
+    const dialog = document.querySelector('.add-student-dialog');
+    const title = document.getElementById('addStudentModalTitle');
+    const submitBtn = document.getElementById('addStudentFormSubmit');
+    if (!passportLinkWrap || !passportLinkInput || !dialog || !title || !schoolWrap || !schoolInput) return;
+
+    const isTeacherMode = addStudentModalMode === 'teacher';
+    const isStudentEntryMode = addStudentModalMode === 'student-entry';
+    const isStudentGlobalMode = addStudentModalMode === 'student-global';
+    const useNameFields = isTeacherMode || isStudentEntryMode;
+    const useNameFieldsAny = useNameFields || isStudentGlobalMode;
+    if (nameRow && firstInput && lastInput) {
+        nameRow.classList.toggle('is-hidden', !useNameFieldsAny);
+        nameRow.setAttribute('aria-hidden', useNameFieldsAny ? 'false' : 'true');
+        firstInput.required = useNameFieldsAny;
+        lastInput.required = useNameFieldsAny;
+        if (!useNameFieldsAny) {
+            firstInput.value = '';
+            lastInput.value = '';
+            if (phoneInput) phoneInput.value = '';
+        }
+    }
+    if (teacherEmailWrap && teacherEmailInput) {
+        teacherEmailWrap.classList.toggle('is-hidden', !isTeacherMode);
+        teacherEmailWrap.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+        teacherEmailInput.required = isTeacherMode;
+        if (teacherPasswordInput) teacherPasswordInput.required = isTeacherMode;
+        if (!isTeacherMode) {
+            teacherEmailInput.value = '';
+            if (teacherPasswordInput) teacherPasswordInput.value = '';
+        }
+    }
+    const hideSchoolInput = isTeacherMode || isStudentEntryMode;
+    schoolWrap.classList.toggle('is-hidden', hideSchoolInput);
+    schoolWrap.setAttribute('aria-hidden', hideSchoolInput ? 'true' : 'false');
+    if (hideSchoolInput) {
+        if (cityInput) cityInput.value = '';
+        if (stateInput) stateInput.value = '';
+    }
+    const useSchoolSelect = isStudentGlobalMode;
+    if (schoolInput) {
+        schoolInput.classList.toggle('is-hidden', useSchoolSelect);
+        schoolInput.setAttribute('aria-hidden', useSchoolSelect ? 'true' : 'false');
+        schoolInput.required = !hideSchoolInput && !useSchoolSelect;
+        if (isTeacherMode || useSchoolSelect) {
+            schoolInput.value = '';
+        }
+    }
+    if (schoolSelect) {
+        schoolSelect.classList.toggle('is-hidden', !useSchoolSelect);
+        schoolSelect.setAttribute('aria-hidden', useSchoolSelect ? 'false' : 'true');
+        schoolSelect.required = !hideSchoolInput && useSchoolSelect;
+        if (!useSchoolSelect) {
+            schoolSelect.value = '';
+        } else {
+            refreshAddStudentSchoolSelect(schoolSelect.value);
+        }
+    }
+
+    const hideExternalLinkControls = isTeacherMode || isStudentEntryMode;
+    if (addSchoolExternalWrap) {
+        addSchoolExternalWrap.classList.toggle('is-hidden', hideExternalLinkControls);
+        addSchoolExternalWrap.setAttribute('aria-hidden', hideExternalLinkControls ? 'true' : 'false');
+    }
+    if (addSchoolThemeWrap) {
+        addSchoolThemeWrap.classList.toggle('is-hidden', hideExternalLinkControls);
+        addSchoolThemeWrap.setAttribute('aria-hidden', hideExternalLinkControls ? 'true' : 'false');
+    }
+    if (hideExternalLinkControls) {
+        if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;
+        if (addSchoolExternalPanel) {
+            addSchoolExternalPanel.classList.add('is-collapsed');
+            addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
+        }
+        if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
+        if (addSchoolPrimaryColor) addSchoolPrimaryColor.value = '#5c6bc0';
+        if (addSchoolSecondaryColor) addSchoolSecondaryColor.value = '#1e88e5';
+        renderAddSchoolThemeSquares();
+        closeAddSchoolColorPopup();
+    }
+
+    passportLinkWrap.classList.remove('is-visible');
+    passportLinkWrap.setAttribute('aria-hidden', 'true');
+    passportLinkInput.required = false;
+    passportLinkInput.value = '';
+    dialog.classList.remove('add-student-dialog--expanded');
+
+    title.textContent = isTeacherMode ? 'Add Teacher Profile' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add Student' : 'Add School');
+    if (submitBtn) {
+        submitBtn.textContent = isTeacherMode ? 'Add' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
+    }
+    renderAddSchoolThemeSquares();
+}
+
+function openAddStudentModal(mode = 'student') {
+    const modal = document.getElementById('addStudentModal');
+    const firstInput = document.getElementById('addStudentFirst');
+    const lastInput = document.getElementById('addStudentLast');
+    const phoneInput = document.getElementById('addStudentPhone');
+    const schoolInput = document.getElementById('addStudentSchool');
+    const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    const cityInput = document.getElementById('addStudentCity');
+    const stateInput = document.getElementById('addStudentState');
+    const passportLinkInput = document.getElementById('addStudentPassportLink');
+    const teacherEmailInput = document.getElementById('addTeacherEmail');
+    const teacherPasswordInput = document.getElementById('addTeacherPassword');
+    const teacherPasswordToggleBtn = document.getElementById('addTeacherPasswordToggle');
+    const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
+    const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
+    const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
+    const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
+    const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
+    if (!modal || !schoolInput || !passportLinkInput) {
+        return;
+    }
+
+    addStudentModalMode =
+        mode === 'teacher'
+            ? 'teacher'
+            : (mode === 'student-entry' ? 'student-entry' : (mode === 'student-global' ? 'student-global' : 'student'));
+    addStudentTargetSchool = '';
+    if (addStudentModalMode === 'teacher' && (!firstInput || !lastInput)) {
+        return;
+    }
+    if (firstInput) firstInput.value = '';
+    if (lastInput) lastInput.value = '';
+    if (phoneInput) phoneInput.value = '';
+    schoolInput.value = '';
+    if (cityInput) cityInput.value = '';
+    if (stateInput) stateInput.value = '';
+    if (schoolSelect) {
+        refreshAddStudentSchoolSelect();
+        schoolSelect.value = '';
+    }
+    passportLinkInput.value = '';
+    if (teacherEmailInput) teacherEmailInput.value = '';
+    if (teacherPasswordInput) {
+        teacherPasswordInput.value = '';
+        teacherPasswordInput.type = 'password';
+        setPasswordToggleVisual(teacherPasswordInput, teacherPasswordToggleBtn);
+    }
+    if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;
+    if (addSchoolExternalPanel) {
+        addSchoolExternalPanel.classList.add('is-collapsed');
+        addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
+    }
+    if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
+    if (addSchoolPrimaryColor) addSchoolPrimaryColor.value = '#5c6bc0';
+    if (addSchoolSecondaryColor) addSchoolSecondaryColor.value = '#1e88e5';
+    renderAddSchoolThemeSquares();
+    closeAddSchoolColorPopup();
+    updateAddStudentPassportFieldVisibility();
 
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
-    firstInput.focus();
+    if ((addStudentModalMode === 'teacher' || addStudentModalMode === 'student-entry' || addStudentModalMode === 'student-global') && firstInput) {
+        firstInput.focus();
+    } else {
+        if (addStudentModalMode === 'student-global') {
+            schoolSelect?.focus();
+        } else {
+            schoolInput.focus();
+        }
+    }
+}
+
+function openAddStudentModalForSchool(schoolTitle) {
+    const school = String(schoolTitle || '').trim();
+    if (!school) return;
+    addStudentTargetSchool = school;
+    openAddStudentModal('student-entry');
 }
 
 function closeAddStudentModal() {
@@ -1536,6 +4446,7 @@ function closeAddStudentModal() {
     if (!modal) {
         return;
     }
+    closeAddSchoolColorPopup();
     modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
 }
@@ -1543,15 +4454,13 @@ function closeAddStudentModal() {
 function setupAddStudentModal() {
     const modal = document.getElementById('addStudentModal');
     const form = document.getElementById('addStudentForm');
-    const openBtn = document.getElementById('addStudentBtn');
     const cancelBtn = document.getElementById('addStudentCancel');
     const backdrop = document.getElementById('addStudentModalBackdrop');
+    const schoolInput = document.getElementById('addStudentSchool');
 
-    if (!modal || !form || !openBtn) {
+    if (!modal || !form) {
         return;
     }
-
-    openBtn.addEventListener('click', () => openAddStudentModal());
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
@@ -1559,17 +4468,87 @@ function setupAddStudentModal() {
     if (backdrop) {
         backdrop.addEventListener('click', () => closeAddStudentModal());
     }
+    schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
+
+    const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
+    const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
+    const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
+    const addSchoolExternalOffsite = document.getElementById('addSchoolExternalOffsite');
+    const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
+    const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
+    const addSchoolPrimarySquare = document.querySelector('.add-school-theme-square--primary');
+    const addSchoolSecondarySquare = document.querySelector('.add-school-theme-square--secondary');
+    const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
+    addSchoolExternalCheckbox?.addEventListener('change', () => {
+        const on = !!addSchoolExternalCheckbox.checked;
+        if (addSchoolExternalPanel) {
+            addSchoolExternalPanel.classList.toggle('is-collapsed', !on);
+            addSchoolExternalPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
+        }
+        if (on) {
+            window.setTimeout(() => addSchoolExternalUrl?.focus(), 220);
+        } else {
+            addSchoolExternalUrl?.blur();
+        }
+    });
+    addSchoolExternalOffsite?.addEventListener('click', () => {
+        const parsed = parseHttpUrlInput(addSchoolExternalUrl?.value || '');
+        if (parsed.error && parsed.error !== 'empty') {
+            alert('Please provide a valid URL link.');
+            addSchoolExternalUrl?.focus();
+            return;
+        }
+        if (parsed.error === 'empty' || !parsed.url) {
+            alert('Paste the spreadsheet or external URL first.');
+            addSchoolExternalUrl?.focus();
+            return;
+        }
+        window.open(parsed.url, '_blank', 'noopener,noreferrer');
+    });
+    addSchoolPrimarySquare?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAddSchoolColorPopup('primary', addSchoolPrimarySquare);
+    });
+    addSchoolSecondarySquare?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAddSchoolColorPopup('secondary', addSchoolSecondarySquare);
+    });
+    addSchoolColorPopup?.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => {
+        if (!modal.classList.contains('is-open')) return;
+        closeAddSchoolColorPopup();
+    });
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const first = document.getElementById('addStudentFirst').value;
-        const last = document.getElementById('addStudentLast').value;
-        const cat = document.getElementById('addStudentCategory').value;
-        addStudentFromForm(first, last, cat);
+        const first = document.getElementById('addStudentFirst')?.value || '';
+        const last = document.getElementById('addStudentLast')?.value || '';
+        if (addStudentModalMode === 'teacher') {
+            const email = document.getElementById('addTeacherEmail')?.value || '';
+            const password = document.getElementById('addTeacherPassword')?.value || '';
+            addTeacherFromForm(first, last, email, password);
+            return;
+        }
+        if (addStudentModalMode === 'student-entry') {
+            addStudentToSchoolFromForm(first, last, addStudentTargetSchool);
+            return;
+        }
+        if (addStudentModalMode === 'student-global') {
+            const schoolName = document.getElementById('addStudentSchoolSelect')?.value || '';
+            addStudentToSchoolFromForm(first, last, schoolName);
+            return;
+        }
+        const school = document.getElementById('addStudentSchool').value;
+        addSchoolFromForm(
+            school,
+            addSchoolPrimaryColor?.value || '#5c6bc0',
+            addSchoolSecondaryColor?.value || '#1e88e5'
+        );
     });
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeAddSchoolColorPopup();
             closeAddStudentModal();
         }
     });
@@ -1577,69 +4556,167 @@ function setupAddStudentModal() {
 
 // Save current schedule to teacherSchedules
 function saveTeacherSchedule(teacherName) {
-    teacherSchedules[teacherName] = { ...slotStates };
+    if (!teacherName) return;
+    const copy = { ...slotStates };
+    if (isActiveTeacherName(teacherName)) {
+        teacherSchedules[teacherName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(copy);
+    } else {
+        teacherSchedules[teacherName] = mergeSpeakonWeeklyClassIntoScheduleCopy(copy, teacherName);
+        syncSpeakOnWeeklyToAllTeacherSchedules();
+    }
     // Save to Cloudflare (will also save to localStorage as backup)
     saveAllSchedules();
 }
 
 // Load schedule from teacherSchedules
 function loadTeacherSchedule(teacherName) {
-    slotStates = teacherSchedules[teacherName] ? { ...teacherSchedules[teacherName] } : {};
+    const raw = teacherSchedules[teacherName] ? { ...teacherSchedules[teacherName] } : {};
+    if (isActiveTeacherName(teacherName)) {
+        slotStates = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
+        teacherSchedules[teacherName] = { ...slotStates };
+    } else {
+        slotStates = mergeSpeakonWeeklyClassIntoScheduleCopy(raw, teacherName);
+    }
+}
+
+function initCalendarHeaderToolbar() {
+    const corner = document.getElementById('calendarHeaderCorner');
+    if (!corner || corner.querySelector('#calendarToolbarStudentsBtn')) {
+        return;
+    }
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'time-slot-toolbar calendar-header-toolbar-inner';
+
+    const btnCalendar = document.createElement('button');
+    btnCalendar.type = 'button';
+    btnCalendar.className = 'calendar-toolbar-btn calendar-toolbar-btn--calendar calendar-toolbar-btn--on-blue';
+    btnCalendar.id = 'calendarToolbarCalendarBtn';
+    btnCalendar.title = 'Show calendar';
+    btnCalendar.setAttribute('aria-label', 'Show calendar');
+    btnCalendar.innerHTML = CALENDAR_TOOLBAR_CALENDAR_SVG;
+
+    const btnStudents = document.createElement('button');
+    btnStudents.type = 'button';
+    btnStudents.className = 'calendar-toolbar-btn calendar-toolbar-btn--students calendar-toolbar-btn--on-blue';
+    btnStudents.id = 'calendarToolbarStudentsBtn';
+    btnStudents.title = 'Show student names';
+    btnStudents.setAttribute('aria-label', 'Show student names');
+    btnStudents.setAttribute('aria-pressed', 'false');
+    btnStudents.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
+        '<path fill-rule="evenodd" d="M1 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V6Zm4 1.5a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm2 3a4 4 0 0 0-3.665 2.395.75.75 0 0 0 .416 1A8.98 8.98 0 0 0 7 14.5a8.98 8.98 0 0 0 3.249-.604.75.75 0 0 0 .416-1.001A4.001 4.001 0 0 0 7 10.5Zm5-3.75a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Zm0 6.5a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Zm.75-4a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z" clip-rule="evenodd" />' +
+        '</svg>';
+
+    const btnClear = document.createElement('button');
+    btnClear.type = 'button';
+    btnClear.className = 'calendar-toolbar-btn calendar-toolbar-btn--clear calendar-toolbar-btn--on-blue';
+    btnClear.id = 'calendarToolbarClearAllBtn';
+    btnClear.title = 'Clear all slots';
+    btnClear.setAttribute('aria-label', 'Clear all slots');
+    btnClear.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
+        '<path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />' +
+        '</svg>';
+
+    toolbar.appendChild(btnCalendar);
+    toolbar.appendChild(btnStudents);
+    toolbar.appendChild(btnClear);
+    corner.appendChild(toolbar);
+
+    btnCalendar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        closeCalendarStudentNamesPopover();
+        if (String(calendarToolbarExternalLink || '').trim()) {
+            closeCalendarLinkPopover();
+            window.open(calendarToolbarExternalLink, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        openCalendarLinkPopover(btnCalendar);
+    });
+    btnCalendar.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openCalendarLinkPopover(btnCalendar);
+    });
+    btnStudents.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        closeCalendarLinkPopover();
+        toggleCalendarStudentNamesPopover(btnStudents);
+    });
+    btnClear.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        closeCalendarStudentNamesPopover();
+        closeCalendarLinkPopover();
+        clearAll();
+    });
 }
 
 // Initialize the calendar
 function initCalendar() {
     const timeSlotsContainer = document.getElementById('timeSlots');
-    
+
+    initCalendarHeaderToolbar();
+
     // Initialize context menu
     contextMenu = document.getElementById('contextMenu');
-    
+    applyCalendarStatePaletteCssVars();
+    refreshContextMenuTheme();
+
     // Generate time slots for each hour
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
-        // Time label
         const timeLabel = document.createElement('div');
         timeLabel.className = 'time-label';
         timeLabel.textContent = formatHour(hour);
         timeSlotsContainer.appendChild(timeLabel);
-        
+
         // Time slots for each day
         DAYS.forEach((day, dayIndex) => {
             const slot = document.createElement('div');
             slot.className = 'time-slot';
             slot.dataset.day = day;
             slot.dataset.hour = hour;
-            
+
             // Left click: cycle through states
             slot.addEventListener('click', (e) => {
-                if (e.button === 0 || !e.button) { // Left click
+                if (e.button === 0 || !e.button) {
                     cycleSlotState(day, hour);
                 }
             });
-            
+
             // Right click: show context menu
             slot.addEventListener('contextmenu', (e) => {
+                if (!isCustomContextMenuEnabledForCurrentSelection()) {
+                    hideContextMenu();
+                    return;
+                }
                 e.preventDefault();
                 showContextMenu(e, day, hour);
             });
-            
+
             timeSlotsContainer.appendChild(slot);
         });
     }
-    
+
+    setupCalendarStudentPopoverDismiss();
+
     // Close context menu when clicking elsewhere
     document.addEventListener('click', () => {
         hideContextMenu();
     });
-    
-    // Handle context menu item clicks
-    document.querySelectorAll('.context-menu-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-            const color = item.dataset.color;
-            if (currentSlot) {
-                setSlotState(currentSlot.day, currentSlot.hour, color === 'clear' ? null : color);
-                hideContextMenu();
-            }
-        });
+
+    // Handle context menu item clicks (delegated; menu rows are rebuilt dynamically)
+    contextMenu?.addEventListener('click', (e) => {
+        const item = e.target.closest('.context-menu-item');
+        if (!item || !contextMenu.contains(item)) return;
+        const color = item.dataset.color;
+        if (currentSlot) {
+            setSlotState(currentSlot.day, currentSlot.hour, color || null);
+            hideContextMenu();
+        }
     });
 }
 
@@ -1652,13 +4729,8 @@ function refreshCalendarDisplay() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
-                // Remove all state classes
-                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
-                
-                // Add current state class
-                if (state) {
-                    slot.classList.add(`state-${state}`);
-                }
+                applyStateVisualToSlot(slot, state);
+                renderStudentNamesInSlot(slot, day, hour, state);
             }
         }
     });
@@ -1686,15 +4758,13 @@ function setSlotState(day, hour, state) {
     
     if (!slot) return;
     
-    // Remove all state classes
-    slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
-    
     if (state) {
         slotStates[key] = state;
-        slot.classList.add(`state-${state}`);
     } else {
         slotStates[key] = null;
     }
+    applyStateVisualToSlot(slot, state);
+    renderStudentNamesInSlot(slot, day, hour, state);
     
     // Save to teacher schedule and localStorage
     saveTeacherSchedule(currentTeacher);
@@ -1702,14 +4772,15 @@ function setSlotState(day, hour, state) {
     updateSummary();
 }
 
-// Cycle through states on left click: null -> available -> unavailable -> null
+// Cycle through states on left click: null <-> available
 function cycleSlotState(day, hour) {
     if (!currentTeacher) return;
     
     const currentState = getSlotState(day, hour);
     const currentIndex = STATE_CYCLE.indexOf(currentState);
-    const nextIndex = (currentIndex + 1) % STATE_CYCLE.length;
-    const nextState = STATE_CYCLE[nextIndex];
+    const nextState = currentIndex === -1
+        ? 'available'
+        : STATE_CYCLE[(currentIndex + 1) % STATE_CYCLE.length];
     
     setSlotState(day, hour, nextState);
 }
@@ -1719,6 +4790,7 @@ function showContextMenu(event, day, hour) {
     if (!currentTeacher) return;
     
     currentSlot = { day, hour };
+    refreshContextMenuTheme();
     contextMenu.classList.add('show');
     
     // Position menu near cursor
@@ -1743,6 +4815,106 @@ function hideContextMenu() {
         contextMenu.classList.remove('show');
     }
     currentSlot = null;
+}
+
+function getContextMenuSchoolConfig() {
+    let schoolTitle = 'HomeTeachers';
+    if (currentTeacher && isStudentName(currentTeacher)) {
+        schoolTitle = getStudentSchoolName(currentTeacher) || 'HomeTeachers';
+    }
+    const classState = makeSchoolStateToken(schoolTitle, 'class');
+    const extraState = makeSchoolStateToken(schoolTitle, 'extra');
+    const theme = getSchoolTheme(schoolTitle);
+    return {
+        classState,
+        extraState,
+        classColor: theme.primary,
+        extraColor: theme.secondary
+    };
+}
+
+function getCalendarStatePaletteByContext() {
+    const getSchoolForKindInTeacherView = (kind) => {
+        const defaultSchool = kind === 'passport' ? 'Passport' : (kind === 'speakon' ? 'SpeakOn' : 'HomeTeachers');
+        if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return defaultSchool;
+        const teacherSched = teacherSchedules[currentTeacher] || {};
+        const relevantStudents = kind === 'passport'
+            ? passportStudentsList
+            : (kind === 'speakon' ? speakonStudentsList : privateStudentsList);
+        const statePair = kind === 'passport'
+            ? { classState: 'special', extraState: '' }
+            : (kind === 'speakon' ? { classState: 'magenta', extraState: 'salmon' } : { classState: 'navy', extraState: 'cyan' });
+        const teacherStateKeys = Object.entries(teacherSched)
+            .filter(([, v]) => {
+                const val = String(v || '');
+                return val === statePair.classState || (!!statePair.extraState && val === statePair.extraState);
+            })
+            .map(([k]) => k);
+        if (teacherStateKeys.length === 0) return defaultSchool;
+        const contributing = relevantStudents.find((studentName) => {
+            const st = teacherSchedules[studentName] || {};
+            return teacherStateKeys.some((key) => {
+                const val = String(st[key] || '');
+                return val === statePair.classState || (!!statePair.extraState && val === statePair.extraState);
+            });
+        });
+        return (contributing && getStudentSchoolName(contributing)) || defaultSchool;
+    };
+    const homeTheme = getSchoolTheme(getSchoolForKindInTeacherView('private'));
+    const speakTheme = getSchoolTheme(getSchoolForKindInTeacherView('speakon'));
+    const passportTheme = getSchoolTheme(getSchoolForKindInTeacherView('passport'));
+    const palette = {
+        navy: homeTheme.primary,
+        cyan: homeTheme.secondary,
+        magenta: speakTheme.primary,
+        salmon: speakTheme.secondary,
+        special: passportTheme.primary
+    };
+    if (currentTeacher && isStudentName(currentTeacher)) {
+        const schoolTitle = getStudentSchoolName(currentTeacher) || 'HomeTeachers';
+        const schoolTheme = getSchoolTheme(schoolTitle);
+        const states = getStudentOverlayStates(currentTeacher);
+        if (states.classState) palette[states.classState] = schoolTheme.primary;
+        if (states.extraState) palette[states.extraState] = schoolTheme.secondary;
+    }
+    return palette;
+}
+
+function applyCalendarStatePaletteCssVars() {
+    const root = document.documentElement;
+    if (!root) return;
+    const palette = getCalendarStatePaletteByContext();
+    ['navy', 'cyan', 'magenta', 'salmon', 'special'].forEach((state) => {
+        const color = String(palette[state] || '').trim().toLowerCase();
+        if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+        root.style.setProperty(`--slot-state-${state}-bg`, color);
+        root.style.setProperty(`--slot-state-${state}-border`, color);
+        root.style.setProperty(`--slot-state-${state}-shadow`, rgbaFromHex(color, 0.4));
+    });
+}
+
+function refreshContextMenuTheme() {
+    if (!contextMenu) return;
+    const cfg = getContextMenuSchoolConfig();
+    const selectedState = currentSlot ? getSlotState(currentSlot.day, currentSlot.hour) : null;
+    const classChecked = selectedState === cfg.classState;
+    const extraChecked = selectedState === cfg.extraState;
+    contextMenu.innerHTML = `
+        <div class="context-menu-row">
+            <button type="button" class="context-menu-item context-menu-item--compact" data-color="${cfg.classState}">
+                <span class="context-menu-checkbox${classChecked ? ' is-checked' : ''}" aria-hidden="true"></span>
+                <span class="context-menu-label">Class</span>
+            </button>
+            <span class="context-menu-divider" aria-hidden="true"></span>
+            <button type="button" class="context-menu-item context-menu-item--compact" data-color="${cfg.extraState}">
+                <span class="context-menu-checkbox${extraChecked ? ' is-checked' : ''}" aria-hidden="true"></span>
+                <span class="context-menu-label">Extra/Reposition</span>
+            </button>
+        </div>
+    `;
+    const rows = contextMenu.querySelectorAll('.context-menu-item');
+    if (rows[0]) rows[0].style.setProperty('--menu-option-color', cfg.classColor);
+    if (rows[1]) rows[1].style.setProperty('--menu-option-color', cfg.extraColor);
 }
 
 // Update the summary panel - show only Available slots
@@ -1838,9 +5010,8 @@ function selectAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
-                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
                 slotStates[key] = 'available';
-                slot.classList.add('state-available');
+                applyStateVisualToSlot(slot, 'available');
             }
         });
     }
@@ -1860,8 +5031,8 @@ function clearAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
-                slot.classList.remove('state-available', 'state-unavailable', 'state-navy', 'state-cyan', 'state-magenta', 'state-salmon', 'state-special');
                 slotStates[key] = null;
+                applyStateVisualToSlot(slot, null);
             }
         });
     }
@@ -2086,9 +5257,19 @@ function exportSchedulePDF() {
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
     await initTeachers();
+    setupAppMessageModal();
+    setupPasswordToggles();
+    setupSidebarProfileAvatarUpload();
+    setupTeacherLoginModal();
     initCalendar();
+    if (currentTeacher) {
+        refreshCalendarDisplay();
+        updateSummary();
+    }
     setupAddStudentModal();
     setupEditStudentModal();
+    setupSchoolSettingsModal();
+    setupDeleteSchoolModal();
     setupStudentClassReportPanel();
     setupClassTopicModal();
 });
