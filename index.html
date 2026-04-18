@@ -105,7 +105,13 @@
                     </label>
                     <label class="add-student-label">
                         <span>Phone number</span>
-                        <input type="tel" id="addStudentPhone" name="phone" autocomplete="tel" maxlength="30" placeholder="+55 11 99999-9999">
+                        <div class="add-student-phone-row">
+                            <div class="add-student-phone-country-wrap">
+                                <img id="addStudentPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
+                                <select id="addStudentPhoneCountry" name="phoneCountry" aria-label="Country code"></select>
+                            </div>
+                            <input type="tel" id="addStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="11 99999-9999">
+                        </div>
                     </label>
                 </div>
                 <div class="add-teacher-email-wrap is-hidden" id="addTeacherEmailWrap" aria-hidden="true">
@@ -197,6 +203,61 @@
         </div>
     </div>
 
+    <!-- Google Meet modal -->
+    <div id="googleMeetModal" class="google-meet-modal" aria-hidden="true">
+        <div class="google-meet-modal-backdrop" id="googleMeetModalBackdrop"></div>
+        <div class="google-meet-dialog" role="dialog" aria-modal="true" aria-labelledby="googleMeetModalTitle">
+            <h3 id="googleMeetModalTitle" class="google-meet-title">Open Google Meet</h3>
+            <form id="googleMeetForm" class="google-meet-form">
+                <label class="google-meet-label">
+                    <span>School's Name</span>
+                    <button type="button" id="googleMeetSchoolToggle" class="google-meet-school-toggle" aria-expanded="false" aria-controls="googleMeetSchoolListWrap">
+                        <span id="googleMeetSchoolToggleText">Select a School</span>
+                        <span class="google-meet-school-toggle-chevron" aria-hidden="true"></span>
+                    </button>
+                    <div id="googleMeetSchoolListWrap" class="google-meet-school-list-wrap" aria-hidden="true">
+                        <div id="googleMeetSchoolList" class="google-meet-school-list" role="listbox" aria-label="Available schools"></div>
+                    </div>
+                </label>
+                <div id="googleMeetSharedSchoolPanel" class="google-meet-shared-school-panel" hidden aria-hidden="true">
+                    <label class="google-meet-shared-school-checkbox-label" for="googleMeetSharedSchoolCheckbox">
+                        <input type="checkbox" id="googleMeetSharedSchoolCheckbox" class="google-meet-shared-school-checkbox-input" />
+                        <span class="google-meet-shared-school-checkbox-box" aria-hidden="true"></span>
+                        <span class="google-meet-shared-school-checkbox-text">same link?</span>
+                    </label>
+                    <label id="googleMeetSharedSchoolInputWrap" class="google-meet-label google-meet-shared-school-input-wrap" hidden aria-hidden="true">
+                        <input type="url" id="googleMeetSharedSchoolInput" autocomplete="off" placeholder="https://meet.google.com/..." />
+                    </label>
+                    <div id="googleMeetSharedSchoolActions" class="google-meet-shared-school-actions" hidden aria-hidden="true">
+                        <button type="button" id="googleMeetSharedSchoolSave" class="google-meet-btn google-meet-btn--submit">Save link</button>
+                    </div>
+                </div>
+                <div id="googleMeetStudentPanel" class="google-meet-student-panel" hidden>
+                    <button type="button" id="googleMeetStudentToggle" class="google-meet-school-toggle google-meet-student-toggle" aria-expanded="false" aria-controls="googleMeetStudentListWrap">
+                        <span id="googleMeetStudentToggleText">Students (0)</span>
+                        <span class="google-meet-school-toggle-chevron" aria-hidden="true"></span>
+                    </button>
+                    <div id="googleMeetStudentListWrap" class="google-meet-school-list-wrap google-meet-student-list-wrap" aria-hidden="true">
+                        <div id="googleMeetStudentList" class="google-meet-school-list google-meet-student-list" role="listbox" aria-label="Students in this school" aria-multiselectable="true"></div>
+                    </div>
+                </div>
+            </form>
+            <div id="googleMeetStudentLinkPopover" class="google-meet-student-link-popover" hidden aria-hidden="true" role="dialog" aria-labelledby="googleMeetStudentLinkPopoverTitle">
+                <p id="googleMeetStudentLinkPopoverTitle" class="google-meet-student-link-popover-title">Google Meet link</p>
+                <p id="googleMeetStudentLinkPopoverStudentName" class="google-meet-student-link-popover-sub"></p>
+                <label class="google-meet-student-link-popover-label">
+                    <span>Paste a Meet link for this student</span>
+                    <input type="url" id="googleMeetStudentLinkPopoverInput" autocomplete="off" placeholder="https://meet.google.com/..." />
+                </label>
+                <div class="google-meet-student-link-popover-actions">
+                    <button type="button" class="google-meet-btn google-meet-btn--cancel" id="googleMeetStudentLinkPopoverCancel">Cancel</button>
+                    <button type="button" class="google-meet-btn google-meet-btn--submit" id="googleMeetStudentLinkPopoverSave">Save</button>
+                </div>
+            </div>
+            <div id="googleMeetContextMessage" class="google-meet-context-message" hidden aria-hidden="true" role="status" aria-live="polite"></div>
+        </div>
+    </div>
+
     <!-- Edit student modal -->
     <div id="editStudentModal" class="edit-student-modal" aria-hidden="true">
         <div class="edit-student-modal-backdrop" id="editStudentModalBackdrop"></div>
@@ -215,6 +276,16 @@
                         <input type="text" id="editStudentLast" name="lastName" autocomplete="family-name" required maxlength="80">
                     </label>
                 </div>
+                <label class="edit-student-label">
+                    <span>Phone number</span>
+                    <div class="edit-student-phone-row">
+                        <div class="edit-student-phone-country-wrap">
+                            <img id="editStudentPhoneCountryFlag" class="edit-student-phone-country-flag" alt="" aria-hidden="true">
+                            <select id="editStudentPhoneCountry" name="phoneCountry" aria-label="Country"></select>
+                        </div>
+                        <input type="tel" id="editStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="+55 11 99999-9999">
+                    </div>
+                </label>
                 <label class="edit-student-label">
                     <span>School's Name</span>
                     <select id="editStudentSchool" name="school" required></select>

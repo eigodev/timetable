@@ -143,10 +143,13 @@ body {
     color: #3f51b5;
     cursor: pointer;
     transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+    position: relative;
 }
 
 #addTeacherProfileBtn {
     border-radius: 0px 10px 10px 0px;
+    opacity: 0;
+    animation: auth-btn-enter 1000ms cubic-bezier(0.22, 1, 0.36, 1) 120ms forwards;
 }
 
 .sidebar-add-btn svg {
@@ -164,22 +167,24 @@ body {
 }
 
 .sidebar-auth-btn {
-    padding: 0px 0px 0px 10px;
+    padding: 0px 0px 0px 6px;
     justify-content: center;
     white-space: nowrap;
     will-change: transform, opacity, filter;
 }
 
 .sidebar.is-logged-in .sidebar-auth-btn {
-    padding: 0px 2.75px 0px 0px;
+    padding: 0px 2.5px 0px 0px;
 }
 
 .sidebar-auth-btn--login {
-    animation: auth-btn-enter 1000ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity: 0;
+    animation: auth-btn-enter 1000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .sidebar-auth-btn--logout {
-    animation: auth-btn-enter 1000ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity: 0;
+    animation: auth-btn-enter 1000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .sidebar-auth-btn--login .sidebar-add-btn-label {
@@ -205,12 +210,12 @@ body {
 @keyframes auth-btn-enter {
     from {
         opacity: 0;
-        transform: translateX(10px) scale(0.98);
+        transform: scale(0.98);
         filter: blur(0.5px);
     }
     to {
         opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: scale(1);
         filter: blur(0);
     }
 }
@@ -246,12 +251,954 @@ body {
 
 .sidebar-add-btn:hover {
     border: 1px solid #9fa8da;
-    background: #d7ddf7;
     color: #3f51b5;
+}
+
+.sidebar-add-btn--expandable {
+    --expanded-width: 86px;
+    width: 20px;
+    min-width: 20px;
+    border-radius: 6px;
+    padding: 0;
+    overflow: hidden;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    transition: width 0.5s ease, min-width 0.5s ease, background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
+}
+
+#googleMeetBtn.sidebar-add-btn--expandable {
+    --expanded-width: 102px;
+}
+
+#addTeacherProfileBtn.sidebar-add-btn--expandable {
+    --expanded-width: var(--add-teacher-expanded-width, 86px);
+
+}
+
+.sidebar-pane-teachers {
+    flex: 0 0 auto;
+    --add-teacher-expanded-width: 86px;
+}
+
+#addStudentEntryBtn.sidebar-add-btn--expandable {
+    --expanded-width: 96px;
+}
+
+#addSchoolBtn.sidebar-add-btn--expandable {
+    --expanded-width: 90px;
+}
+
+.sidebar-add-btn-state {
+    position: absolute;
+    inset: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sidebar-add-btn-state--icon {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.sidebar-add-btn-state--full {
+    opacity: 0;
+    transform: translateX(4px);
+    justify-content: flex-start;
+    gap: 5px;
+    padding: 0 6px;
+}
+
+.sidebar-add-btn-state-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.sidebar-add-btn--expandable:hover,
+.sidebar-add-btn--expandable:focus-visible {
+    width: var(--expanded-width);
+    min-width: var(--expanded-width);
+}
+
+/* Schools: expand in place (no negative margin) so Meet / Add student stay visible */
+.sidebar-pane-students .sidebar-add-btn--expandable:hover,
+.sidebar-pane-students .sidebar-add-btn--expandable:focus-visible {
+    margin-left: 0;
+}
+
+/* Teachers: expand Add teacher to the right so it never stacks over log in/out */
+.sidebar-pane-teachers #addTeacherProfileBtn.sidebar-add-btn--expandable:hover,
+.sidebar-pane-teachers #addTeacherProfileBtn.sidebar-add-btn--expandable:focus-visible {
+    margin-left: 0;
+}
+
+.sidebar-add-btn--expandable:hover .sidebar-add-btn-state--icon,
+.sidebar-add-btn--expandable:focus-visible .sidebar-add-btn-state--icon {
+    opacity: 0;
+    transform: translateX(-4px);
+}
+
+.sidebar-add-btn--expandable:hover .sidebar-add-btn-state--full,
+.sidebar-add-btn--expandable:focus-visible .sidebar-add-btn-state--full {
+    opacity: 1;
+    transform: translateX(0);
 }
 
 .sidebar-section-add-btn {
     flex-shrink: 0;
+}
+
+.sidebar-add-btn--google-meet,
+.sidebar-add-btn--student-entry,
+.sidebar-add-btn--school {
+    opacity: 0;
+    animation: auth-btn-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sidebar-add-btn--google-meet {
+    animation-delay: 520ms;
+}
+
+.sidebar-add-btn--student-entry {
+    animation-delay: 600ms;
+}
+
+.sidebar-add-btn--school {
+    animation-delay: 680ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-add-btn--google-meet,
+    .sidebar-add-btn--student-entry,
+    .sidebar-add-btn--school {
+        opacity: 1;
+        animation: none;
+    }
+}
+
+.google-meet-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2002;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.google-meet-modal.is-open {
+    display: flex;
+}
+
+.google-meet-modal.is-open .google-meet-modal-backdrop {
+    animation: modal-backdrop-in 0.28s ease-out both;
+}
+
+.google-meet-modal.is-open .google-meet-dialog {
+    animation: modal-popup-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.google-meet-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.google-meet-dialog {
+    position: relative;
+    width: var(--google-meet-dialog-width, 35%);
+    min-width: min(35%, 340px);
+    max-width: calc(100vw - 24px);
+    padding: 20px;
+    
+    background: #fff;
+    border: 1px solid #d9def6;
+    border-radius: 10px;
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
+    transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.google-meet-title {
+    margin: 0 0 14px;
+    color: #2f3a78;
+    font-size: 1.05rem;
+}
+
+.google-meet-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.google-meet-label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 0.88rem;
+    color: #2f3a78;
+    font-weight: 600;
+}
+
+.google-meet-label input {
+    width: 100%;
+    border: 1px solid #cfd5ec;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font: inherit;
+    color: #1f2937;
+}
+
+.google-meet-label select {
+    width: 100%;
+    border: 1px solid #cfd5ec;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font: inherit;
+    color: #1f2937;
+    background: #fff;
+}
+
+.google-meet-school-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    width: 100%;
+    padding: 10px;
+
+    border: none;
+    border-radius: 10px 10px 0px 0px;
+    background: #3f51b5;
+
+    font-weight: 600;
+    font: inherit;
+    color: #ffffff;
+    text-align: left;
+    cursor: pointer;
+}
+
+#googleMeetSchoolToggleText {
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#googleMeetSchoolToggleText.is-swap-out {
+    animation: google-meet-value-out 0.22s ease forwards;
+}
+
+#googleMeetSchoolToggleText.is-swap-in {
+    animation: google-meet-value-in 0.26s ease forwards;
+}
+
+.google-meet-school-toggle:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.16);
+}
+
+.google-meet-school-toggle:hover {
+    background: #32408f;
+    border-color: #32408f;
+}
+
+.google-meet-school-toggle-chevron {
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(45deg);
+    transition: transform 0.28s ease;
+    margin-left: 10px;
+    flex-shrink: 0;
+}
+
+.google-meet-school-toggle[aria-expanded="true"] .google-meet-school-toggle-chevron {
+    transform: rotate(225deg);
+}
+
+.google-meet-school-list-wrap {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.42s ease, opacity 0.34s ease;
+    border: 1px solid transparent;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    background: #fff;
+}
+
+.google-meet-school-list-wrap.is-open {
+    max-height: 180px;
+    opacity: 1;
+}
+
+.google-meet-school-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.google-meet-school-option {
+    border: none;
+    border-bottom: 1px solid #3f51b5;
+    background: #fff;
+    text-align: left;
+    padding: 10px;
+    font: inherit;
+    font-size: 0.9rem;
+    color: #1f2937;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(-4px);
+    animation: google-meet-option-in 0.38s ease forwards;
+}
+
+.google-meet-school-option:hover {
+    background: #eef1ff;
+}
+
+.google-meet-school-option.is-selected {
+    background: #e2e8ff;
+    color: #2f3a78;
+    font-weight: 600;
+}
+
+.google-meet-school-empty {
+    padding: 8px 10px;
+    color: #7a8096;
+    font-size: 0.88rem;
+}
+
+.google-meet-student-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.google-meet-shared-school-panel {
+    margin-top: 2px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.google-meet-shared-school-panel[hidden],
+.google-meet-shared-school-input-wrap[hidden],
+.google-meet-shared-school-actions[hidden] {
+    display: none !important;
+}
+
+.google-meet-shared-school-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    width: fit-content;
+}
+
+.google-meet-shared-school-checkbox-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.google-meet-shared-school-checkbox-box {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #9fa8da;
+    border-radius: 4px;
+    background: #fff;
+    position: relative;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.google-meet-shared-school-checkbox-box::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) scale(0);
+    transform-origin: center;
+    transition: transform 0.16s ease;
+}
+
+.google-meet-shared-school-checkbox-input:checked + .google-meet-shared-school-checkbox-box {
+    background: #3f51b5;
+    border-color: #3f51b5;
+}
+
+.google-meet-shared-school-checkbox-input:checked + .google-meet-shared-school-checkbox-box::after {
+    transform: rotate(45deg) scale(1);
+}
+
+.google-meet-shared-school-checkbox-input:focus-visible + .google-meet-shared-school-checkbox-box {
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
+}
+
+.google-meet-shared-school-checkbox-text {
+    font-size: 0.84rem;
+    color: #2f3a78;
+    font-weight: 600;
+}
+
+.google-meet-shared-school-input-wrap {
+    margin-top: 0;
+}
+
+.google-meet-shared-school-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.google-meet-shared-school-actions .google-meet-btn {
+    padding: 7px 14px;
+    font-size: 0.82rem;
+}
+
+.google-meet-student-panel[hidden] {
+    display: none !important;
+}
+
+/* Enter class is toggled from JS so the animation runs after display:none → visible */
+.google-meet-student-panel.google-meet-student-panel--enter {
+    animation: google-meet-student-panel-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes google-meet-student-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .google-meet-student-panel.google-meet-student-panel--enter {
+        animation: none !important;
+    }
+
+    .google-meet-student-row {
+        transition: background-color 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease !important;
+    }
+
+    .google-meet-student-row:hover {
+        transform: none;
+    }
+}
+
+.google-meet-student-toggle {
+    margin-top: 10px;
+    background: #eef1ff !important;
+    color: #2f3a78 !important;
+}
+
+.google-meet-student-toggle[aria-expanded="false"] {
+    border-radius: 10px 10px 0px 0px;
+}
+
+.google-meet-student-toggle:focus {
+    outline: none;
+    border-color: #32408f;
+    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.16);
+}
+
+.google-meet-student-toggle .google-meet-school-toggle-chevron {
+    border-right-color: #3f51b5;
+    border-bottom-color: #3f51b5;
+}
+
+.google-meet-student-list-wrap {
+    border-radius: 0 0 10px 10px;
+}
+
+.google-meet-school-list-wrap.google-meet-student-list-wrap.is-open {
+    max-height: 280px;
+}
+
+/* Scrollable when needed; scrollbar hidden (still scroll with wheel / touch) */
+.google-meet-student-list.google-meet-school-list {
+    max-height: 260px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 4px;
+    background: #f7f9ff;
+    border-radius: 0 0 10px 10px;
+}
+
+.google-meet-student-list.google-meet-school-list.is-multi-column {
+    display: grid;
+    grid-template-columns: repeat(var(--google-meet-student-columns, 1), minmax(0, 1fr));
+    align-content: start;
+    padding: 10px;
+    gap: 5px;
+}
+
+.google-meet-student-column {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.google-meet-student-list.google-meet-school-list::-webkit-scrollbar {
+    display: none;
+}
+
+.google-meet-student-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+
+    padding: 8px 12px;
+    box-sizing: border-box;
+    border: 1px solid #c9d4f4;
+    border-radius: 10px;
+    background: #ffffff;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(-4px);
+    animation: google-meet-option-in 0.5s ease forwards;
+    transition: background-color 0.24s ease, box-shadow 0.24s ease, transform 0.24s ease, border-color 0.24s ease;
+}
+
+.google-meet-student-row:last-child {
+    border-bottom: 1px solid #c9d4f4;
+}
+
+.google-meet-student-list.google-meet-school-list.is-multi-column .google-meet-student-row {
+    border: 1px solid #c9d4f4;
+    border-radius: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #c9d4f4;
+}
+
+.google-meet-student-row.has-saved-meet-link {
+    background: #f3f6ff;
+    border-color: #b7c5f3;
+    box-shadow: 2.5px 2.5px 2.5px 0px rgba(63, 81, 181, 0.15);
+}
+
+.google-meet-student-row.has-saved-meet-link .google-meet-student-name {
+    color: rgb(63, 81, 181);
+    font-weight: 600;
+}
+
+.google-meet-student-row.has-saved-meet-link:hover {
+    background: #edf2ff;
+}
+
+.google-meet-student-row.is-selected {
+    background: #e7edff;
+    border-color: #95a8e9;
+    box-shadow: 0 4px 14px rgba(63, 81, 181, 0.2);
+}
+
+.google-meet-student-row.is-selected .google-meet-student-name {
+    color: #2f3a78;
+    font-weight: 600;
+}
+
+.google-meet-student-row.is-selected.has-saved-meet-link {
+    background: #dde8ff;
+    border-color: #899de4;
+    box-shadow: 0 4px 14px rgba(63, 81, 181, 0.2);
+}
+
+.google-meet-student-row.is-selected.has-saved-meet-link .google-meet-student-name {
+    color: #2f3a78;
+}
+
+.google-meet-student-row:focus-within {
+    outline: none;
+}
+
+.google-meet-student-row:focus-visible {
+    outline: 2px solid #3f51b5;
+    outline-offset: 1px;
+}
+
+.google-meet-student-row:hover {
+    transform: translateY(-1px);
+    border-color: #aebeea;
+    box-shadow: 0 3px 10px rgba(63, 81, 181, 0.11);
+}
+
+.google-meet-student-name {
+    flex: 1 1 auto;
+    font-family: inherit;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: #1f2937;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.google-meet-student-save-indicator {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: #3f51b5;
+}
+
+.google-meet-student-save-indicator.is-saved {
+    color: #3f51b5;
+}
+
+.google-meet-student-save-indicator-layer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.3s ease, transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.google-meet-student-save-indicator-layer svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+}
+
+.google-meet-student-save-indicator-layer--saved {
+    opacity: 0;
+    transform: scale(0.82);
+    pointer-events: none;
+}
+
+.google-meet-student-save-indicator.is-saved .google-meet-student-save-indicator-layer--empty {
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+.google-meet-student-save-indicator.is-saved .google-meet-student-save-indicator-layer--saved {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.google-meet-student-save-indicator.is-saved .google-meet-student-save-indicator-layer--saved svg {
+    animation: google-meet-saved-check-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes google-meet-saved-check-in {
+    from {
+        opacity: 0;
+        transform: scale(0.45);
+    }
+    55% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .google-meet-student-save-indicator-layer {
+        transition: none;
+    }
+
+    .google-meet-student-save-indicator.is-saved .google-meet-student-save-indicator-layer--saved svg {
+        animation: none;
+    }
+
+}
+
+.google-meet-student-meet-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 30px;
+    height: 30px;
+    
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: #3f51b5;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.google-meet-student-meet-btn svg {
+    width: 15px;
+    height: 15px;
+    display: block;
+}
+
+.google-meet-student-meet-btn:hover {
+    background: #3f51b5;
+    color: #ffffff;
+}
+
+.google-meet-student-meet-btn:focus {
+    outline: none;
+}
+
+.google-meet-student-meet-btn:focus-visible {
+    outline: 2px solid #3f51b5;
+    outline-offset: 2px;
+}
+
+.google-meet-modal .google-meet-student-link-popover {
+    position: absolute;
+    top: 25%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transform-origin: center;
+    z-index: 2010;
+
+    width: 40%;
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid #cfd5ec;
+    background: #fff;
+    box-shadow: 2.5px 2.5px 5px rgba(15, 23, 42, 0.15);
+}
+
+.google-meet-modal .google-meet-context-message {
+    position: fixed;
+    z-index: 2020;
+    max-width: min(240px, calc(100vw - 24px));
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid #cfd5ec;
+    background: #ffffff;
+    color: #2f3a78;
+    font-size: 0.82rem;
+    font-weight: 600;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+    transition: opacity 220ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.google-meet-modal .google-meet-context-message.is-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.google-meet-modal .google-meet-context-message.is-exit {
+    opacity: 0;
+    transform: translateY(2px) scale(0.992);
+}
+
+.google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--enter {
+    animation: google-meet-link-popover-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes google-meet-link-popover-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--enter {
+        animation: none !important;
+    }
+
+    .google-meet-modal .google-meet-context-message {
+        transition: none !important;
+    }
+}
+
+.google-meet-student-link-popover-title {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #2f3a78;
+}
+
+.google-meet-student-link-popover-sub {
+    margin: 0 0 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #5c637e;
+}
+
+.google-meet-student-link-popover-label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #2f3a78;
+}
+
+.google-meet-student-link-popover-label input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cfd5ec;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 0.85rem;
+    color: #1f2937;
+}
+
+.google-meet-student-link-popover-label input:focus {
+    outline: none;
+    border-color: #6a79cf;
+    box-shadow: 0 0 0 2px rgba(106, 121, 207, 0.16);
+}
+
+.google-meet-student-link-popover-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.google-meet-student-link-popover-actions .google-meet-btn {
+    padding: 7px 14px;
+    font-size: 0.82rem;
+}
+
+#googleMeetStudentLinkPopoverSave {
+    position: relative;
+    overflow: hidden;
+}
+
+#googleMeetStudentLinkPopoverSave .google-meet-save-ok-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    transform: translateY(-50%) scale(0.55) rotate(-10deg);
+    opacity: 0;
+    pointer-events: none;
+}
+
+#googleMeetStudentLinkPopoverSave .google-meet-save-ok-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    color: #ffffff;
+}
+
+#googleMeetStudentLinkPopoverSave.google-meet-save-ok-animate .google-meet-save-ok-icon {
+    animation: google-meet-save-btn-ok 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes google-meet-save-btn-ok {
+    0% {
+        opacity: 0;
+        transform: translateY(-50%) scale(0.55) rotate(-10deg);
+    }
+    45% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1.14) rotate(0deg);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-50%) scale(1) rotate(0deg);
+    }
+}
+
+.google-meet-label input:focus {
+    outline: none;
+    border-color: #6a79cf;
+    box-shadow: 0 0 0 2px rgba(106, 121, 207, 0.16);
+}
+
+.google-meet-label select:focus {
+    outline: none;
+    border-color: #6a79cf;
+    box-shadow: 0 0 0 2px rgba(106, 121, 207, 0.16);
+}
+
+@keyframes google-meet-option-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes google-meet-value-out {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+}
+
+@keyframes google-meet-value-in {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.google-meet-btn {
+    border: 1px solid #cfd5ec;
+    border-radius: 10px;
+    padding: 10px 10px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.google-meet-btn--cancel {
+    background: #ffffff;
+    color: #3f51b5;
+    font-size: 0.85rem;
+}
+
+.google-meet-btn--submit {
+    background: #3f51b5;
+    border-color: #3f51b5;
+    color: #ffffff;
+    font-size: 0.85rem;
+}
+
+.google-meet-btn--cancel:hover {
+    background: #eef1ff;
+    transition: background 0.5s ease;
+}
+
+.google-meet-btn--submit:hover {
+    background: #32408f;
+    border-color: #32408f;
+    transition: background 0.5s ease;
 }
 
 /* Add student modal */
@@ -315,12 +1262,43 @@ body {
     padding: 20px;
 }
 
-@keyframes modal-fade-in {
+@keyframes modal-backdrop-in {
     from {
         opacity: 0;
     }
     to {
         opacity: 1;
+    }
+}
+
+@keyframes modal-backdrop-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes modal-popup-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes modal-popup-out {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(6px) scale(0.97);
     }
 }
 
@@ -331,7 +1309,7 @@ body {
 .class-topic-modal.is-open .class-topic-modal-backdrop,
 .teacher-login-modal.is-open .teacher-login-modal-backdrop,
 .app-message-modal.is-open .app-message-modal-backdrop {
-    animation: modal-fade-in 0.28s ease-out both;
+    animation: modal-backdrop-in 0.28s ease-out both;
 }
 
 .add-student-modal.is-open .add-student-dialog,
@@ -341,13 +1319,45 @@ body {
 .class-topic-modal.is-open .class-topic-dialog,
 .teacher-login-modal.is-open .teacher-login-dialog,
 .app-message-modal.is-open .app-message-dialog {
-    animation: modal-fade-in 0.32s ease-out both;
+    animation: modal-popup-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.google-meet-modal.is-closing .google-meet-modal-backdrop,
+.add-student-modal.is-closing .add-student-modal-backdrop,
+.edit-student-modal.is-closing .edit-student-modal-backdrop,
+.school-settings-modal.is-closing .school-settings-modal-backdrop,
+.delete-school-modal.is-closing .delete-school-modal-backdrop,
+.class-topic-modal.is-closing .class-topic-modal-backdrop,
+.teacher-login-modal.is-closing .teacher-login-modal-backdrop,
+.app-message-modal.is-closing .app-message-modal-backdrop {
+    animation: modal-backdrop-out 0.22s ease-in both;
+}
+
+.google-meet-modal.is-closing .google-meet-dialog,
+.add-student-modal.is-closing .add-student-dialog,
+.edit-student-modal.is-closing .edit-student-dialog,
+.school-settings-modal.is-closing .school-settings-dialog,
+.delete-school-modal.is-closing .delete-school-dialog,
+.class-topic-modal.is-closing .class-topic-dialog,
+.teacher-login-modal.is-closing .teacher-login-dialog,
+.app-message-modal.is-closing .app-message-dialog {
+    animation: modal-popup-out 0.24s ease-in both;
+}
+
+.google-meet-modal.is-closing,
+.add-student-modal.is-closing,
+.edit-student-modal.is-closing,
+.delete-school-modal.is-closing,
+.school-settings-modal.is-closing,
+.class-topic-modal.is-closing,
+.teacher-login-modal.is-closing,
+.app-message-modal.is-closing,
 .edit-student-modal.is-open {
     display: flex;
 }
 
+.add-student-modal.is-open,
+.google-meet-modal.is-open,
 .delete-school-modal.is-open {
     display: flex;
 }
@@ -391,7 +1401,7 @@ body {
     padding: 22px 22px 18px;
     background: white;
     border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -488,7 +1498,7 @@ body {
 
 .class-topic-exercise-add-row {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
 }
 
@@ -537,7 +1547,7 @@ body {
     background: transparent;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
     align-content: flex-end;
     position: absolute;
     left: 10px;
@@ -549,7 +1559,7 @@ body {
 .class-topic-exercise-item {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     padding: 4px 8px;
     border-radius: 999px;
     background: #e8eaf6;
@@ -665,16 +1675,15 @@ body {
 .teacher-login-dialog,
 .app-message-dialog {
     position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 420px;
-    padding: 22px 22px 18px;
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 5px;
+    z-index: 1;
+
+    padding: 10px 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
 }
 
 .teacher-login-title,
@@ -693,7 +1702,7 @@ body {
 .teacher-login-label {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     font-size: 0.85rem;
     font-weight: 600;
     color: #444;
@@ -882,7 +1891,7 @@ body {
     padding: 22px 22px 18px;
     background: white;
     border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -922,7 +1931,7 @@ body {
 .school-settings-theme-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
 }
 
 .school-settings-theme-select-row {
@@ -969,7 +1978,7 @@ body {
     border-radius: 10px;
     border: 1px solid #c5cae9;
     background: #fff;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     opacity: 0;
     transform: translateY(-4px) scale(0.98);
     transform-origin: top left;
@@ -1106,7 +2115,7 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     font-size: 0.85rem;
     font-weight: 600;
     color: #444;
@@ -1182,7 +2191,7 @@ body {
     padding: 22px 22px 18px;
     background: white;
     border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1253,7 +2262,7 @@ body {
     padding: 22px 22px 18px;
     background: white;
     border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
 }
 
 .edit-student-title {
@@ -1265,7 +2274,7 @@ body {
 .edit-student-form {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 5px;
 }
 
 .edit-student-name-row {
@@ -1282,17 +2291,65 @@ body {
 .edit-student-label {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     font-size: 0.85rem;
     font-weight: 600;
     color: #444;
 }
 
+.edit-student-phone-row {
+    display: flex;
+    gap: 2.5px;
+    width: 100%;
+}
+
+.edit-student-phone-country-wrap {
+    flex: 0 0 52px;
+    min-width: 52px;
+    max-width: 52px;
+    position: relative;
+}
+
+#editStudentPhoneCountry {
+    width: 40px;
+    color: transparent;
+    text-shadow: 0 0 0 transparent;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
+    box-sizing: border-box;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+#editStudentPhoneCountry option {
+    color: #333;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
+}
+
+.edit-student-phone-country-flag {
+    position: absolute;
+    left: 38%;
+    top: 50%;
+    width: 40px;
+    height: 30px;
+    transform: translate(-50%, -50%);
+    border-radius: 10px;
+    object-fit: cover;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+    pointer-events: none;
+    background: #f3f4f8;
+}
+
+#editStudentPhone {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .edit-student-label input,
 .edit-student-label select {
-    padding: 10px 12px;
+    padding: 5px 10px;
     border: 1px solid #c5cae9;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 1rem;
     font-family: inherit;
 }
@@ -1329,7 +2386,7 @@ body {
 .edit-student-speakon-row {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
 }
 
 .edit-student-speakon-label {
@@ -1340,7 +2397,7 @@ body {
 
 .edit-student-speakon-pair {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: stretch;
 }
 
@@ -1433,7 +2490,7 @@ body {
     padding: 22px 22px 18px;
     background: white;
     border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     transition: max-width 0.35s ease;
 }
 
@@ -1460,8 +2517,57 @@ body {
 }
 
 .add-student-name-row .add-student-label {
-    flex: 1;
-    min-width: 150px;
+    min-width: 145px;
+}
+
+.add-student-phone-row {
+    display: flex;
+    gap: 2.5px;
+    width: 100%;
+}
+
+.add-student-phone-country-wrap {
+    flex: 0 0 35px;
+    min-width: 30px;
+    max-width: 50px;
+    position: relative;
+}
+
+#addStudentPhoneCountry {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    padding-left: 0;
+    padding-right: 18px;
+    color: transparent;
+    text-shadow: 0 0 0 transparent;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+#addStudentPhoneCountry option {
+    color: #333;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
+}
+
+.add-student-phone-country-flag {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    width: 18px;
+    height: 13px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    object-fit: cover;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+    pointer-events: none;
+    background: #f3f4f8;
+}
+
+#addStudentPhone {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .add-teacher-name-row.is-hidden {
@@ -1863,10 +2969,6 @@ body {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-.sidebar-pane-teachers {
-    flex: 0 0 auto;
-}
-
 .sidebar-pane-teachers-inner {
     display: block;
 }
@@ -1904,6 +3006,11 @@ body {
     padding: 0;
 }
 
+.sidebar-pane-class-report-inner {
+    overflow: visible;
+    max-height: none;
+}
+
 .sidebar-pane.is-collapsed .sidebar-pane-teachers-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-students-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-class-report-inner,
@@ -1938,7 +3045,7 @@ body {
 }
 
 .sidebar.is-logged-in .class-report-lists {
-    padding: 0px 10px 20px;
+    padding: 0px 10px 10px;
     gap: 15px;
 }
 
@@ -2013,11 +3120,109 @@ body {
 }
 
 .class-report-student-item {
-    padding: 10px;
+    padding: 10px 20px;
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     border-radius: 4px;
     transition: background 0.15s ease;
+}
+
+.class-report-student-item-content {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
+.class-report-student-actions {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.class-report-student-name {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.class-report-student-meet-btn {
+    flex: 0 0 auto;
+    width: 25px;
+    height: 25px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--school-primary, #3f51b5);
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.class-report-student-meet-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+}
+
+.class-report-student-meet-btn--off {
+    color: #8c93aa;
+    cursor: default;
+}
+
+.class-report-student-meet-btn:hover {
+    background: var(--school-primary, #3f51b5);
+    color: #ffffff;
+}
+
+.class-report-student-meet-btn--off:hover {
+    background: transparent;
+    color: #8c93aa;
+}
+
+.class-report-student-meet-btn:focus {
+    outline: none;
+}
+
+.class-report-student-meet-btn:focus-visible {
+    outline: 2px solid var(--school-primary, #3f51b5);
+    outline-offset: 2px;
+}
+
+.class-report-student-whatsapp-btn {
+    flex: 0 0 auto;
+    width: 25px;
+    height: 25px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: #25d366;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.class-report-student-whatsapp-btn svg {
+    width: 15px;
+    height: 15px;
+    display: block;
+}
+
+.class-report-student-whatsapp-btn:hover {
+    background: #097531;
+    color: #ffffff;
+}
+
+.class-report-student-whatsapp-btn:focus {
+    outline: none;
+}
+
+.class-report-student-whatsapp-btn:focus-visible {
+    outline: 2px solid #25d366;
+    outline-offset: 2px;
 }
 
 .class-report-student-item:hover {
@@ -2056,10 +3261,6 @@ body {
 
 .sidebar.is-logged-in .class-report-group-title {
     padding: 10px 15px;
-}
-
-.sidebar.is-logged-in .class-report-student-item {
-    padding: 10px 20px;
 }
 
 .class-report-empty {
@@ -2225,9 +3426,13 @@ body {
     cursor: default;
 }
 
+.sidebar-section-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2.5px;
+}
+
 .sidebar-section-header-label {
-    flex: 1;
-    min-width: 0;
     cursor: pointer;
 }
 
@@ -2250,6 +3455,16 @@ body {
     cursor: pointer;
     outline: none;
     transition: all 0.5s ease;
+    opacity: 0;
+    animation: auth-btn-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sidebar-class-report-download-btn {
+    animation-delay: 760ms;
+}
+
+.sidebar-finances-download-btn {
+    animation-delay: 840ms;
 }
 
 .sidebar-class-report-download-btn:hover,
@@ -2859,7 +4074,7 @@ body {
 .student-class-report-date-wrap {
     display: flex;
     align-items: stretch;
-    gap: 8px;
+    gap: 10px;
     min-height: 34px;
     min-width: 0;
     position: relative;
@@ -3101,7 +4316,7 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
     margin-top: 10px;
     font-size: 0.9em;
     color: #666;
@@ -3449,7 +4664,7 @@ header h1 {
 .calendar-school-filter-option {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     cursor: pointer;
 }
 
@@ -3530,7 +4745,7 @@ header h1 {
 .calendar-link-popover-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 10px;
     margin-top: 10px;
 }
 
@@ -3713,7 +4928,7 @@ header h1 {
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     transition: background 0.2s ease;
     border: 0;
     background: transparent;
@@ -3727,7 +4942,7 @@ header h1 {
 .context-menu-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .context-menu-item.context-menu-item--compact {

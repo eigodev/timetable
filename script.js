@@ -12,33 +12,7 @@ const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
 const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 const PROFILE_AVATARS_STORAGE_KEY = 'timetable_profile_avatars';
 const SCHOOL_THEME_COLORS = [
-    '#c2185b',
-    '#f57c00',
-    '#fbc02d',
-    '#388e3c',
-    '#009688',
-    '#7b1fa2',
-    '#e91e63',
-    '#ef6c00',
-    '#afb42b',
-    '#26a69a',
-    '#5c6bc0',
-    '#6d4c41',
-    '#d32f2f',
-    '#7cb342',
-    '#9575cd',
-    '#757575',
-    '#e57373',
-    '#43a047',
-    '#42a5f5',
-    '#7986cb',
-    '#616161',
-    '#ef9a9a',
-    '#fdd835',
-    '#66bb6a',
-    '#1e88e5',
-    '#5e35b1',
-    '#bdbdbd'
+    '#c2185b','#f57c00','#fbc02d','#388e3c','#009688','#7b1fa2','#e91e63','#ef6c00','#afb42b','#26a69a','#5c6bc0','#6d4c41','#d32f2f','#7cb342','#9575cd','#757575','#e57373','#43a047','#42a5f5','#7986cb','#616161','#ef9a9a','#fdd835','#66bb6a','#1e88e5','#5e35b1','#bdbdbd'
 ];
 const SCHOOL_THEME_PALETTE_GROUPS = [
     { label: 'Reds & Pinks', colors: ['#c2185b', '#e91e63', '#d32f2f', '#e57373', '#ef9a9a'] },
@@ -48,43 +22,33 @@ const SCHOOL_THEME_PALETTE_GROUPS = [
     { label: 'Neutrals', colors: ['#6d4c41', '#616161', '#757575', '#bdbdbd'] }
 ];
 const SCHOOL_THEME_COLOR_SET = new Set(SCHOOL_THEME_COLORS.map((c) => c.toLowerCase()));
+const PHONE_COUNTRY_OPTIONS = [
+    { iso: 'BR', flag: '🇧🇷', name: 'Brazil', dialCode: '+55', sample: '11 99999-9999' },
+    { iso: 'US', flag: '🇺🇸', name: 'United States', dialCode: '+1', sample: '(555) 123-4567' },
+    { iso: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', sample: '(555) 123-4567' },
+    { iso: 'GB', flag: '🇬🇧', name: 'United Kingdom', dialCode: '+44', sample: '7400 123456' },
+    { iso: 'PT', flag: '🇵🇹', name: 'Portugal', dialCode: '+351', sample: '912 345 678' },
+    { iso: 'ES', flag: '🇪🇸', name: 'Spain', dialCode: '+34', sample: '612 34 56 78' },
+    { iso: 'FR', flag: '🇫🇷', name: 'France', dialCode: '+33', sample: '6 12 34 56 78' },
+    { iso: 'DE', flag: '🇩🇪', name: 'Germany', dialCode: '+49', sample: '1512 3456789' },
+    { iso: 'IT', flag: '🇮🇹', name: 'Italy', dialCode: '+39', sample: '312 345 6789' },
+    { iso: 'IE', flag: '🇮🇪', name: 'Ireland', dialCode: '+353', sample: '85 123 4567' },
+    { iso: 'MX', flag: '🇲🇽', name: 'Mexico', dialCode: '+52', sample: '55 1234 5678' },
+    { iso: 'AR', flag: '🇦🇷', name: 'Argentina', dialCode: '+54', sample: '9 11 1234-5678' },
+    { iso: 'CL', flag: '🇨🇱', name: 'Chile', dialCode: '+56', sample: '9 1234 5678' },
+    { iso: 'CO', flag: '🇨🇴', name: 'Colombia', dialCode: '+57', sample: '300 123 4567' },
+    { iso: 'PE', flag: '🇵🇪', name: 'Peru', dialCode: '+51', sample: '912 345 678' },
+    { iso: 'AU', flag: '🇦🇺', name: 'Australia', dialCode: '+61', sample: '412 345 678' },
+    { iso: 'NZ', flag: '🇳🇿', name: 'New Zealand', dialCode: '+64', sample: '21 123 4567' },
+    { iso: 'JP', flag: '🇯🇵', name: 'Japan', dialCode: '+81', sample: '90-1234-5678' },
+    { iso: 'KR', flag: '🇰🇷', name: 'South Korea', dialCode: '+82', sample: '10-1234-5678' },
+    { iso: 'IN', flag: '🇮🇳', name: 'India', dialCode: '+91', sample: '91234 56789' }
+];
+const DEFAULT_PHONE_COUNTRY_ISO = 'BR';
+const BRAZIL_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%2036%2036%22%3E%3Cpath%20fill%3D%22%23009B3A%22%20d%3D%22M36%2027a4%204%200%200%201-4%204H4a4%204%200%200%201-4-4V9a4%204%200%200%201%204-4h28a4%204%200%200%201%204%204v18z%22/%3E%3Cpath%20fill%3D%22%23FEDF01%22%20d%3D%22M32.728%2018L18%2029.124L3.272%2018L18%206.875z%22/%3E%3Ccircle%20cx%3D%2217.976%22%20cy%3D%2217.924%22%20r%3D%226.458%22%20fill%3D%22%23002776%22/%3E%3Cpath%20fill%3D%22%23CBE9D4%22%20d%3D%22M12.277%2014.887a6.406%206.406%200%200%200-.672%202.023c3.995-.29%209.417%201.891%2011.744%204.595c.402-.604.7-1.28.883-2.004c-2.872-2.808-7.917-4.63-11.955-4.614z%22/%3E%3Cpath%20fill%3D%22%2388C9F9%22%20d%3D%22M12%2018.233h1v1h-1zm1%202h1v1h-1z%22/%3E%3Cpath%20fill%3D%22%2355ACEE%22%20d%3D%22M15%2018.233h1v1h-1zm2%201h1v1h-1zm4%202h1v1h-1zm-3%201h1v1h-1zm3-6h1v1h-1z%22/%3E%3Cpath%20fill%3D%22%233B88C3%22%20d%3D%22M19%2020.233h1v1h-1z%22/%3E%3C/svg%3E';
 
 /** @type {Record<string, Array<Record<string, string>>>} */
 let studentClassReportRows = {};
-
-// Sidebar categories
-const DEFAULT_TEACHERS = ['Samuel Öettinger'];
-const DEFAULT_PRIVATE_STUDENTS = [
-    'Alexandre Eleuterio',
-    'Berenildo Nascimento',
-    'Fernanda Penteado',
-    'Lorena Albergoni',
-    'Lucas Tonholi',
-    'Matheus Santos',
-    'Michele Miranda',
-    'Rosangela de Paula',
-    'Vinicios Santos'
-];
-const DEFAULT_SPEAKON_STUDENTS = [
-    'Adelcio Souza',
-    'Ana Candeloro',
-    'Bruna Santos',
-    'Carolina Cecilio',
-    'Eliane Marcon',
-    'Fernando Yeshua',
-    'Maria Ribeiro',
-    'Marisa Nogueira',
-    'Neide de Paula',
-    'Raquel Guedes',
-    'Tamires Busichia'
-];
-const DEFAULT_PASSPORT_STUDENTS = [];
-const DEFAULT_TEACHER_ACCOUNTS = {
-    'Samuel Öettinger': {
-        email: 'samoettinger_@outlook.com',
-        password: '@Senha847136'
-    }
-};
 
 let teachersList = [];
 let privateStudentsList = [];
@@ -93,6 +57,7 @@ let passportStudentsList = [];
 let passportFollowupLinks = {};
 let passportHeaderPageLink = '';
 let studentSchoolByName = {};
+let studentPhonesByName = {};
 let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
@@ -124,6 +89,80 @@ let sidebarPaneCollapsedState = {
 };
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
+let googleMeetSelectedSchool = '';
+/** @type {Set<string>} */
+let googleMeetSelectedStudentNames = new Set();
+/** @type {Record<string, string>} student display name → Meet URL */
+let studentGoogleMeetLinksByName = {};
+let googleMeetLinkPopoverStudent = '';
+let googleMeetLinkPopoverEscapeHandler = null;
+let googleMeetToggleSwapTimer = null;
+let googleMeetContextMessageTimer = null;
+let googleMeetContextMessageHideTimer = null;
+let googleMeetUseSharedSchoolLink = false;
+let googleMeetSharedLinkModeBySchoolKey = {};
+const MODAL_CLOSE_ANIMATION_MS = 220;
+const modalCloseTimers = new WeakMap();
+
+function openModalWithAnimation(modal) {
+    if (!modal) return;
+    const timer = modalCloseTimers.get(modal);
+    if (timer) {
+        clearTimeout(timer);
+        modalCloseTimers.delete(modal);
+    }
+    modal.classList.remove('is-closing');
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function setGoogleMeetToggleText(nextText, animate = false) {
+    const schoolToggleText = document.getElementById('googleMeetSchoolToggleText');
+    if (!schoolToggleText) {
+        return;
+    }
+    const targetText = String(nextText || '').trim() || 'Select a School';
+    const currentText = String(schoolToggleText.textContent || '').trim();
+    if (!animate || currentText === targetText) {
+        schoolToggleText.textContent = targetText;
+        schoolToggleText.classList.remove('is-swap-out', 'is-swap-in');
+        if (googleMeetToggleSwapTimer) {
+            clearTimeout(googleMeetToggleSwapTimer);
+            googleMeetToggleSwapTimer = null;
+        }
+        return;
+    }
+    if (googleMeetToggleSwapTimer) {
+        clearTimeout(googleMeetToggleSwapTimer);
+        googleMeetToggleSwapTimer = null;
+    }
+    schoolToggleText.classList.remove('is-swap-in');
+    schoolToggleText.classList.add('is-swap-out');
+    googleMeetToggleSwapTimer = window.setTimeout(() => {
+        schoolToggleText.textContent = targetText;
+        schoolToggleText.classList.remove('is-swap-out');
+        schoolToggleText.classList.add('is-swap-in');
+        googleMeetToggleSwapTimer = window.setTimeout(() => {
+            schoolToggleText.classList.remove('is-swap-in');
+            googleMeetToggleSwapTimer = null;
+        }, 260);
+    }, 220);
+}
+
+function closeModalWithAnimation(modal) {
+    if (!modal) return;
+    const timer = modalCloseTimers.get(modal);
+    if (timer) {
+        clearTimeout(timer);
+    }
+    modal.classList.add('is-closing');
+    modal.setAttribute('aria-hidden', 'true');
+    const nextTimer = window.setTimeout(() => {
+        modal.classList.remove('is-open', 'is-closing');
+        modalCloseTimers.delete(modal);
+    }, MODAL_CLOSE_ANIMATION_MS);
+    modalCloseTimers.set(modal, nextTimer);
+}
 
 function loadRosterFromStorage() {
     try {
@@ -585,32 +624,30 @@ function setProfileAvatarDataUrl(profileKey, dataUrl) {
 function initRoster() {
     const saved = loadRosterFromStorage();
     if (!saved) {
-        teachersList = [...DEFAULT_TEACHERS];
-        privateStudentsList = [...DEFAULT_PRIVATE_STUDENTS];
-        speakonStudentsList = [...DEFAULT_SPEAKON_STUDENTS];
-        passportStudentsList = [...DEFAULT_PASSPORT_STUDENTS];
+        teachersList = [];
+        privateStudentsList = [];
+        speakonStudentsList = [];
+        passportStudentsList = [];
         passportFollowupLinks = {};
         passportHeaderPageLink = '';
         studentSchoolByName = {};
-        privateStudentsList.forEach((name) => { studentSchoolByName[name] = 'HomeTeachers'; });
-        speakonStudentsList.forEach((name) => { studentSchoolByName[name] = 'SpeakOn'; });
-        passportStudentsList.forEach((name) => { studentSchoolByName[name] = 'Passport'; });
+        studentPhonesByName = {};
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
         customSchoolsList = [];
         schoolExternalLinks = {};
         schoolThemeColors = {};
         calendarToolbarExternalLink = '';
-        const changedDefaults = applyDefaultTeacherAccounts();
-        if (changedDefaults) saveRoster();
         speakonStudentWeeklyClass = {};
+        studentGoogleMeetLinksByName = {};
+        googleMeetSharedLinkModeBySchoolKey = {};
         loadStudentClassReportRows();
         return;
     }
-    teachersList = Array.isArray(saved.teachers) && saved.teachers.length > 0 ? [...saved.teachers] : [...DEFAULT_TEACHERS];
-    privateStudentsList = Array.isArray(saved.private) ? [...saved.private] : [...DEFAULT_PRIVATE_STUDENTS];
-    speakonStudentsList = Array.isArray(saved.speakon) ? [...saved.speakon] : [...DEFAULT_SPEAKON_STUDENTS];
-    passportStudentsList = Array.isArray(saved.passport) ? [...saved.passport] : [...DEFAULT_PASSPORT_STUDENTS];
+    teachersList = Array.isArray(saved.teachers) ? [...saved.teachers] : [];
+    privateStudentsList = Array.isArray(saved.private) ? [...saved.private] : [];
+    speakonStudentsList = Array.isArray(saved.speakon) ? [...saved.speakon] : [];
+    passportStudentsList = Array.isArray(saved.passport) ? [...saved.passport] : [];
     passportFollowupLinks =
         saved.passportLinks && typeof saved.passportLinks === 'object' && !Array.isArray(saved.passportLinks)
             ? { ...saved.passportLinks }
@@ -629,6 +666,22 @@ function initRoster() {
     });
     passportStudentsList.forEach((name) => {
         studentSchoolByName[name] = String(fromStorage[name] || 'Passport').trim() || 'Passport';
+    });
+    const phonesRaw =
+        saved.studentPhones && typeof saved.studentPhones === 'object' && !Array.isArray(saved.studentPhones)
+            ? saved.studentPhones
+            : {};
+    studentPhonesByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const entry = phonesRaw[name];
+        if (!entry || typeof entry !== 'object') return;
+        const countryIso = String(entry.countryIso || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+        const normalizedIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === countryIso)
+            ? countryIso
+            : DEFAULT_PHONE_COUNTRY_ISO;
+        const number = String(entry.number || '').trim();
+        if (!number) return;
+        studentPhonesByName[name] = { countryIso: normalizedIso, number };
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -652,6 +705,30 @@ function initRoster() {
         ? [...new Set(saved.customSchools.map((s) => String(s || '').trim()).filter(Boolean))]
         : [];
     customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const meetLinksRaw =
+        saved.studentGoogleMeetLinks &&
+        typeof saved.studentGoogleMeetLinks === 'object' &&
+        !Array.isArray(saved.studentGoogleMeetLinks)
+            ? saved.studentGoogleMeetLinks
+            : {};
+    studentGoogleMeetLinksByName = {};
+    Object.keys(meetLinksRaw).forEach((k) => {
+        const key = String(k || '').trim();
+        const v = String(meetLinksRaw[k] || '').trim();
+        if (key && v) studentGoogleMeetLinksByName[key] = v;
+    });
+    const sharedMeetModeRaw =
+        saved.googleMeetSharedLinkModeBySchool &&
+        typeof saved.googleMeetSharedLinkModeBySchool === 'object' &&
+        !Array.isArray(saved.googleMeetSharedLinkModeBySchool)
+            ? saved.googleMeetSharedLinkModeBySchool
+            : {};
+    googleMeetSharedLinkModeBySchoolKey = {};
+    Object.keys(sharedMeetModeRaw).forEach((key) => {
+        const k = String(key || '').trim().toLowerCase();
+        if (!k) return;
+        googleMeetSharedLinkModeBySchoolKey[k] = !!sharedMeetModeRaw[key];
+    });
     const linksRaw =
         saved.schoolExternalLinks && typeof saved.schoolExternalLinks === 'object' && !Array.isArray(saved.schoolExternalLinks)
             ? saved.schoolExternalLinks
@@ -690,29 +767,8 @@ function initRoster() {
             extraHour: String(v.extraHour ?? '').trim()
         };
     });
-    const changedDefaults = applyDefaultTeacherAccounts();
-    if (changedDefaults) saveRoster();
     normalizeCustomSchoolsList();
     loadStudentClassReportRows();
-}
-
-function applyDefaultTeacherAccounts() {
-    let changed = false;
-    teachersList.forEach((name) => {
-        const defaults = DEFAULT_TEACHER_ACCOUNTS[name];
-        if (!defaults) return;
-        const currentEmail = String(teacherEmailsByName[name] || '').trim();
-        const currentPassword = String(teacherPasswordsByName[name] || '');
-        if (!currentEmail) {
-            teacherEmailsByName[name] = defaults.email;
-            changed = true;
-        }
-        if (!currentPassword) {
-            teacherPasswordsByName[name] = defaults.password;
-            changed = true;
-        }
-    });
-    return changed;
 }
 
 function normalizeCustomSchoolsList() {
@@ -1530,6 +1586,38 @@ const SIDEBAR_ADD_PLUS_SVG =
 
 const SIDEBAR_ADD_SCHOOL_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"/></svg>';
+const SIDEBAR_GOOGLE_MEET_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M22.205 9.41v5.13c.01.382-.087.76-.28 1.09a2.13 2.13 0 0 1-.86.77a2 2 0 0 1-.9.21h-.25a2.07 2.07 0 0 1-1-.43l-2.53-2v.91a4.34 4.34 0 0 1-4.34 4.34h-5.91a4.37 4.37 0 0 1-3.07-1.27a4.31 4.31 0 0 1-1.27-3.07V8.92a4.298 4.298 0 0 1 .33-1.66a4.38 4.38 0 0 1 2.35-2.36a4.31 4.31 0 0 1 1.66-.33h5.79a4.4 4.4 0 0 1 1.67.33a4.38 4.38 0 0 1 2.35 2.36c.22.529.33 1.097.32 1.67v.9l2.53-2a2.09 2.09 0 0 1 3.06.53c.207.313.328.675.35 1.05"/></svg>';
+const SIDEBAR_GOOGLE_MEET_OFF_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path stroke-miterlimit="10" d="m11.047 10l-4 3.991m0-3.982l4 3.991"/><path stroke-linejoin="round" d="M12 5.32H6.095A3.595 3.595 0 0 0 2.5 8.923v6.162a3.595 3.595 0 0 0 3.595 3.595H12a3.595 3.595 0 0 0 3.595-3.595V8.924A3.594 3.594 0 0 0 12 5.32m9.5 4.118v5.135c0 .25-.071.496-.205.708a1.355 1.355 0 0 1-.555.493a1.27 1.27 0 0 1-.73.124a1.366 1.366 0 0 1-.677-.278l-3.225-2.588a1.377 1.377 0 0 1-.503-1.047c0-.2.045-.396.133-.575c.092-.168.218-.315.37-.432l3.225-2.567a1.36 1.36 0 0 1 .678-.278c.25-.032.504.011.729.124a1.325 1.325 0 0 1 .76 1.181"/></g></svg>';
+const SIDEBAR_WHATSAPP_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 258" aria-hidden="true"><defs><linearGradient id="logosWhatsappIcon0" x1="50%" x2="50%" y1="100%" y2="0%"><stop offset="0%" stop-color="#1FAF38"/><stop offset="100%" stop-color="#60D669"/></linearGradient><linearGradient id="logosWhatsappIcon1" x1="50%" x2="50%" y1="100%" y2="0%"><stop offset="0%" stop-color="#F9F9F9"/><stop offset="100%" stop-color="#FFF"/></linearGradient></defs><path fill="url(#logosWhatsappIcon0)" d="M5.463 127.456c-.006 21.677 5.658 42.843 16.428 61.499L4.433 252.697l65.232-17.104a122.994 122.994 0 0 0 58.8 14.97h.054c67.815 0 123.018-55.183 123.047-123.01c.013-32.867-12.775-63.773-36.009-87.025c-23.23-23.25-54.125-36.061-87.043-36.076c-67.823 0-123.022 55.18-123.05 123.004"/><path fill="url(#logosWhatsappIcon1)" d="M1.07 127.416c-.007 22.457 5.86 44.38 17.014 63.704L0 257.147l67.571-17.717c18.618 10.151 39.58 15.503 60.91 15.511h.055c70.248 0 127.434-57.168 127.464-127.423c.012-34.048-13.236-66.065-37.3-90.15C194.633 13.286 162.633.014 128.536 0C58.276 0 1.099 57.16 1.071 127.416Zm40.24 60.376l-2.523-4.005c-10.606-16.864-16.204-36.352-16.196-56.363C22.614 69.029 70.138 21.52 128.576 21.52c28.3.012 54.896 11.044 74.9 31.06c20.003 20.018 31.01 46.628 31.003 74.93c-.026 58.395-47.551 105.91-105.943 105.91h-.042c-19.013-.01-37.66-5.116-53.922-14.765l-3.87-2.295l-40.098 10.513l10.706-39.082Z"/><path fill="#ffffff" d="M96.678 74.148c-2.386-5.303-4.897-5.41-7.166-5.503c-1.858-.08-3.982-.074-6.104-.074c-2.124 0-5.575.799-8.492 3.984c-2.92 3.188-11.148 10.892-11.148 26.561c0 15.67 11.413 30.813 13.004 32.94c1.593 2.123 22.033 35.307 54.405 48.073c26.904 10.609 32.379 8.499 38.218 7.967c5.84-.53 18.844-7.702 21.497-15.139c2.655-7.436 2.655-13.81 1.859-15.142c-.796-1.327-2.92-2.124-6.105-3.716c-3.186-1.593-18.844-9.298-21.763-10.361c-2.92-1.062-5.043-1.592-7.167 1.597c-2.124 3.184-8.223 10.356-10.082 12.48c-1.857 2.129-3.716 2.394-6.9.801c-3.187-1.598-13.444-4.957-25.613-15.806c-9.468-8.442-15.86-18.867-17.718-22.056c-1.858-3.184-.199-4.91 1.398-6.497c1.431-1.427 3.186-3.719 4.78-5.578c1.588-1.86 2.118-3.187 3.18-5.311c1.063-2.126.531-3.986-.264-5.579c-.798-1.593-6.987-17.343-9.819-23.64"/></svg>';
+
+/** Outline check in rounded square — shown before Meet link is saved (color via CSS currentColor) */
+const GOOGLE_MEET_STUDENT_LINK_STATUS_EMPTY_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m7.393 12.084l2.593 2.593a.983.983 0 0 0 1.395 0l5.227-5.226"/><rect width="18.5" height="18.5" x="2.75" y="2.75" rx="6"/></g></svg>';
+
+/** Filled check in rounded square — crossfades in when a Meet link exists */
+const GOOGLE_MEET_STUDENT_LINK_STATUS_SAVED_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15.25 2h-6.5A6.76 6.76 0 0 0 2 8.75v6.5A6.76 6.76 0 0 0 8.75 22h6.5A6.76 6.76 0 0 0 22 15.25v-6.5A6.76 6.76 0 0 0 15.25 2m2.06 8.16l-5.22 5.22a2 2 0 0 1-1.41.59a2 2 0 0 1-.76-.15a1.999 1.999 0 0 1-.64-.44l-2.59-2.59a1 1 0 0 1 1.41-1.41l2.59 2.59l5.21-5.23a1.002 1.002 0 0 1 1.41 1.42"/></svg>';
+
+function animateGoogleMeetSaveButtonOk() {
+    const btn = document.getElementById('googleMeetStudentLinkPopoverSave');
+    if (!btn) return;
+    let icon = btn.querySelector('.google-meet-save-ok-icon');
+    if (!icon) {
+        icon = document.createElement('span');
+        icon.className = 'google-meet-save-ok-icon';
+        icon.innerHTML = GOOGLE_MEET_STUDENT_LINK_STATUS_SAVED_SVG;
+        btn.appendChild(icon);
+    }
+    btn.classList.remove('google-meet-save-ok-animate');
+    void btn.offsetWidth;
+    btn.classList.add('google-meet-save-ok-animate');
+    window.setTimeout(() => {
+        btn.classList.remove('google-meet-save-ok-animate');
+    }, 620);
+}
 
 const SIDEBAR_ADD_TEACHER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5"/></svg>';
@@ -2045,16 +2133,14 @@ function openClassTopicEditor(studentName, rowIndex) {
     if (subtitle) {
         subtitle.textContent = `Student: ${studentName}`;
     }
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
     ta.focus();
 }
 
 function closeClassTopicModal() {
     const modal = document.getElementById('classTopicModal');
     if (modal) {
-        modal.classList.remove('is-open');
-        modal.setAttribute('aria-hidden', 'true');
+        closeModalWithAnimation(modal);
     }
     classTopicDraftExercises = [];
     syncClassTopicExerciseOverlayHeight();
@@ -2182,7 +2268,10 @@ function saveRoster() {
             calendarToolbarExternalLink,
             passportLinks: passportFollowupLinks,
             passportHeaderPageLink,
-            speakonWeeklyClass: speakonStudentWeeklyClass
+            speakonWeeklyClass: speakonStudentWeeklyClass,
+            studentPhones: studentPhonesByName,
+            studentGoogleMeetLinks: studentGoogleMeetLinksByName,
+            googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey
         }));
     } catch (error) {
         console.error('Error saving roster to localStorage:', error);
@@ -2634,10 +2723,9 @@ function renderSidebar() {
     const addTeacherBtn = document.createElement('button');
     addTeacherBtn.type = 'button';
     addTeacherBtn.id = 'addTeacherProfileBtn';
-    addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher';
+    addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher sidebar-add-btn--expandable';
     addTeacherBtn.setAttribute('aria-label', 'Add teacher profile');
-    addTeacherBtn.setAttribute('title', 'Add teacher profile');
-    addTeacherBtn.innerHTML = SIDEBAR_ADD_TEACHER_SVG;
+    addTeacherBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_ADD_TEACHER_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full"><span class="sidebar-add-btn-state-label">Add Teacher</span>${SIDEBAR_ADD_TEACHER_SVG}</span>`;
     addTeacherBtn.addEventListener('click', () => openAddStudentModal('teacher'));
     const loginTeacherBtn = document.createElement('button');
     loginTeacherBtn.type = 'button';
@@ -2645,7 +2733,6 @@ function renderSidebar() {
     if (isTeacherLoggedIn) {
         loginTeacherBtn.classList.add('sidebar-auth-btn--logout');
         loginTeacherBtn.setAttribute('aria-label', 'Teacher logout');
-        loginTeacherBtn.setAttribute('title', 'Teacher logout');
         loginTeacherBtn.innerHTML = `${SIDEBAR_LOGOUT_TEACHER_SVG}<span class="sidebar-add-btn-label">Log Out</span>`;
         loginTeacherBtn.addEventListener('click', () => {
             isTeacherLoggedIn = false;
@@ -2662,7 +2749,6 @@ function renderSidebar() {
     } else {
         loginTeacherBtn.classList.add('sidebar-auth-btn--login');
         loginTeacherBtn.setAttribute('aria-label', 'Teacher login');
-        loginTeacherBtn.setAttribute('title', 'Teacher login');
         loginTeacherBtn.innerHTML = `<span class="sidebar-add-btn-label">Log In</span>${SIDEBAR_LOGIN_TEACHER_SVG}`;
         loginTeacherBtn.addEventListener('click', () => {
             if (teachersList.length === 0) {
@@ -2672,9 +2758,12 @@ function renderSidebar() {
             openTeacherLoginModal();
         });
     }
+    const teachersHeaderActions = document.createElement('div');
+    teachersHeaderActions.className = 'sidebar-section-actions';
+    teachersHeaderActions.appendChild(loginTeacherBtn);
+    teachersHeaderActions.appendChild(addTeacherBtn);
     teachersHeader.appendChild(teachersHeaderLabel);
-    teachersHeader.appendChild(loginTeacherBtn);
-    teachersHeader.appendChild(addTeacherBtn);
+    teachersHeader.appendChild(teachersHeaderActions);
     const teachersInner = document.createElement('div');
     teachersInner.className = 'sidebar-pane-teachers-inner';
     setupSidebarPaneHeaderToggle(paneTeachers, teachersInner, teachersHeaderLabel, 'teachers');
@@ -2692,22 +2781,31 @@ function renderSidebar() {
     const addStudentEntryBtn = document.createElement('button');
     addStudentEntryBtn.type = 'button';
     addStudentEntryBtn.id = 'addStudentEntryBtn';
-    addStudentEntryBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--student-entry';
+    addStudentEntryBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--student-entry sidebar-add-btn--expandable';
     addStudentEntryBtn.setAttribute('aria-label', 'Add student');
-    addStudentEntryBtn.setAttribute('title', 'Add student');
-    addStudentEntryBtn.innerHTML = ADD_STUDENT_SVG;
+    addStudentEntryBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${ADD_STUDENT_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${ADD_STUDENT_SVG}<span class="sidebar-add-btn-state-label">Add Student</span></span>`;
     addStudentEntryBtn.addEventListener('click', () => openAddStudentModal('student-global'));
+    const googleMeetBtn = document.createElement('button');
+    googleMeetBtn.type = 'button';
+    googleMeetBtn.id = 'googleMeetBtn';
+    googleMeetBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--google-meet sidebar-add-btn--expandable';
+    googleMeetBtn.setAttribute('aria-label', 'Open Google Meet');
+    googleMeetBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_GOOGLE_MEET_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${SIDEBAR_GOOGLE_MEET_SVG}<span class="sidebar-add-btn-state-label">Google Meet</span></span>`;
+    googleMeetBtn.addEventListener('click', openGoogleMeetModal);
     const addStudentBtn = document.createElement('button');
     addStudentBtn.type = 'button';
     addStudentBtn.id = 'addSchoolBtn';
-    addStudentBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--school';
+    addStudentBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--school sidebar-add-btn--expandable';
     addStudentBtn.setAttribute('aria-label', 'Add school');
-    addStudentBtn.setAttribute('title', 'Add school');
-    addStudentBtn.innerHTML = SIDEBAR_ADD_SCHOOL_SVG;
+    addStudentBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_ADD_SCHOOL_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${SIDEBAR_ADD_SCHOOL_SVG}<span class="sidebar-add-btn-state-label">Add School</span></span>`;
     addStudentBtn.addEventListener('click', () => openAddStudentModal('student'));
+    const studentsHeaderActions = document.createElement('div');
+    studentsHeaderActions.className = 'sidebar-section-actions';
+    studentsHeaderActions.appendChild(googleMeetBtn);
+    studentsHeaderActions.appendChild(addStudentEntryBtn);
+    studentsHeaderActions.appendChild(addStudentBtn);
     studentsHeader.appendChild(studentsHeaderLabel);
-    studentsHeader.appendChild(addStudentEntryBtn);
-    studentsHeader.appendChild(addStudentBtn);
+    studentsHeader.appendChild(studentsHeaderActions);
 
     const studentsInner = document.createElement('div');
     studentsInner.className = 'sidebar-pane-students-inner';
@@ -2727,11 +2825,13 @@ function renderSidebar() {
     classReportDownloadBtn.type = 'button';
     classReportDownloadBtn.className = 'sidebar-class-report-download-btn';
     classReportDownloadBtn.setAttribute('aria-label', 'Download class report as PDF');
-    classReportDownloadBtn.setAttribute('title', 'Download class report (PDF)');
     classReportDownloadBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+    const classReportHeaderActions = document.createElement('div');
+    classReportHeaderActions.className = 'sidebar-section-actions';
+    classReportHeaderActions.appendChild(classReportDownloadBtn);
     classReportHeader.appendChild(classReportHeaderTitle);
-    classReportHeader.appendChild(classReportDownloadBtn);
+    classReportHeader.appendChild(classReportHeaderActions);
     const classReportInner = document.createElement('div');
     classReportInner.className = 'sidebar-pane-class-report-inner';
     classReportInner.setAttribute('aria-label', 'Class report content');
@@ -2750,11 +2850,13 @@ function renderSidebar() {
     financesDownloadBtn.type = 'button';
     financesDownloadBtn.className = 'sidebar-finances-download-btn';
     financesDownloadBtn.setAttribute('aria-label', 'Download finances as PDF');
-    financesDownloadBtn.setAttribute('title', 'Download finances (PDF)');
     financesDownloadBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+    const financesHeaderActions = document.createElement('div');
+    financesHeaderActions.className = 'sidebar-section-actions';
+    financesHeaderActions.appendChild(financesDownloadBtn);
     financesHeader.appendChild(financesHeaderTitle);
-    financesHeader.appendChild(financesDownloadBtn);
+    financesHeader.appendChild(financesHeaderActions);
     const financesInner = document.createElement('div');
     financesInner.className = 'sidebar-pane-finances-inner';
     financesInner.setAttribute('aria-label', 'Finances');
@@ -2770,6 +2872,10 @@ function renderSidebar() {
     teacherList.appendChild(paneStudents);
     teacherList.appendChild(paneClassReport);
     teacherList.appendChild(paneFinances);
+    const googleMeetSchoolToggle = document.getElementById('googleMeetSchoolToggle');
+    if (googleMeetSchoolToggle) {
+        refreshGoogleMeetSchoolSelect(googleMeetSelectedSchool);
+    }
 
     if (!isTeacherLoggedIn) {
         const teachersEmpty = document.createElement('p');
@@ -2870,7 +2976,6 @@ function renderSidebar() {
             offsiteBtn.type = 'button';
             offsiteBtn.className = 'sidebar-section-title-passport-btn sidebar-section-title-passport-btn--offsite';
             offsiteBtn.setAttribute('aria-label', 'Open spreadsheet or external link');
-            offsiteBtn.setAttribute('title', 'Open external link');
             offsiteBtn.innerHTML =
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>';
             offsiteBtn.addEventListener('click', (e) => {
@@ -2885,7 +2990,6 @@ function renderSidebar() {
                 'aria-label',
                 `School settings for ${category.title}`
             );
-            settingsBtn.setAttribute('title', 'School settings');
             settingsBtn.innerHTML = SETTINGS_GEAR_SVG;
             settingsBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -2910,7 +3014,6 @@ function renderSidebar() {
                 settingsBtn.type = 'button';
                 settingsBtn.className = 'sidebar-section-title-passport-btn sidebar-section-title-passport-btn--settings';
                 settingsBtn.setAttribute('aria-label', `School settings for ${category.title}`);
-                settingsBtn.setAttribute('title', 'School settings');
                 settingsBtn.innerHTML = SETTINGS_GEAR_SVG;
                 settingsBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -3032,7 +3135,50 @@ function populateClassReportStudentLists(container) {
                 li.dataset.studentName = name;
                 li.setAttribute('role', 'button');
                 li.tabIndex = 0;
-                li.textContent = name;
+                const itemContent = document.createElement('div');
+                itemContent.className = 'class-report-student-item-content';
+                const studentNameLabel = document.createElement('span');
+                studentNameLabel.className = 'class-report-student-name';
+                studentNameLabel.textContent = name;
+                const savedMeetLink = String(studentGoogleMeetLinksByName[name] || '').trim();
+                const actionsWrap = document.createElement('div');
+                actionsWrap.className = 'class-report-student-actions';
+                if (savedMeetLink) {
+                    const meetBtn = document.createElement('button');
+                    meetBtn.type = 'button';
+                    meetBtn.className = 'class-report-student-meet-btn';
+                    meetBtn.setAttribute('aria-label', `Open saved Google Meet link for ${name}`);
+                    meetBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SVG;
+                    meetBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        window.open(savedMeetLink, '_blank', 'noopener,noreferrer');
+                    });
+                    actionsWrap.appendChild(meetBtn);
+                } else {
+                    const meetOff = document.createElement('span');
+                    meetOff.className = 'class-report-student-meet-btn class-report-student-meet-btn--off';
+                    meetOff.innerHTML = SIDEBAR_GOOGLE_MEET_OFF_SVG;
+                    meetOff.setAttribute('aria-hidden', 'true');
+                    actionsWrap.appendChild(meetOff);
+                }
+                const whatsappBtn = document.createElement('button');
+                whatsappBtn.type = 'button';
+                whatsappBtn.className = 'class-report-student-whatsapp-btn';
+                whatsappBtn.setAttribute('aria-label', `Open WhatsApp for ${name}`);
+                whatsappBtn.innerHTML = SIDEBAR_WHATSAPP_SVG;
+                whatsappBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const whatsappUrl = buildStudentWhatsappUrl(name, buildStudentWhatsappMessage(name));
+                    if (!whatsappUrl) {
+                        showAppMessage(`No valid phone number found for ${name}.`);
+                        return;
+                    }
+                    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+                });
+                actionsWrap.prepend(whatsappBtn);
+                itemContent.appendChild(actionsWrap);
+                itemContent.appendChild(studentNameLabel);
+                li.appendChild(itemContent);
                 if (classReportVisible && currentTeacher === name && isStudentName(name)) {
                     li.classList.add('class-report-student-item--active');
                 }
@@ -3221,11 +3367,14 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
         delete studentClassReportRows[name];
         delete passportFollowupLinks[name];
         delete studentSchoolByName[name];
+        delete studentPhonesByName[name];
+        delete studentGoogleMeetLinksByName[name];
     });
 
     customSchoolsList = customSchoolsList.filter((school) => String(school || '').trim().toLowerCase() !== schoolKey);
     delete schoolExternalLinks[schoolKey];
     delete schoolThemeColors[schoolKey];
+    delete googleMeetSharedLinkModeBySchoolKey[schoolKey];
 
     if (currentTeacher && removedKeys.has(currentTeacher.trim().toLowerCase())) {
         currentTeacher = null;
@@ -3264,15 +3413,13 @@ function openDeleteSchoolModal(schoolTitle, studentCount = 0) {
         ? `${studentCount} student${studentCount === 1 ? '' : 's'} will also be deleted.`
         : 'This school has no students yet.';
     confirmBtn.textContent = studentCount > 0 ? 'Delete school and students' : 'Delete school';
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
 }
 
 function closeDeleteSchoolModal() {
     const modal = document.getElementById('deleteSchoolModal');
     if (!modal) return;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
+    closeModalWithAnimation(modal);
     pendingDeleteSchoolTitle = '';
 }
 
@@ -3329,8 +3476,7 @@ function openSchoolSettingsModal(schoolTitle) {
     externalPanel.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     externalUrl.value = existingUrl;
 
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
     if (enabled) {
         externalUrl.focus();
     } else {
@@ -3341,8 +3487,7 @@ function openSchoolSettingsModal(schoolTitle) {
 function closeSchoolSettingsModal() {
     const modal = document.getElementById('schoolSettingsModal');
     if (!modal) return;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
+    closeModalWithAnimation(modal);
     closeSchoolSettingsColorPopup();
     pendingSchoolSettingsTitle = '';
 }
@@ -3418,6 +3563,10 @@ function saveSchoolSettingsFromModal() {
     }
     if (nextSchoolKey !== schoolKey) {
         delete schoolExternalLinks[schoolKey];
+        if (Object.prototype.hasOwnProperty.call(googleMeetSharedLinkModeBySchoolKey, schoolKey)) {
+            googleMeetSharedLinkModeBySchoolKey[nextSchoolKey] = !!googleMeetSharedLinkModeBySchoolKey[schoolKey];
+            delete googleMeetSharedLinkModeBySchoolKey[schoolKey];
+        }
     }
 
     schoolThemeColors[nextSchoolKey] = normalizeSchoolTheme(
@@ -3515,16 +3664,14 @@ function openAppMessageModal(title, message) {
     if (!modal || !titleEl || !bodyEl) return;
     titleEl.textContent = String(title || 'Notice').trim() || 'Notice';
     bodyEl.textContent = String(message || '').trim();
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
     window.setTimeout(() => okBtn?.focus(), 0);
 }
 
 function closeAppMessageModal() {
     const modal = document.getElementById('appMessageModal');
     if (!modal) return;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
+    closeModalWithAnimation(modal);
 }
 
 function showAppMessage(message, title = 'Notice') {
@@ -3590,8 +3737,7 @@ function openTeacherLoginModal() {
     if (saveCredentialsCheckbox) saveCredentialsCheckbox.checked = !!savedCredentials;
     passwordInput.type = 'password';
     setPasswordToggleVisual(passwordInput, passwordToggleBtn);
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
     window.setTimeout(() => (emailInput.value ? passwordInput.focus() : emailInput.focus()), 0);
 }
 
@@ -3599,8 +3745,7 @@ function closeTeacherLoginModal() {
     const modal = document.getElementById('teacherLoginModal');
     const errorEl = document.getElementById('teacherLoginError');
     if (!modal) return;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
+    closeModalWithAnimation(modal);
     if (errorEl) errorEl.textContent = '';
 }
 
@@ -3809,6 +3954,8 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentClassReportRows[removedName];
     delete passportFollowupLinks[removedName];
     delete studentSchoolByName[removedName];
+    delete studentPhonesByName[removedName];
+    delete studentGoogleMeetLinksByName[removedName];
     saveStudentClassReportRows();
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
@@ -3856,6 +4003,123 @@ function splitName(fullName) {
     };
 }
 
+function getStudentPhoneInfo(studentName) {
+    const name = String(studentName || '').trim();
+    const raw = name ? studentPhonesByName[name] : null;
+    if (!raw || typeof raw !== 'object') {
+        return { countryIso: DEFAULT_PHONE_COUNTRY_ISO, number: '' };
+    }
+    const iso = String(raw.countryIso || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+    const countryIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
+    const number = String(raw.number || '').trim();
+    return { countryIso, number };
+}
+
+function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {
+    const name = String(studentName || '').trim();
+    if (!name) return;
+    const number = String(numberRaw || '').trim();
+    if (!number) {
+        delete studentPhonesByName[name];
+        return;
+    }
+    const iso = String(countryIsoRaw || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+    const countryIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
+    studentPhonesByName[name] = { countryIso, number };
+}
+
+function buildStudentWhatsappUrl(studentName, message = '') {
+    const name = String(studentName || '').trim();
+    if (!name) return '';
+    const phoneInfo = getStudentPhoneInfo(name);
+    const country = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === phoneInfo.countryIso)
+        || PHONE_COUNTRY_OPTIONS.find((item) => item.iso === DEFAULT_PHONE_COUNTRY_ISO)
+        || PHONE_COUNTRY_OPTIONS[0];
+    if (!country) return '';
+
+    const dialDigits = String(country.dialCode || '').replace(/\D+/g, '');
+    let numberDigits = String(phoneInfo.number || '').replace(/\D+/g, '');
+    if (!dialDigits || !numberDigits) return '';
+
+    if (numberDigits.startsWith('00')) {
+        numberDigits = numberDigits.slice(2);
+    }
+    const fullNumberDigits = numberDigits.startsWith(dialDigits)
+        ? numberDigits
+        : `${dialDigits}${numberDigits.replace(/^0+/, '')}`;
+    if (!/^\d{8,15}$/.test(fullNumberDigits)) return '';
+
+    const encodedMessage = encodeURIComponent(String(message || '').trim());
+    return encodedMessage
+        ? `https://wa.me/${fullNumberDigits}?text=${encodedMessage}`
+        : `https://wa.me/${fullNumberDigits}`;
+}
+
+function getOrdinalSuffix(day) {
+    const n = Number(day) || 0;
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return 'th';
+    const mod10 = n % 10;
+    if (mod10 === 1) return 'st';
+    if (mod10 === 2) return 'nd';
+    if (mod10 === 3) return 'rd';
+    return 'th';
+}
+
+function buildStudentWhatsappMessage(studentName) {
+    const fullName = String(studentName || '').trim();
+    const firstName = splitName(fullName).first || fullName || 'student';
+    const now = new Date();
+    const month = now.toLocaleString('en-US', { month: 'long' });
+    const day = now.getDate();
+    const dayOfWeek = now.toLocaleString('en-US', { weekday: 'long' });
+    const dateLine = `*${month}, ${day}${getOrdinalSuffix(day)} — ${dayOfWeek}.*`;
+    const greetingOptions = ['Hi', 'Hi there', 'Hello', 'Hello there', 'Hey', 'Hey there'];
+    const greeting = greetingOptions[Math.floor(Math.random() * greetingOptions.length)] || 'Hi there';
+    const followUpOptions = [
+        'How are you?',
+        'How are you doing?',
+        "How's it going?",
+        'How have you been?',
+        "How's everything?",
+        'How are things going?',
+        "How's your day going?",
+        "How's your day been so far?",
+        "What's up?",
+        "What's going on?",
+        "How's it going so far?",
+        'How are things?',
+        'How are you today?',
+        "I hope you're doing well.",
+        "Hope you're having a great day."
+    ];
+    const followUp = followUpOptions[Math.floor(Math.random() * followUpOptions.length)] || 'How are you today?';
+    const meetLink = String(studentGoogleMeetLinksByName[fullName] || '').trim();
+    const meetLine = `*${meetLink || "<Google Meet link>"}*`;
+    const classLinkLineOptions = [
+        "Here's the link for our class.",
+        "Here's your class link.",
+        "Here's the link to our class.",
+        'This is our class link.',
+        "Here's your link for today's class.",
+        "Here's the link for our lesson today.",
+        "Here's your class link for today.",
+        "Here's where we'll meet.",
+        'Please find the class link below.',
+        'Here is the link for our class.',
+        'You can access the class using the link below.',
+        'Class link.',
+        'Your class link.',
+        'Join here.'
+    ];
+    const classLinkLine = classLinkLineOptions[Math.floor(Math.random() * classLinkLineOptions.length)] || "Here's your class link.";
+    return `${dateLine}
+${greeting}, ${firstName}. ${followUp}
+
+${meetLine}
+${classLinkLine}`;
+}
+
 function refreshEditStudentSchoolSelect(selectedSchool = '') {
     const schoolSelect = document.getElementById('editStudentSchool');
     if (!schoolSelect) return;
@@ -3879,10 +4143,12 @@ function openEditStudentModal(studentName, rosterKey) {
     const modal = document.getElementById('editStudentModal');
     const firstInput = document.getElementById('editStudentFirst');
     const lastInput = document.getElementById('editStudentLast');
+    const phoneInput = document.getElementById('editStudentPhone');
+    const phoneCountrySelect = document.getElementById('editStudentPhoneCountry');
     const schoolSelect = document.getElementById('editStudentSchool');
     const originalNameInput = document.getElementById('editStudentOriginalName');
     const originalCategoryInput = document.getElementById('editStudentOriginalCategory');
-    if (!modal || !firstInput || !lastInput || !schoolSelect || !originalNameInput || !originalCategoryInput) {
+    if (!modal || !firstInput || !lastInput || !phoneInput || !phoneCountrySelect || !schoolSelect || !originalNameInput || !originalCategoryInput) {
         return;
     }
 
@@ -3890,20 +4156,22 @@ function openEditStudentModal(studentName, rosterKey) {
     const currentSchool = getStudentSchoolName(studentName) || (rosterKey === 'passport' ? 'Passport' : (rosterKey === 'speakon' ? 'SpeakOn' : 'HomeTeachers'));
     firstInput.value = parsed.first;
     lastInput.value = parsed.last;
+    const phone = getStudentPhoneInfo(studentName);
+    phoneInput.value = phone.number;
+    phoneCountrySelect.value = phone.countryIso;
+    updateEditStudentPhonePlaceholder();
     refreshEditStudentSchoolSelect(currentSchool);
     originalNameInput.value = studentName;
     originalCategoryInput.value = rosterKey;
 
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
     firstInput.focus();
 }
 
 function closeEditStudentModal() {
     const modal = document.getElementById('editStudentModal');
     if (!modal) return;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
+    closeModalWithAnimation(modal);
 }
 
 function upsertStudentFromEditForm(action = 'save') {
@@ -3911,6 +4179,8 @@ function upsertStudentFromEditForm(action = 'save') {
     const originalKind = document.getElementById('editStudentOriginalCategory')?.value || '';
     const first = document.getElementById('editStudentFirst')?.value || '';
     const last = document.getElementById('editStudentLast')?.value || '';
+    const phoneNumber = document.getElementById('editStudentPhone')?.value || '';
+    const phoneCountryIso = document.getElementById('editStudentPhoneCountry')?.value || DEFAULT_PHONE_COUNTRY_ISO;
     const schoolName = document.getElementById('editStudentSchool')?.value || '';
     const nextSchool = String(schoolName || '').trim();
     const nextKind = rosterKindFromSchoolName(nextSchool);
@@ -3975,11 +4245,19 @@ function upsertStudentFromEditForm(action = 'save') {
             delete passportFollowupLinks[originalName];
         }
         delete studentSchoolByName[originalName];
+        if (studentGoogleMeetLinksByName[originalName]) {
+            studentGoogleMeetLinksByName[fullName] = studentGoogleMeetLinksByName[originalName];
+        }
+        delete studentGoogleMeetLinksByName[originalName];
     } else if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
     if (originalKind === 'passport' && nextKind !== 'passport') {
         delete passportFollowupLinks[fullName];
+    }
+    saveStudentPhoneInfo(fullName, phoneCountryIso, phoneNumber);
+    if (originalName !== fullName) {
+        delete studentPhonesByName[originalName];
     }
 
     if (currentTeacher && currentTeacher.trim().toLowerCase() === originalName.trim().toLowerCase()) {
@@ -4066,9 +4344,12 @@ function setupEditStudentModal() {
     const cancelBtn = document.getElementById('editStudentCancel');
     const deleteBtn = document.getElementById('editStudentDelete');
     const backdrop = document.getElementById('editStudentModalBackdrop');
+    const phoneCountrySelect = document.getElementById('editStudentPhoneCountry');
     if (!modal || !form) {
         return;
     }
+    populateEditStudentPhoneCountrySelect();
+    updateEditStudentPhonePlaceholder();
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeEditStudentModal());
@@ -4079,6 +4360,7 @@ function setupEditStudentModal() {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => upsertStudentFromEditForm('delete'));
     }
+    phoneCountrySelect?.addEventListener('change', updateEditStudentPhonePlaceholder);
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -4235,6 +4517,9 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     roster.push(fullName);
     roster.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     studentSchoolByName[fullName] = schoolName;
+    const addPhoneInput = document.getElementById('addStudentPhone');
+    const addPhoneCountrySelect = document.getElementById('addStudentPhoneCountry');
+    saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
     if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
@@ -4247,6 +4532,85 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     closeAddStudentModal();
 }
 
+function populateAddStudentPhoneCountrySelect() {
+    const countrySelect = document.getElementById('addStudentPhoneCountry');
+    if (!countrySelect) return;
+    if (countrySelect.options.length > 0) return;
+
+    PHONE_COUNTRY_OPTIONS.forEach((country) => {
+        const option = document.createElement('option');
+        option.value = country.iso;
+        option.textContent = country.flag;
+        option.dataset.dialCode = country.dialCode;
+        option.dataset.sample = country.sample;
+        option.dataset.flagUrl = `https://flagcdn.com/w40/${country.iso.toLowerCase()}.png`;
+        countrySelect.appendChild(option);
+    });
+
+    countrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+}
+
+function updateAddStudentPhonePlaceholder() {
+    const countrySelect = document.getElementById('addStudentPhoneCountry');
+    const phoneInput = document.getElementById('addStudentPhone');
+    const flagImg = document.getElementById('addStudentPhoneCountryFlag');
+    if (!countrySelect || !phoneInput) return;
+
+    const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
+        || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
+        || PHONE_COUNTRY_OPTIONS[0];
+    if (!selected) return;
+    phoneInput.placeholder = `${selected.dialCode} ${selected.sample}`;
+    if (flagImg) {
+        const flagUrl = `https://flagcdn.com/w40/${selected.iso.toLowerCase()}.png`;
+        flagImg.src = flagUrl;
+        flagImg.alt = `${selected.name} flag`;
+        flagImg.onerror = () => {
+            if (selected.iso === 'BR') {
+                flagImg.src = BRAZIL_FLAG_SVG_DATA_URI;
+            }
+        };
+    }
+}
+
+function populateEditStudentPhoneCountrySelect() {
+    const countrySelect = document.getElementById('editStudentPhoneCountry');
+    if (!countrySelect) return;
+    if (countrySelect.options.length > 0) return;
+
+    PHONE_COUNTRY_OPTIONS.forEach((country) => {
+        const option = document.createElement('option');
+        option.value = country.iso;
+        option.textContent = country.flag;
+        countrySelect.appendChild(option);
+    });
+
+    countrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+}
+
+function updateEditStudentPhonePlaceholder() {
+    const countrySelect = document.getElementById('editStudentPhoneCountry');
+    const phoneInput = document.getElementById('editStudentPhone');
+    const flagImg = document.getElementById('editStudentPhoneCountryFlag');
+    if (!countrySelect || !phoneInput) return;
+
+    const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
+        || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
+        || PHONE_COUNTRY_OPTIONS[0];
+    if (!selected) return;
+    phoneInput.placeholder = `${selected.dialCode} ${selected.sample}`;
+    if (flagImg) {
+        const flagUrl = `https://flagcdn.com/w40/${selected.iso.toLowerCase()}.png`;
+        flagImg.src = flagUrl;
+        flagImg.alt = `${selected.name} flag`;
+        flagImg.onerror = () => {
+            if (selected.iso === 'BR') {
+                flagImg.src = BRAZIL_FLAG_SVG_DATA_URI;
+            }
+        };
+    }
+}
+
 function updateAddStudentPassportFieldVisibility() {
     const nameRow = document.getElementById('addTeacherNameRow');
     const firstInput = document.getElementById('addStudentFirst');
@@ -4257,6 +4621,7 @@ function updateAddStudentPassportFieldVisibility() {
     const stateInput = document.getElementById('addStudentState');
     const schoolInput = document.getElementById('addStudentSchool');
     const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
     const teacherEmailWrap = document.getElementById('addTeacherEmailWrap');
     const teacherEmailInput = document.getElementById('addTeacherEmail');
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
@@ -4288,6 +4653,10 @@ function updateAddStudentPassportFieldVisibility() {
             firstInput.value = '';
             lastInput.value = '';
             if (phoneInput) phoneInput.value = '';
+            if (phoneCountrySelect) {
+                phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+                updateAddStudentPhonePlaceholder();
+            }
         }
     }
     if (teacherEmailWrap && teacherEmailInput) {
@@ -4367,6 +4736,7 @@ function openAddStudentModal(mode = 'student') {
     const firstInput = document.getElementById('addStudentFirst');
     const lastInput = document.getElementById('addStudentLast');
     const phoneInput = document.getElementById('addStudentPhone');
+    const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
     const schoolInput = document.getElementById('addStudentSchool');
     const schoolSelect = document.getElementById('addStudentSchoolSelect');
     const cityInput = document.getElementById('addStudentCity');
@@ -4395,6 +4765,7 @@ function openAddStudentModal(mode = 'student') {
     if (firstInput) firstInput.value = '';
     if (lastInput) lastInput.value = '';
     if (phoneInput) phoneInput.value = '';
+    if (phoneCountrySelect) phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
     schoolInput.value = '';
     if (cityInput) cityInput.value = '';
     if (stateInput) stateInput.value = '';
@@ -4419,10 +4790,10 @@ function openAddStudentModal(mode = 'student') {
     if (addSchoolSecondaryColor) addSchoolSecondaryColor.value = '#1e88e5';
     renderAddSchoolThemeSquares();
     closeAddSchoolColorPopup();
+    updateAddStudentPhonePlaceholder();
     updateAddStudentPassportFieldVisibility();
 
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    openModalWithAnimation(modal);
     if ((addStudentModalMode === 'teacher' || addStudentModalMode === 'student-entry' || addStudentModalMode === 'student-global') && firstInput) {
         firstInput.focus();
     } else {
@@ -4441,14 +4812,693 @@ function openAddStudentModalForSchool(schoolTitle) {
     openAddStudentModal('student-entry');
 }
 
+function getStudentNamesForSchool(schoolTitle) {
+    const schoolKey = String(schoolTitle || '').trim().toLowerCase();
+    if (!schoolKey) return [];
+    return [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
+        .filter((name) => (getStudentSchoolName(name) || '').trim().toLowerCase() === schoolKey)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function getGoogleMeetSchoolKey(schoolTitle) {
+    return String(schoolTitle || '').trim().toLowerCase();
+}
+
+function getSharedGoogleMeetLinkForStudents(names) {
+    const links = names
+        .map((name) => String(studentGoogleMeetLinksByName[name] || '').trim())
+        .filter(Boolean);
+    if (links.length === 0) return '';
+    const first = links[0];
+    return links.every((link) => link === first) ? first : '';
+}
+
+function refreshGoogleMeetSharedSchoolPanel() {
+    const panel = document.getElementById('googleMeetSharedSchoolPanel');
+    const checkbox = document.getElementById('googleMeetSharedSchoolCheckbox');
+    const inputWrap = document.getElementById('googleMeetSharedSchoolInputWrap');
+    const actions = document.getElementById('googleMeetSharedSchoolActions');
+    const input = document.getElementById('googleMeetSharedSchoolInput');
+    if (!panel || !checkbox || !inputWrap || !actions || !input) return;
+
+    const school = String(googleMeetSelectedSchool || '').trim();
+    const schoolKey = getGoogleMeetSchoolKey(school);
+    const hasSchool = !!schoolKey;
+    panel.hidden = !hasSchool;
+    panel.setAttribute('aria-hidden', hasSchool ? 'false' : 'true');
+    if (!hasSchool) {
+        googleMeetUseSharedSchoolLink = false;
+        checkbox.checked = false;
+    }
+
+    if (hasSchool) {
+        checkbox.checked = !!googleMeetUseSharedSchoolLink;
+    }
+    const shouldShowSharedInput = hasSchool && !!checkbox.checked;
+    inputWrap.hidden = !shouldShowSharedInput;
+    inputWrap.setAttribute('aria-hidden', shouldShowSharedInput ? 'false' : 'true');
+    actions.hidden = !shouldShowSharedInput;
+    actions.setAttribute('aria-hidden', shouldShowSharedInput ? 'false' : 'true');
+
+    if (hasSchool && shouldShowSharedInput) {
+        const names = getStudentNamesForSchool(googleMeetSelectedSchool);
+        input.value = getSharedGoogleMeetLinkForStudents(names);
+    }
+}
+
+function isPlausibleGoogleMeetUrl(candidate) {
+    const raw = String(candidate || '').trim();
+    if (!raw) return true;
+    let u = raw;
+    if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+    try {
+        const url = new URL(u);
+        const h = url.hostname.toLowerCase();
+        return h === 'meet.google.com' || h.endsWith('.meet.google.com') || h === 'meet.app';
+    } catch {
+        return false;
+    }
+}
+
+function normalizeGoogleMeetUrl(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+function hideGoogleMeetContextMessage(immediate = false) {
+    if (googleMeetContextMessageTimer) {
+        clearTimeout(googleMeetContextMessageTimer);
+        googleMeetContextMessageTimer = null;
+    }
+    if (googleMeetContextMessageHideTimer) {
+        clearTimeout(googleMeetContextMessageHideTimer);
+        googleMeetContextMessageHideTimer = null;
+    }
+    const toast = document.getElementById('googleMeetContextMessage');
+    if (!toast) return;
+    if (immediate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        toast.classList.remove('is-visible', 'is-exit');
+        toast.hidden = true;
+        toast.setAttribute('aria-hidden', 'true');
+        return;
+    }
+    if (toast.hidden) return;
+    toast.classList.remove('is-visible');
+    toast.classList.add('is-exit');
+    googleMeetContextMessageHideTimer = window.setTimeout(() => {
+        toast.classList.remove('is-exit');
+        toast.hidden = true;
+        toast.setAttribute('aria-hidden', 'true');
+        googleMeetContextMessageHideTimer = null;
+    }, 240);
+}
+
+function showGoogleMeetContextMessage(message, anchorEl) {
+    const toast = document.getElementById('googleMeetContextMessage');
+    if (!toast) return;
+    hideGoogleMeetContextMessage(true);
+    toast.textContent = String(message || '').trim();
+    if (!toast.textContent) return;
+    toast.hidden = false;
+    toast.setAttribute('aria-hidden', 'false');
+    toast.classList.remove('is-exit');
+
+    const rect = anchorEl?.getBoundingClientRect?.();
+    const pad = 10;
+    const gap = 10;
+    const top = rect ? Math.round(rect.top + (rect.height - toast.offsetHeight) / 2) : pad + 10;
+    let left = rect ? rect.right + gap : window.innerWidth - toast.offsetWidth - pad;
+    const maxTop = window.innerHeight - toast.offsetHeight - pad;
+    const clampedTop = Math.min(Math.max(pad, top), Math.max(pad, maxTop));
+    if (left < pad) left = pad;
+    if (left + toast.offsetWidth > window.innerWidth - pad) {
+        left = rect ? rect.left - toast.offsetWidth - gap : window.innerWidth - toast.offsetWidth - pad;
+    }
+    if (left < pad) {
+        left = window.innerWidth - toast.offsetWidth - pad;
+    }
+    if (left < pad) {
+        left = pad;
+    }
+    toast.style.top = `${Math.round(clampedTop)}px`;
+    toast.style.left = `${Math.round(left)}px`;
+    requestAnimationFrame(() => {
+        toast.classList.add('is-visible');
+    });
+    googleMeetContextMessageTimer = window.setTimeout(() => {
+        hideGoogleMeetContextMessage();
+    }, 2000);
+}
+
+function findGoogleMeetStudentIndicator(studentName) {
+    const name = String(studentName || '').trim();
+    const list = document.getElementById('googleMeetStudentList');
+    if (!name || !list) return null;
+    const rows = list.querySelectorAll('.google-meet-student-row');
+    for (const row of rows) {
+        const label = row.querySelector('.google-meet-student-name');
+        if (!label || String(label.textContent || '').trim() !== name) continue;
+        return row.querySelector('.google-meet-student-save-indicator') || row.querySelector('.google-meet-student-meet-btn');
+    }
+    return null;
+}
+
+function closeGoogleMeetStudentLinkPopover() {
+    if (googleMeetLinkPopoverEscapeHandler) {
+        document.removeEventListener('keydown', googleMeetLinkPopoverEscapeHandler, true);
+        googleMeetLinkPopoverEscapeHandler = null;
+    }
+    googleMeetLinkPopoverStudent = '';
+    const pop = document.getElementById('googleMeetStudentLinkPopover');
+    if (pop) {
+        pop.classList.remove('google-meet-student-link-popover--enter');
+        pop.hidden = true;
+        pop.setAttribute('aria-hidden', 'true');
+    }
+}
+
+function positionGoogleMeetStudentLinkPopover(anchorRef) {
+    const pop = document.getElementById('googleMeetStudentLinkPopover');
+    if (!pop || pop.hidden) return;
+    // Respect CSS-driven positioning for this popup.
+    pop.style.removeProperty('left');
+    pop.style.removeProperty('top');
+}
+
+function openGoogleMeetStudentLinkPopover(studentName, anchorRef) {
+    closeGoogleMeetStudentLinkPopover();
+    const pop = document.getElementById('googleMeetStudentLinkPopover');
+    const sub = document.getElementById('googleMeetStudentLinkPopoverStudentName');
+    const input = document.getElementById('googleMeetStudentLinkPopoverInput');
+    if (!pop || !sub || !input) return;
+    googleMeetLinkPopoverStudent = String(studentName || '').trim();
+    if (!googleMeetLinkPopoverStudent) return;
+    sub.textContent = googleMeetLinkPopoverStudent;
+    input.value = studentGoogleMeetLinksByName[googleMeetLinkPopoverStudent] || '';
+    pop.classList.remove('google-meet-student-link-popover--enter');
+    pop.hidden = false;
+    pop.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => {
+        positionGoogleMeetStudentLinkPopover(anchorRef);
+        requestAnimationFrame(() => {
+            positionGoogleMeetStudentLinkPopover(anchorRef);
+            if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+                void pop.offsetWidth;
+                pop.classList.add('google-meet-student-link-popover--enter');
+            }
+            input.focus();
+            if (typeof input.select === 'function') input.select();
+        });
+    });
+    googleMeetLinkPopoverEscapeHandler = (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeGoogleMeetStudentLinkPopover();
+        }
+    };
+    document.addEventListener('keydown', googleMeetLinkPopoverEscapeHandler, true);
+}
+
+function openGoogleMeetStudentAccordion() {
+    const panel = document.getElementById('googleMeetStudentPanel');
+    const toggle = document.getElementById('googleMeetStudentToggle');
+    const listWrap = document.getElementById('googleMeetStudentListWrap');
+    if (!panel || !toggle || !listWrap || panel.hidden) return;
+    toggle.setAttribute('aria-expanded', 'true');
+    listWrap.classList.add('is-open');
+    listWrap.setAttribute('aria-hidden', 'false');
+}
+
+function closeGoogleMeetStudentAccordion() {
+    const toggle = document.getElementById('googleMeetStudentToggle');
+    const listWrap = document.getElementById('googleMeetStudentListWrap');
+    if (!toggle || !listWrap) return;
+    toggle.setAttribute('aria-expanded', 'false');
+    listWrap.classList.remove('is-open');
+    listWrap.setAttribute('aria-hidden', 'true');
+}
+
+/** CSS animations often skip when `hidden` is cleared in the same frame; run after layout. */
+function queueGoogleMeetStudentPanelEnter(panel) {
+    if (!panel || panel.hidden) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const run = () => {
+        panel.classList.remove('google-meet-student-panel--enter');
+        void panel.offsetWidth;
+        panel.classList.add('google-meet-student-panel--enter');
+    };
+    requestAnimationFrame(() => {
+        requestAnimationFrame(run);
+    });
+}
+
+function refreshGoogleMeetStudentPanel() {
+    const panel = document.getElementById('googleMeetStudentPanel');
+    const list = document.getElementById('googleMeetStudentList');
+    const toggle = document.getElementById('googleMeetStudentToggle');
+    const toggleText = document.getElementById('googleMeetStudentToggleText');
+    const dialog = document.querySelector('#googleMeetModal .google-meet-dialog');
+    if (!panel || !list || !toggle || !toggleText) return;
+
+    const setGoogleMeetDialogWidth = (percent) => {
+        if (!dialog) return;
+        const p = Math.max(35, Math.min(78, Number(percent) || 35));
+        dialog.style.setProperty('--google-meet-dialog-width', `${p}%`);
+    };
+
+    const school = String(googleMeetSelectedSchool || '').trim();
+    const schoolKey = getGoogleMeetSchoolKey(school);
+    googleMeetUseSharedSchoolLink = !!(schoolKey && googleMeetSharedLinkModeBySchoolKey[schoolKey]);
+    const useShared = googleMeetUseSharedSchoolLink;
+    if (!school) {
+        setGoogleMeetDialogWidth(35);
+        panel.hidden = true;
+        panel.classList.remove('google-meet-student-panel--enter');
+        delete panel.dataset.studentsSchool;
+        googleMeetSelectedStudentNames.clear();
+        closeGoogleMeetStudentAccordion();
+        return;
+    }
+
+    if (useShared) {
+        setGoogleMeetDialogWidth(35);
+        panel.hidden = true;
+        panel.classList.remove('google-meet-student-panel--enter');
+        closeGoogleMeetStudentAccordion();
+        return;
+    }
+
+    const prevSchool = panel.dataset.studentsSchool || '';
+    const schoolChanged = prevSchool !== school;
+    const wasHidden = panel.hidden;
+    panel.dataset.studentsSchool = school;
+
+    if (schoolChanged) {
+        googleMeetSelectedStudentNames.clear();
+    }
+
+    panel.hidden = false;
+    const names = getStudentNamesForSchool(school);
+    const n = names.length;
+    toggleText.textContent = n === 1 ? 'Students (1)' : `Students (${n})`;
+    const getGoogleMeetStudentColumns = (count) => {
+        const total = Number(count) || 0;
+        if (total <= 5) return 1;
+        if (total <= 8) return 2;
+        if (total <= 11) return 3;
+        if (total <= 14) return 4;
+        return 5;
+    };
+    const getGoogleMeetColumnSizes = (count, columns) => {
+        const total = Number(count) || 0;
+        const cols = Math.max(1, Math.min(Number(columns) || 1, total || 1));
+        const base = Math.floor(total / cols);
+        const remainder = total % cols;
+        return Array.from({ length: cols }, (_, idx) => base + (idx < remainder ? 1 : 0));
+    };
+    const columnCount = getGoogleMeetStudentColumns(n);
+    const columnSizes = getGoogleMeetColumnSizes(n, columnCount);
+    setGoogleMeetDialogWidth(35 + (columnCount - 1) * 10);
+    list.style.setProperty('--google-meet-student-columns', String(columnCount));
+    list.classList.toggle('is-multi-column', columnCount > 1);
+
+    if (!schoolChanged && names.length > 0) {
+        const nameSet = new Set(names);
+        googleMeetSelectedStudentNames = new Set(
+            [...googleMeetSelectedStudentNames].filter((x) => nameSet.has(x))
+        );
+    }
+
+    const wasExpanded = toggle.getAttribute('aria-expanded') === 'true';
+
+    list.innerHTML = '';
+    const columnParents = columnCount > 1
+        ? columnSizes.map(() => {
+            const col = document.createElement('div');
+            col.className = 'google-meet-student-column';
+            list.appendChild(col);
+            return col;
+        })
+        : [list];
+    let currentColumnIndex = 0;
+    let itemsInCurrentColumn = 0;
+    if (names.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'google-meet-school-empty';
+        empty.textContent = 'No students assigned to this school yet.';
+        list.appendChild(empty);
+    } else {
+        names.forEach((name, index) => {
+            const hasSavedMeet = !!String(studentGoogleMeetLinksByName[name] || '').trim();
+            const row = document.createElement('div');
+            row.className = `google-meet-student-row${googleMeetSelectedStudentNames.has(name) ? ' is-selected' : ''}${
+                hasSavedMeet ? ' has-saved-meet-link' : ''
+            }`;
+            row.setAttribute('role', 'option');
+            row.setAttribute('aria-selected', googleMeetSelectedStudentNames.has(name) ? 'true' : 'false');
+            row.style.animationDelay = `${Math.min(index, 14) * 28}ms`;
+
+            const nameP = document.createElement('p');
+            nameP.className = 'google-meet-student-name';
+            nameP.textContent = name;
+
+            const statusWrap = document.createElement('span');
+            statusWrap.className = `google-meet-student-save-indicator${hasSavedMeet ? ' is-saved' : ''}`;
+            statusWrap.setAttribute('aria-hidden', 'true');
+
+            const emptyLayer = document.createElement('span');
+            emptyLayer.className = 'google-meet-student-save-indicator-layer google-meet-student-save-indicator-layer--empty';
+            emptyLayer.innerHTML = GOOGLE_MEET_STUDENT_LINK_STATUS_EMPTY_SVG;
+
+            const savedLayer = document.createElement('span');
+            savedLayer.className = 'google-meet-student-save-indicator-layer google-meet-student-save-indicator-layer--saved';
+            savedLayer.innerHTML = GOOGLE_MEET_STUDENT_LINK_STATUS_SAVED_SVG;
+
+            statusWrap.appendChild(emptyLayer);
+            statusWrap.appendChild(savedLayer);
+            statusWrap.style.cursor = 'pointer';
+            statusWrap.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                openGoogleMeetStudentLinkPopover(name, { x: ev.clientX, y: ev.clientY });
+            });
+
+            const meetBtn = document.createElement('button');
+            meetBtn.type = 'button';
+            meetBtn.className = 'google-meet-student-meet-btn';
+            meetBtn.setAttribute('aria-label', `Google Meet link for ${name}`);
+            meetBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SVG;
+            meetBtn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                openGoogleMeetStudentLinkPopover(name, { x: ev.clientX, y: ev.clientY });
+            });
+
+            row.addEventListener('click', (ev) => {
+                if (ev.target.closest('.google-meet-student-meet-btn') || ev.target.closest('.google-meet-student-save-indicator')) {
+                    return;
+                }
+                if (googleMeetSelectedStudentNames.has(name)) {
+                    googleMeetSelectedStudentNames.delete(name);
+                } else {
+                    googleMeetSelectedStudentNames.add(name);
+                }
+                const on = googleMeetSelectedStudentNames.has(name);
+                row.classList.toggle('is-selected', on);
+                row.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+
+            row.appendChild(nameP);
+            row.appendChild(meetBtn);
+            row.appendChild(statusWrap);
+            const targetColumn = columnParents[Math.min(currentColumnIndex, columnParents.length - 1)] || list;
+            targetColumn.appendChild(row);
+            itemsInCurrentColumn += 1;
+            const currentTargetSize = columnSizes[currentColumnIndex] || 0;
+            if (itemsInCurrentColumn >= currentTargetSize && currentColumnIndex < columnSizes.length - 1) {
+                currentColumnIndex += 1;
+                itemsInCurrentColumn = 0;
+            }
+        });
+    }
+
+    if (schoolChanged) {
+        openGoogleMeetStudentAccordion();
+    } else if (wasExpanded) {
+        openGoogleMeetStudentAccordion();
+    } else {
+        closeGoogleMeetStudentAccordion();
+    }
+
+    if (wasHidden || schoolChanged) {
+        queueGoogleMeetStudentPanelEnter(panel);
+    }
+}
+
+function refreshGoogleMeetSchoolSelect(selectedSchool = '', animateLabel = false) {
+    const schoolToggleText = document.getElementById('googleMeetSchoolToggleText');
+    const schoolList = document.getElementById('googleMeetSchoolList');
+    if (!schoolToggleText || !schoolList) {
+        return;
+    }
+    const selected = String(selectedSchool || '').trim();
+    const options = getAvailableSchoolNames();
+    const hasSelected = options.includes(selected);
+    googleMeetSelectedSchool = hasSelected ? selected : '';
+    const selectedKey = getGoogleMeetSchoolKey(googleMeetSelectedSchool);
+    googleMeetUseSharedSchoolLink = !!(selectedKey && googleMeetSharedLinkModeBySchoolKey[selectedKey]);
+    setGoogleMeetToggleText(googleMeetSelectedSchool || 'Select a School', animateLabel);
+    refreshGoogleMeetSharedSchoolPanel();
+
+    schoolList.innerHTML = '';
+    if (options.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'google-meet-school-empty';
+        empty.textContent = 'No schools available';
+        schoolList.appendChild(empty);
+        refreshGoogleMeetStudentPanel();
+        return;
+    }
+
+    options.forEach((school, index) => {
+        const optionBtn = document.createElement('button');
+        optionBtn.type = 'button';
+        optionBtn.className = `google-meet-school-option${school === googleMeetSelectedSchool ? ' is-selected' : ''}`;
+        optionBtn.setAttribute('role', 'option');
+        optionBtn.setAttribute('aria-selected', school === googleMeetSelectedSchool ? 'true' : 'false');
+        optionBtn.style.animationDelay = `${index * 40}ms`;
+        optionBtn.textContent = school;
+        optionBtn.addEventListener('click', () => {
+            googleMeetSelectedSchool = school;
+            const schoolKey = getGoogleMeetSchoolKey(school);
+            googleMeetUseSharedSchoolLink = !!(schoolKey && googleMeetSharedLinkModeBySchoolKey[schoolKey]);
+            setGoogleMeetToggleText(school, true);
+            window.setTimeout(() => {
+                closeGoogleMeetSchoolAccordion();
+                window.setTimeout(() => {
+                    refreshGoogleMeetSchoolSelect(googleMeetSelectedSchool, false);
+                }, 380);
+            }, 220);
+        });
+        schoolList.appendChild(optionBtn);
+    });
+    refreshGoogleMeetStudentPanel();
+}
+
+function openGoogleMeetSchoolAccordion() {
+    const toggle = document.getElementById('googleMeetSchoolToggle');
+    const listWrap = document.getElementById('googleMeetSchoolListWrap');
+    if (!toggle || !listWrap) return;
+    toggle.setAttribute('aria-expanded', 'true');
+    listWrap.classList.add('is-open');
+    listWrap.setAttribute('aria-hidden', 'false');
+}
+
+function closeGoogleMeetSchoolAccordion() {
+    const toggle = document.getElementById('googleMeetSchoolToggle');
+    const listWrap = document.getElementById('googleMeetSchoolListWrap');
+    if (!toggle || !listWrap) return;
+    toggle.setAttribute('aria-expanded', 'false');
+    listWrap.classList.remove('is-open');
+    listWrap.setAttribute('aria-hidden', 'true');
+}
+
+function openGoogleMeetModal() {
+    const modal = document.getElementById('googleMeetModal');
+    const schoolToggle = document.getElementById('googleMeetSchoolToggle');
+    if (!modal || !schoolToggle) {
+        return;
+    }
+    googleMeetSelectedSchool = '';
+    googleMeetUseSharedSchoolLink = false;
+    googleMeetSelectedStudentNames.clear();
+    closeGoogleMeetStudentLinkPopover();
+    refreshGoogleMeetSchoolSelect();
+    closeGoogleMeetSchoolAccordion();
+    openModalWithAnimation(modal);
+    schoolToggle.focus();
+}
+
+function closeGoogleMeetModal() {
+    const modal = document.getElementById('googleMeetModal');
+    if (!modal) {
+        return;
+    }
+    hideGoogleMeetContextMessage(true);
+    closeGoogleMeetStudentLinkPopover();
+    closeGoogleMeetSchoolAccordion();
+    closeGoogleMeetStudentAccordion();
+    closeModalWithAnimation(modal);
+}
+
+function setupGoogleMeetModal() {
+    const modal = document.getElementById('googleMeetModal');
+    const form = document.getElementById('googleMeetForm');
+    const backdrop = document.getElementById('googleMeetModalBackdrop');
+    const cancelBtn = document.getElementById('googleMeetCancel');
+    const schoolToggle = document.getElementById('googleMeetSchoolToggle');
+    const listWrap = document.getElementById('googleMeetSchoolListWrap');
+    const studentToggle = document.getElementById('googleMeetStudentToggle');
+    const studentListWrap = document.getElementById('googleMeetStudentListWrap');
+    const sharedSchoolCheckbox = document.getElementById('googleMeetSharedSchoolCheckbox');
+    const sharedSchoolInput = document.getElementById('googleMeetSharedSchoolInput');
+    const sharedSchoolSave = document.getElementById('googleMeetSharedSchoolSave');
+
+    if (!modal || !form || !schoolToggle || !listWrap) {
+        return;
+    }
+
+    backdrop?.addEventListener('click', closeGoogleMeetModal);
+    cancelBtn?.addEventListener('click', closeGoogleMeetModal);
+    schoolToggle.addEventListener('click', () => {
+        const isOpen = schoolToggle.getAttribute('aria-expanded') === 'true';
+        if (isOpen) {
+            closeGoogleMeetSchoolAccordion();
+        } else {
+            openGoogleMeetSchoolAccordion();
+        }
+    });
+    studentToggle?.addEventListener('click', () => {
+        const isOpen = studentToggle.getAttribute('aria-expanded') === 'true';
+        if (isOpen) {
+            closeGoogleMeetStudentAccordion();
+        } else {
+            openGoogleMeetStudentAccordion();
+        }
+    });
+    sharedSchoolCheckbox?.addEventListener('change', () => {
+        googleMeetUseSharedSchoolLink = !!sharedSchoolCheckbox.checked;
+        const schoolKey = getGoogleMeetSchoolKey(googleMeetSelectedSchool);
+        if (schoolKey) {
+            googleMeetSharedLinkModeBySchoolKey[schoolKey] = !!googleMeetUseSharedSchoolLink;
+            saveRoster();
+        }
+        refreshGoogleMeetSharedSchoolPanel();
+        refreshGoogleMeetStudentPanel();
+        if (googleMeetUseSharedSchoolLink) {
+            closeGoogleMeetStudentLinkPopover();
+            if (!sharedSchoolInput?.hidden) sharedSchoolInput?.focus();
+        }
+    });
+    sharedSchoolSave?.addEventListener('click', () => {
+        const school = String(googleMeetSelectedSchool || '').trim();
+        if (!school) return;
+        const raw = String(sharedSchoolInput?.value || '').trim();
+        if (raw && !isPlausibleGoogleMeetUrl(raw)) {
+            showAppMessage('Enter a valid Google Meet link (e.g. meet.google.com or meet.app).');
+            sharedSchoolInput?.focus();
+            return;
+        }
+        const names = getStudentNamesForSchool(school);
+        if (names.length === 0) {
+            showAppMessage('No students found for this school.');
+            return;
+        }
+        if (!raw) {
+            names.forEach((name) => {
+                delete studentGoogleMeetLinksByName[name];
+            });
+        } else {
+            const normalized = normalizeGoogleMeetUrl(raw);
+            names.forEach((name) => {
+                studentGoogleMeetLinksByName[name] = normalized;
+            });
+        }
+        saveRoster();
+        refreshGoogleMeetStudentPanel();
+        showGoogleMeetContextMessage(raw ? 'Meet link saved.' : 'Meet link cleared.', sharedSchoolSave);
+    });
+    sharedSchoolInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sharedSchoolSave?.click();
+        }
+    });
+    modal.addEventListener('click', (e) => {
+        const linkPopover = document.getElementById('googleMeetStudentLinkPopover');
+        if (linkPopover && !linkPopover.hidden && linkPopover.contains(e.target)) {
+            return;
+        }
+        const inSchool =
+            e.target === schoolToggle || schoolToggle.contains(e.target) || listWrap.contains(e.target);
+        if (!inSchool) {
+            closeGoogleMeetSchoolAccordion();
+        }
+        const studentPanel = document.getElementById('googleMeetStudentPanel');
+        if (studentToggle && studentListWrap && studentPanel && !studentPanel.hidden) {
+            const inStudent =
+                e.target === studentToggle ||
+                studentToggle.contains(e.target) ||
+                studentListWrap.contains(e.target);
+            if (!inStudent) {
+                closeGoogleMeetStudentAccordion();
+            }
+        }
+    });
+
+    const linkPopover = document.getElementById('googleMeetStudentLinkPopover');
+    const linkInput = document.getElementById('googleMeetStudentLinkPopoverInput');
+    const linkCancel = document.getElementById('googleMeetStudentLinkPopoverCancel');
+    const linkSave = document.getElementById('googleMeetStudentLinkPopoverSave');
+    linkPopover?.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    linkCancel?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeGoogleMeetStudentLinkPopover();
+    });
+    linkSave?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const student = String(googleMeetLinkPopoverStudent || '').trim();
+        if (!student) return;
+        const raw = String(linkInput?.value || '').trim();
+        if (raw && !isPlausibleGoogleMeetUrl(raw)) {
+            showAppMessage('Enter a valid Google Meet link (e.g. meet.google.com or meet.app).');
+            linkInput?.focus();
+            return;
+        }
+        if (!raw) {
+            delete studentGoogleMeetLinksByName[student];
+        } else {
+            studentGoogleMeetLinksByName[student] = normalizeGoogleMeetUrl(raw);
+        }
+        saveRoster();
+        if (raw) {
+            animateGoogleMeetSaveButtonOk();
+        }
+        closeGoogleMeetStudentLinkPopover();
+        refreshGoogleMeetStudentPanel();
+        if (raw) {
+            const anchor = findGoogleMeetStudentIndicator(student);
+            showGoogleMeetContextMessage('Meet link saved.', anchor);
+        }
+    });
+    linkInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            linkSave?.click();
+        }
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const schoolName = String(googleMeetSelectedSchool || '').trim();
+        if (!schoolName) {
+            showAppMessage("Please select the school's name.");
+            schoolToggle.focus();
+            return;
+        }
+        closeGoogleMeetModal();
+        window.open('https://meet.google.com/new', '_blank', 'noopener,noreferrer');
+    });
+}
+
 function closeAddStudentModal() {
     const modal = document.getElementById('addStudentModal');
     if (!modal) {
         return;
     }
     closeAddSchoolColorPopup();
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
+    closeModalWithAnimation(modal);
 }
 
 function setupAddStudentModal() {
@@ -4457,10 +5507,14 @@ function setupAddStudentModal() {
     const cancelBtn = document.getElementById('addStudentCancel');
     const backdrop = document.getElementById('addStudentModalBackdrop');
     const schoolInput = document.getElementById('addStudentSchool');
+    const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
 
     if (!modal || !form) {
         return;
     }
+
+    populateAddStudentPhoneCountrySelect();
+    updateAddStudentPhonePlaceholder();
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
@@ -4469,6 +5523,7 @@ function setupAddStudentModal() {
         backdrop.addEventListener('click', () => closeAddStudentModal());
     }
     schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
+    phoneCountrySelect?.addEventListener('change', updateAddStudentPhonePlaceholder);
 
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
@@ -5267,6 +6322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateSummary();
     }
     setupAddStudentModal();
+    setupGoogleMeetModal();
     setupEditStudentModal();
     setupSchoolSettingsModal();
     setupDeleteSchoolModal();
