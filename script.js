@@ -23,7 +23,7 @@ const SCHOOL_THEME_PALETTE_GROUPS = [
 ];
 const SCHOOL_THEME_COLOR_SET = new Set(SCHOOL_THEME_COLORS.map((c) => c.toLowerCase()));
 const PHONE_COUNTRY_OPTIONS = [
-    { iso: 'BR', flag: '🇧🇷', name: 'Brazil', dialCode: '+55', sample: '11 99999-9999' },
+    { iso: 'BR', flag: '🇧🇷', name: 'Brazil', dialCode: '+55', sample: '(__) _____-____' },
     { iso: 'US', flag: '🇺🇸', name: 'United States', dialCode: '+1', sample: '(555) 123-4567' },
     { iso: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', sample: '(555) 123-4567' },
     { iso: 'GB', flag: '🇬🇧', name: 'United Kingdom', dialCode: '+44', sample: '7400 123456' },
@@ -58,6 +58,8 @@ let passportFollowupLinks = {};
 let passportHeaderPageLink = '';
 let studentSchoolByName = {};
 let studentPhonesByName = {};
+/** Display / assignment: instructor name per student (optional). */
+let studentTeacherByName = {};
 let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
@@ -68,7 +70,6 @@ let schoolExternalLinks = {};
 let schoolThemeColors = {};
 let addStudentModalMode = 'student';
 let addStudentTargetSchool = '';
-let editStudentEscHandlerBound = false;
 let pendingDeleteSchoolTitle = '';
 let pendingSchoolSettingsTitle = '';
 let schoolSettingsColorTarget = '';
@@ -80,13 +81,9 @@ let calendarToolbarExternalLink = '';
 let speakonStudentWeeklyClass = {};
 let isTeacherLoggedIn = false;
 let loggedInTeacherName = '';
+/** When set, the signed-in user is this student (first name + phone login); may only view their own schedule. */
+let loggedInStudentFullName = '';
 let classReportCollapsedBySchool = {};
-let sidebarPaneCollapsedState = {
-    teachers: false,
-    schools: false,
-    classReport: false,
-    finances: false
-};
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
 let googleMeetSelectedSchool = '';
@@ -95,7 +92,6 @@ let googleMeetSelectedStudentNames = new Set();
 /** @type {Record<string, string>} student display name → Meet URL */
 let studentGoogleMeetLinksByName = {};
 let googleMeetLinkPopoverStudent = '';
-let googleMeetLinkPopoverEscapeHandler = null;
 let googleMeetToggleSwapTimer = null;
 let googleMeetContextMessageTimer = null;
 let googleMeetContextMessageHideTimer = null;
@@ -103,6 +99,12 @@ let googleMeetUseSharedSchoolLink = false;
 let googleMeetSharedLinkModeBySchoolKey = {};
 const MODAL_CLOSE_ANIMATION_MS = 220;
 const modalCloseTimers = new WeakMap();
+
+function clearSidebarExpandableSticky() {
+    document.querySelectorAll('.sidebar-add-btn--expandable-sticky').forEach((b) => {
+        b.classList.remove('sidebar-add-btn--expandable-sticky');
+    });
+}
 
 function openModalWithAnimation(modal) {
     if (!modal) return;
@@ -160,8 +162,217 @@ function closeModalWithAnimation(modal) {
     const nextTimer = window.setTimeout(() => {
         modal.classList.remove('is-open', 'is-closing');
         modalCloseTimers.delete(modal);
+        clearSidebarExpandableSticky();
     }, MODAL_CLOSE_ANIMATION_MS);
     modalCloseTimers.set(modal, nextTimer);
+}
+
+/**
+ * Escape dismisses the top overlay: nested popups first, then modals (highest z-index first).
+ * Registered once in capture phase so behavior is consistent and actions are cancelled (close only).
+ */
+function setupGlobalEscapeToDismissOverlays() {
+    if (document.body.dataset.globalEscapeDismissBound === '1') return;
+    document.body.dataset.globalEscapeDismissBound = '1';
+    document.addEventListener(
+        'keydown',
+        (e) => {
+            if (e.key !== 'Escape') return;
+
+            const schoolColorPopup = document.getElementById('schoolSettingsColorPopup');
+            if (schoolColorPopup && !schoolColorPopup.hidden && schoolColorPopup.classList.contains('is-open')) {
+                e.preventDefault();
+                closeSchoolSettingsColorPopup();
+                return;
+            }
+
+            const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
+            if (addSchoolColorPopup && !addSchoolColorPopup.hidden && addSchoolColorPopup.classList.contains('is-open')) {
+                e.preventDefault();
+                closeAddSchoolColorPopup();
+                return;
+            }
+
+            if (contextMenu && contextMenu.classList.contains('show')) {
+                e.preventDefault();
+                hideContextMenu();
+                return;
+            }
+
+            const calendarLinkPopover = document.getElementById('calendarLinkPopover');
+            if (calendarLinkPopover && !calendarLinkPopover.hidden) {
+                e.preventDefault();
+                closeCalendarLinkPopover();
+                return;
+            }
+
+            const meetStudentLinkPop = document.getElementById('googleMeetStudentLinkPopover');
+            if (meetStudentLinkPop && !meetStudentLinkPop.hidden) {
+                e.preventDefault();
+                closeGoogleMeetStudentLinkPopover();
+                return;
+            }
+
+            const calendarStudentPop = document.getElementById('calendarStudentNamesPopover');
+            if (calendarStudentPop && !calendarStudentPop.hidden) {
+                e.preventDefault();
+                closeCalendarStudentNamesPopover();
+                return;
+            }
+
+            const studentRepositionModal = document.getElementById('studentRepositionModal');
+            if (studentRepositionModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeStudentRepositionModal();
+                return;
+            }
+
+            const appMessageModal = document.getElementById('appMessageModal');
+            if (appMessageModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeAppMessageModal();
+                return;
+            }
+
+            const teacherLoginModal = document.getElementById('teacherLoginModal');
+            if (teacherLoginModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeTeacherLoginModal();
+                return;
+            }
+
+            const classTopicModal = document.getElementById('classTopicModal');
+            if (classTopicModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeClassTopicModal();
+                return;
+            }
+
+            const deleteSchoolModal = document.getElementById('deleteSchoolModal');
+            if (deleteSchoolModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeDeleteSchoolModal();
+                return;
+            }
+
+            const schoolSettingsModal = document.getElementById('schoolSettingsModal');
+            if (schoolSettingsModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeSchoolSettingsModal();
+                return;
+            }
+
+            const googleMeetModal = document.getElementById('googleMeetModal');
+            if (googleMeetModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeGoogleMeetModal();
+                return;
+            }
+
+            const editStudentModal = document.getElementById('editStudentModal');
+            if (editStudentModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeEditStudentModal();
+                return;
+            }
+
+            const addStudentModal = document.getElementById('addStudentModal');
+            if (addStudentModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeAddStudentModal();
+                return;
+            }
+        },
+        true
+    );
+}
+
+/**
+ * Pointer-down outside the active overlay dismisses it (same top-first priority as Escape).
+ * This makes closing popups/modals easier on desktop and touch devices.
+ */
+function setupGlobalPointerDownToDismissOverlays() {
+    if (document.body.dataset.globalPointerDismissBound === '1') return;
+    document.body.dataset.globalPointerDismissBound = '1';
+    document.addEventListener(
+        'pointerdown',
+        (e) => {
+            const target = e.target;
+            if (!target) return;
+
+            const schoolColorPopup = document.getElementById('schoolSettingsColorPopup');
+            if (schoolColorPopup && !schoolColorPopup.hidden && schoolColorPopup.classList.contains('is-open')) {
+                if (!schoolColorPopup.contains(target)) {
+                    closeSchoolSettingsColorPopup();
+                }
+                return;
+            }
+
+            const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
+            if (addSchoolColorPopup && !addSchoolColorPopup.hidden && addSchoolColorPopup.classList.contains('is-open')) {
+                if (!addSchoolColorPopup.contains(target)) {
+                    closeAddSchoolColorPopup();
+                }
+                return;
+            }
+
+            if (contextMenu && contextMenu.classList.contains('show')) {
+                if (!contextMenu.contains(target)) {
+                    hideContextMenu();
+                }
+                return;
+            }
+
+            const calendarLinkPopover = document.getElementById('calendarLinkPopover');
+            if (calendarLinkPopover && !calendarLinkPopover.hidden) {
+                const btn = document.getElementById('calendarToolbarCalendarBtn');
+                if (!calendarLinkPopover.contains(target) && !(btn && btn.contains(target))) {
+                    closeCalendarLinkPopover();
+                }
+                return;
+            }
+
+            const meetStudentLinkPop = document.getElementById('googleMeetStudentLinkPopover');
+            if (meetStudentLinkPop && !meetStudentLinkPop.hidden) {
+                if (!meetStudentLinkPop.contains(target)) {
+                    closeGoogleMeetStudentLinkPopover();
+                }
+                return;
+            }
+
+            const calendarStudentPop = document.getElementById('calendarStudentNamesPopover');
+            if (calendarStudentPop && !calendarStudentPop.hidden) {
+                const btn = document.getElementById('calendarToolbarStudentsBtn');
+                if (!calendarStudentPop.contains(target) && !(btn && btn.contains(target))) {
+                    closeCalendarStudentNamesPopover();
+                }
+                return;
+            }
+
+            const modalDismissOrder = [
+                { id: 'studentRepositionModal', close: closeStudentRepositionModal },
+                { id: 'appMessageModal', close: closeAppMessageModal },
+                { id: 'teacherLoginModal', close: closeTeacherLoginModal },
+                { id: 'classTopicModal', close: closeClassTopicModal },
+                { id: 'deleteSchoolModal', close: closeDeleteSchoolModal },
+                { id: 'schoolSettingsModal', close: closeSchoolSettingsModal },
+                { id: 'googleMeetModal', close: closeGoogleMeetModal },
+                { id: 'editStudentModal', close: closeEditStudentModal },
+                { id: 'addStudentModal', close: closeAddStudentModal }
+            ];
+
+            for (const item of modalDismissOrder) {
+                const modal = document.getElementById(item.id);
+                if (!modal || !modal.classList.contains('is-open')) continue;
+                const dialog = modal.querySelector('[role="dialog"]');
+                if (dialog && !dialog.contains(target)) {
+                    item.close();
+                }
+                return;
+            }
+        },
+        true
+    );
 }
 
 function loadRosterFromStorage() {
@@ -525,12 +736,117 @@ function clearSavedLoginCredentials() {
     }
 }
 
+function digitsOnly(s) {
+    return String(s || '').replace(/\D/g, '');
+}
+
+function getDialCodeDigitsForCountryIso(iso) {
+    const c = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === String(iso || '').trim().toUpperCase());
+    return c ? digitsOnly(c.dialCode) : '';
+}
+
+/**
+ * Digit strings that count as the same phone for student login (national and international forms).
+ */
+function getStudentLoginPhoneDigitVariations(studentName) {
+    const info = getStudentPhoneInfo(studentName);
+    let d = digitsOnly(info.number);
+    const out = new Set();
+    if (!d) return out;
+    if (d.startsWith('00')) {
+        d = d.slice(2);
+    }
+    out.add(d);
+    const dial = getDialCodeDigitsForCountryIso(info.countryIso);
+    if (dial && d.startsWith(dial)) {
+        let rest = d.slice(dial.length);
+        while (rest.startsWith('0')) rest = rest.slice(1);
+        if (rest) out.add(rest);
+    } else if (dial) {
+        const body = d.replace(/^0+/, '') || d;
+        out.add(`${dial}${body}`);
+    }
+    return out;
+}
+
+function normalizeStudentLoginPassDigits(passwordRaw) {
+    let d = digitsOnly(passwordRaw);
+    if (d.startsWith('00')) d = d.slice(2);
+    return d;
+}
+
+function findStudentsByLoginFirstName(inputRaw) {
+    const want = String(inputRaw || '').trim().toLowerCase();
+    if (!want) return [];
+    const out = [];
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const first = String(splitName(name).first || '').trim().toLowerCase();
+        if (first === want) out.push(name);
+    });
+    return out;
+}
+
+/**
+ * Student login username: plain first name, or a single token `@FirstName` (no domain).
+ * @returns {string|null} first name to match against the roster; null if the value looks like an email address.
+ */
+function getStudentLoginFirstNameFromUsernameField(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^@[^@\s]+$/i.test(s)) {
+        const first = s.slice(1).trim();
+        return first || '';
+    }
+    if (!s.includes('@')) {
+        return s;
+    }
+    return null;
+}
+
+function getTutorRosterNameForStudent(studentFullName) {
+    const tutor = String(studentTeacherByName[studentFullName] || '').trim();
+    if (!tutor) return '';
+    const found = teachersList.find((t) => String(t || '').trim().toLowerCase() === tutor.toLowerCase());
+    // If the assigned label does not exactly match a roster teacher, still allow student login
+    // (session uses the student as the active profile; schedule keys are by student name).
+    return found ? String(found) : tutor;
+}
+
+/**
+ * Student login: first name or `@FirstName` (case-insensitive first name) + phone digits (national or with country code).
+ * @returns {{ ok: true, studentName: string } | { ok: false, error: string }}
+ */
+function verifyStudentLogin(firstNameRaw, passwordRaw) {
+    const passDigits = normalizeStudentLoginPassDigits(passwordRaw);
+    if (!passDigits) {
+        return { ok: false, error: 'Password is required to log in.' };
+    }
+    if (passDigits.length < 10 || passDigits.length > 15) {
+        return { ok: false, error: 'Use 10–15 digits (national number or full number with country code, no spaces needed).' };
+    }
+    const candidates = findStudentsByLoginFirstName(firstNameRaw);
+    if (candidates.length === 0) {
+        return { ok: false, error: '' };
+    }
+    const matches = candidates.filter((n) => getStudentLoginPhoneDigitVariations(n).has(passDigits));
+    if (matches.length === 1) {
+        return { ok: true, studentName: matches[0] };
+    }
+    if (matches.length > 1) {
+        return {
+            ok: false,
+            error: 'Several students match. Ask your teacher to confirm your profile.'
+        };
+    }
+    return { ok: false, error: 'Incorrect password.' };
+}
+
 /**
  * If the user previously chose to save credentials, validate them against the roster
- * and restore an authenticated teacher session (same rules as the login form).
- * @returns {string|null} teacher name when session was restored, otherwise null
+ * and restore a teacher or student session (same rules as the login form).
+ * @returns {string|null} profile key to select (teacher name or student full name), otherwise null
  */
-function tryRestoreTeacherSessionFromSavedCredentials() {
+function tryRestoreSessionFromSavedCredentials() {
     try {
         if (sessionStorage.getItem(LOGIN_SESSION_SUPPRESS_KEY) === '1') return null;
     } catch {
@@ -538,34 +854,59 @@ function tryRestoreTeacherSessionFromSavedCredentials() {
     }
     const saved = loadSavedLoginCredentials();
     if (!saved) return null;
-    const email = String(saved.email || '').trim().toLowerCase();
+    const rawEmail = String(saved.email || '').trim();
+    const emailLc = rawEmail.toLowerCase();
     const password = String(saved.password || '').trim();
-    if (!email || !password || password.length < 8) return null;
+    if (!rawEmail || !password) return null;
 
     const teacherNameByEmail = teachersList.find((name) => {
         const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
-        return teacherEmail && teacherEmail === email;
+        return teacherEmail && teacherEmail === emailLc;
     });
-    if (!teacherNameByEmail) return null;
+    if (teacherNameByEmail) {
+        if (password.length < 8) return null;
+        const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
+        if (!expectedPassword || password !== expectedPassword) return null;
+        loggedInStudentFullName = '';
+        isTeacherLoggedIn = true;
+        loggedInTeacherName = teacherNameByEmail;
+        return teacherNameByEmail;
+    }
 
-    const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
-    if (!expectedPassword || password !== expectedPassword) return null;
+    const studentFirst = getStudentLoginFirstNameFromUsernameField(rawEmail);
+    if (studentFirst !== null && studentFirst) {
+        const v = verifyStudentLogin(studentFirst, password);
+        if (!v.ok) return null;
+        const tutor = getTutorRosterNameForStudent(v.studentName);
+        if (!tutor) return null;
+        loggedInStudentFullName = v.studentName;
+        loggedInTeacherName = tutor;
+        isTeacherLoggedIn = true;
+        return v.studentName;
+    }
 
-    isTeacherLoggedIn = true;
-    loggedInTeacherName = teacherNameByEmail;
-    return teacherNameByEmail;
+    return null;
 }
 
 function isTeacherSelectionAllowed(name) {
     const requested = String(name || '').trim();
     if (!requested) return false;
     if (!isTeacherLoggedIn) return false;
+    if (loggedInStudentFullName) {
+        return requested.toLowerCase() === String(loggedInStudentFullName || '').trim().toLowerCase();
+    }
     if (!loggedInTeacherName) return true;
     return requested.toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase();
 }
 
+function isLoggedInStudentCalendarReadOnly() {
+    return !!String(loggedInStudentFullName || '').trim();
+}
+
 function getActiveTeacherProfileName() {
     if (!isTeacherLoggedIn) return '';
+    const asStudent = String(loggedInStudentFullName || '').trim();
+    if (asStudent) return asStudent;
     const logged = String(loggedInTeacherName || '').trim();
     if (logged) return logged;
     const current = String(currentTeacher || '').trim();
@@ -632,6 +973,7 @@ function initRoster() {
         passportHeaderPageLink = '';
         studentSchoolByName = {};
         studentPhonesByName = {};
+        studentTeacherByName = {};
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
         customSchoolsList = [];
@@ -682,6 +1024,15 @@ function initRoster() {
         const number = String(entry.number || '').trim();
         if (!number) return;
         studentPhonesByName[name] = { countryIso: normalizedIso, number };
+    });
+    const teachersRaw =
+        saved.studentTeachers && typeof saved.studentTeachers === 'object' && !Array.isArray(saved.studentTeachers)
+            ? { ...saved.studentTeachers }
+            : {};
+    studentTeacherByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const t = String(teachersRaw[name] || '').trim();
+        if (t) studentTeacherByName[name] = t;
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -784,6 +1135,12 @@ function normalizeCustomSchoolsList() {
 
 function getAvailableSchoolNames() {
     const schools = new Set();
+    const asStudent = String(loggedInStudentFullName || '').trim();
+    if (asStudent) {
+        const school = String(getStudentSchoolName(asStudent) || '').trim();
+        if (school) schools.add(school);
+        return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
     Object.keys(studentSchoolByName).forEach((studentName) => {
         const school = String(studentSchoolByName[studentName] || '').trim();
         if (school) schools.add(school);
@@ -816,6 +1173,83 @@ function refreshAddStudentSchoolSelect(selectedSchool = '') {
     const hasSelected = options.includes(selected);
     schoolSelect.value = hasSelected ? selected : '';
     placeholder.selected = !hasSelected;
+}
+
+function refreshAddStudentTeacherSelect(selectedTeacher = '') {
+    const sel = document.getElementById('addStudentTeacher');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    const want = String(selectedTeacher || sel.value || '').trim();
+    const prevLower = want.toLowerCase();
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '—';
+    sel.appendChild(ph);
+    teachersList.forEach((raw) => {
+        const n = String(raw || '').trim();
+        if (!n) return;
+        const o = document.createElement('option');
+        o.value = n;
+        o.textContent = n;
+        sel.appendChild(o);
+    });
+    const stored = String(want || '').trim();
+    if (stored && !teachersList.some((t) => String(t || '').trim().toLowerCase() === stored.toLowerCase())) {
+        const o = document.createElement('option');
+        o.value = stored;
+        o.textContent = stored;
+        sel.appendChild(o);
+    }
+    const match = teachersList.find((t) => String(t || '').trim().toLowerCase() === prevLower)
+        || (stored && stored.toLowerCase() === prevLower ? stored : null);
+    sel.value = match ? String(match) : '';
+}
+
+function refreshEditStudentTeacherSelect(selectedTeacher = '') {
+    const sel = document.getElementById('editStudentTeacher');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    const want = String(selectedTeacher || '').trim();
+    const prevLower = want.toLowerCase();
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '—';
+    sel.appendChild(ph);
+    teachersList.forEach((raw) => {
+        const n = String(raw || '').trim();
+        if (!n) return;
+        const o = document.createElement('option');
+        o.value = n;
+        o.textContent = n;
+        sel.appendChild(o);
+    });
+    const storedWant = String(want || '').trim();
+    if (storedWant && !teachersList.some((t) => String(t || '').trim().toLowerCase() === storedWant.toLowerCase())) {
+        const o = document.createElement('option');
+        o.value = storedWant;
+        o.textContent = storedWant;
+        sel.appendChild(o);
+    }
+    const match = teachersList.find((t) => String(t || '').trim().toLowerCase() === prevLower)
+        || (storedWant && storedWant.toLowerCase() === prevLower ? storedWant : null);
+    sel.value = match ? String(match) : '';
+}
+
+function syncAddStudentModalThemeFromSchoolTitle(schoolTitleRaw) {
+    const schoolTitle = String(schoolTitleRaw || '').trim();
+    const primaryInput = document.getElementById('addSchoolPrimaryColor');
+    const secondaryInput = document.getElementById('addSchoolSecondaryColor');
+    if (!primaryInput || !secondaryInput) return;
+    if (!schoolTitle) {
+        primaryInput.value = '#5c6bc0';
+        secondaryInput.value = '#1e88e5';
+        renderAddSchoolThemeSquares();
+        return;
+    }
+    const th = getSchoolTheme(schoolTitle);
+    primaryInput.value = th.primary || '#5c6bc0';
+    secondaryInput.value = th.secondary || '#1e88e5';
+    renderAddSchoolThemeSquares();
 }
 
 function loadStudentClassReportRows() {
@@ -1011,6 +1445,20 @@ function mergeSpeakonWeeklyClassIntoScheduleCopy(sched, studentName) {
     return out;
 }
 
+/**
+ * Tutor "available" (green) belongs on the teacher profile only. Student grids may have picked it up
+ * from the logged-in merge; strip it from stored / teacher-facing student views.
+ */
+function stripTeacherAvailabilityFromStudentScheduleCopy(sched) {
+    const out = { ...sched };
+    Object.keys(out).forEach((k) => {
+        if (String(out[k] || '').trim().toLowerCase() === 'available') {
+            delete out[k];
+        }
+    });
+    return out;
+}
+
 function stripSpeakonColorsFromScheduleCopy(sched) {
     const out = { ...sched };
     Object.keys(out).forEach((k) => {
@@ -1191,6 +1639,19 @@ function syncSpeakOnWeeklyToAllTeacherSchedules() {
             refreshCalendarDisplay();
             updateSummary();
         }
+    } else if (
+        currentTeacher &&
+        loggedInStudentFullName &&
+        String(currentTeacher).trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
+    ) {
+        const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
+        if (tk) {
+            slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tk);
+            if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+                refreshCalendarDisplay();
+                updateSummary();
+            }
+        }
     }
 }
 
@@ -1270,13 +1731,14 @@ function getStudentNamesForTeacherSlot(day, hour, state) {
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
     if (!slotEl) return;
-    if (!calendarStudentNamesInCellsVisible) {
+    const assignedUnavailableName = getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state);
+    if (!calendarStudentNamesInCellsVisible && !assignedUnavailableName) {
         slotEl.textContent = '';
         slotEl.title = '';
         slotEl.classList.remove('time-slot--with-student-names');
         return;
     }
-    const names = getStudentNamesForTeacherSlot(day, hour, state);
+    const names = assignedUnavailableName ? [assignedUnavailableName] : getStudentNamesForTeacherSlot(day, hour, state);
     const label = names.join(', ');
     slotEl.textContent = '';
     if (label) {
@@ -1287,6 +1749,15 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
     }
     slotEl.title = label;
     slotEl.classList.toggle('time-slot--with-student-names', names.length > 0);
+}
+
+function getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return '';
+    if (String(state || '').trim().toLowerCase() !== 'unavailable') return '';
+    const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
+    if (!byTeacher || typeof byTeacher !== 'object') return '';
+    const key = `${day}-${hour}`;
+    return String(byTeacher[key] || '').trim();
 }
 
 function setCalendarStudentNamesInCellsVisible(visible) {
@@ -1301,6 +1772,60 @@ function setCalendarStudentNamesInCellsVisible(visible) {
 
 function isCustomContextMenuEnabledForCurrentSelection() {
     return !!currentTeacher && !isActiveTeacherName(currentTeacher);
+}
+
+function isTeacherGreenCellContextMenuEnabled(day, hour) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
+    if (isLoggedInStudentCalendarReadOnly()) return false;
+    const state = String(getSlotState(day, hour) || '').trim().toLowerCase();
+    return state === 'available';
+}
+
+function handleTeacherGreenContextMenuAction(action) {
+    if (!currentSlot || !action) return;
+    const { day, hour } = currentSlot;
+    if (action === 'block') {
+        setSlotState(day, hour, null);
+        return;
+    }
+    if (action === 'reposition') {
+        openStudentRepositionModal(day, hour);
+        return;
+    }
+    if (action === 'book') {
+        const selectedSchool = String(contextMenu?.dataset.selectedSchool || '').trim();
+        if (!selectedSchool) {
+            showAppMessage('Please choose a school first.');
+            return;
+        }
+        showAppMessage(`Booking flow for ${selectedSchool} on ${day} at ${formatHour(hour)} will be added next.`);
+        return;
+    }
+    if (action === 'book-school') {
+        const selectedSchool = String(contextMenu?.dataset.selectedSchool || '').trim();
+        if (!selectedSchool) {
+            showAppMessage('Please choose a school first.');
+            return;
+        }
+        showAppMessage(`Booking flow for ${selectedSchool} on ${day} at ${formatHour(hour)} will be added next.`);
+        return;
+    }
+    if (action === 'set-class-reposition') {
+        showAppMessage(`Set Class/Reposition flow for ${day} at ${formatHour(hour)} will be added next.`);
+        return;
+    }
+    if (action === 'reserve') {
+        showAppMessage(`Reserve flow for ${day} at ${formatHour(hour)} will be added next.`);
+        return;
+    }
+    if (action === 'note') {
+        showAppMessage(`Slot notes for ${day} at ${formatHour(hour)} will be added next.`);
+        return;
+    }
+    if (action === 'clear') {
+        // Intentionally no-op for now.
+        return;
+    }
 }
 
 function applyStateVisualToSlot(slot, state) {
@@ -1507,12 +2032,6 @@ function setupCalendarStudentPopoverDismiss() {
         const btn = document.getElementById('calendarToolbarCalendarBtn');
         if (btn && btn.contains(t)) return;
         closeCalendarLinkPopover();
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeCalendarStudentNamesPopover();
-            closeCalendarLinkPopover();
-        }
     });
     window.addEventListener('resize', () => {
         const btn = document.getElementById('calendarToolbarStudentsBtn');
@@ -2203,11 +2722,6 @@ function setupClassTopicModal() {
     backdrop?.addEventListener('click', closeClassTopicModal);
     cancel?.addEventListener('click', closeClassTopicModal);
     save?.addEventListener('click', saveClassTopicFromModal);
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-            closeClassTopicModal();
-        }
-    });
     window.addEventListener('resize', () => {
         if (modal.classList.contains('is-open')) {
             syncClassTopicExerciseOverlayHeight();
@@ -2270,6 +2784,7 @@ function saveRoster() {
             passportHeaderPageLink,
             speakonWeeklyClass: speakonStudentWeeklyClass,
             studentPhones: studentPhonesByName,
+            studentTeachers: studentTeacherByName,
             studentGoogleMeetLinks: studentGoogleMeetLinksByName,
             googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey
         }));
@@ -2293,6 +2808,8 @@ const STATE_CYCLE = [null, 'available'];
 // Context menu
 let contextMenu = null;
 let currentSlot = null;
+let currentContextMenuMode = 'school';
+const teacherUnavailableStudentNamesByTeacher = {};
 
 // Cloudflare API endpoint
 const API_ENDPOINT = '/api/schedules';
@@ -2619,7 +3136,7 @@ function renderSidebarHeaderProfile() {
     const displayName = isTeacherLoggedIn
         ? String(activeTeacherName || 'Teacher').trim()
         : 'Guest profile';
-    const displayRole = isTeacherLoggedIn ? 'Teacher' : 'Guest';
+    const displayRole = !isTeacherLoggedIn ? 'Guest' : (loggedInStudentFullName ? 'Student' : 'Teacher');
 
     nameEl.textContent = displayName;
     roleEl.textContent = displayRole;
@@ -2668,39 +3185,12 @@ function setupSidebarProfileAvatarUpload() {
     });
 }
 
-function setupSidebarPaneHeaderToggle(paneEl, paneInnerEl, headerLabelEl, paneKey) {
-    if (!paneEl || !paneInnerEl || !headerLabelEl || !paneKey) return;
-    const applyPaneCollapsedVisual = (collapsed) => {
-        paneEl.classList.toggle('is-collapsed', collapsed);
-        paneInnerEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
-        headerLabelEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        sidebarPaneCollapsedState[paneKey] = collapsed;
-    };
-    const isCollapsed = !!sidebarPaneCollapsedState[paneKey];
-    applyPaneCollapsedVisual(isCollapsed);
-    headerLabelEl.setAttribute('role', 'button');
-    headerLabelEl.tabIndex = 0;
-    const toggle = () => {
-        const next = !paneEl.classList.contains('is-collapsed');
-        applyPaneCollapsedVisual(next);
-    };
-    headerLabelEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggle();
-    });
-    headerLabelEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggle();
-        }
-    });
-}
-
 function renderSidebar() {
     const teacherList = document.getElementById('teacherList');
     if (!teacherList) return;
     const sidebarRoot = teacherList.closest('.sidebar');
     sidebarRoot?.classList.toggle('is-logged-in', !!isTeacherLoggedIn);
+    sidebarRoot?.classList.toggle('is-student-session', !!loggedInStudentFullName);
     renderSidebarHeaderProfile();
 
     const collapsedByTitle = {};
@@ -2737,6 +3227,7 @@ function renderSidebar() {
         loginTeacherBtn.addEventListener('click', () => {
             isTeacherLoggedIn = false;
             loggedInTeacherName = '';
+            loggedInStudentFullName = '';
             currentTeacher = null;
             try {
                 sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
@@ -2751,7 +3242,10 @@ function renderSidebar() {
         loginTeacherBtn.setAttribute('aria-label', 'Teacher login');
         loginTeacherBtn.innerHTML = `<span class="sidebar-add-btn-label">Log In</span>${SIDEBAR_LOGIN_TEACHER_SVG}`;
         loginTeacherBtn.addEventListener('click', () => {
-            if (teachersList.length === 0) {
+            const hasTeachers = teachersList.length > 0;
+            const hasStudents =
+                privateStudentsList.length + speakonStudentsList.length + passportStudentsList.length > 0;
+            if (!hasTeachers && !hasStudents) {
                 showAppMessage('No teacher profile found yet. Click the academic icon to create your profile.');
                 return;
             }
@@ -2766,7 +3260,6 @@ function renderSidebar() {
     teachersHeader.appendChild(teachersHeaderActions);
     const teachersInner = document.createElement('div');
     teachersInner.className = 'sidebar-pane-teachers-inner';
-    setupSidebarPaneHeaderToggle(paneTeachers, teachersInner, teachersHeaderLabel, 'teachers');
     paneTeachers.appendChild(teachersHeader);
     paneTeachers.appendChild(teachersInner);
 
@@ -2799,6 +3292,12 @@ function renderSidebar() {
     addStudentBtn.setAttribute('aria-label', 'Add school');
     addStudentBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_ADD_SCHOOL_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${SIDEBAR_ADD_SCHOOL_SVG}<span class="sidebar-add-btn-state-label">Add School</span></span>`;
     addStudentBtn.addEventListener('click', () => openAddStudentModal('student'));
+    if (loggedInStudentFullName) {
+        addTeacherBtn.hidden = true;
+        googleMeetBtn.hidden = true;
+        addStudentEntryBtn.hidden = true;
+        addStudentBtn.hidden = true;
+    }
     const studentsHeaderActions = document.createElement('div');
     studentsHeaderActions.className = 'sidebar-section-actions';
     studentsHeaderActions.appendChild(googleMeetBtn);
@@ -2809,7 +3308,6 @@ function renderSidebar() {
 
     const studentsInner = document.createElement('div');
     studentsInner.className = 'sidebar-pane-students-inner';
-    setupSidebarPaneHeaderToggle(paneStudents, studentsInner, studentsHeaderLabel, 'schools');
 
     paneStudents.appendChild(studentsHeader);
     paneStudents.appendChild(studentsInner);
@@ -2835,9 +3333,22 @@ function renderSidebar() {
     const classReportInner = document.createElement('div');
     classReportInner.className = 'sidebar-pane-class-report-inner';
     classReportInner.setAttribute('aria-label', 'Class report content');
-    setupSidebarPaneHeaderToggle(paneClassReport, classReportInner, classReportHeaderTitle, 'classReport');
     paneClassReport.appendChild(classReportHeader);
     paneClassReport.appendChild(classReportInner);
+
+    const paneRepositionClasses = document.createElement('div');
+    paneRepositionClasses.className = 'sidebar-pane sidebar-pane-reposition-classes';
+    const repositionHeader = document.createElement('div');
+    repositionHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const repositionHeaderTitle = document.createElement('span');
+    repositionHeaderTitle.className = 'sidebar-section-header-label';
+    repositionHeaderTitle.textContent = 'Reposition Classes';
+    repositionHeader.appendChild(repositionHeaderTitle);
+    const repositionInner = document.createElement('div');
+    repositionInner.className = 'sidebar-pane-reposition-classes-inner';
+    repositionInner.setAttribute('aria-label', 'Reposition classes');
+    paneRepositionClasses.appendChild(repositionHeader);
+    paneRepositionClasses.appendChild(repositionInner);
 
     const paneFinances = document.createElement('div');
     paneFinances.className = 'sidebar-pane sidebar-pane-finances';
@@ -2860,7 +3371,6 @@ function renderSidebar() {
     const financesInner = document.createElement('div');
     financesInner.className = 'sidebar-pane-finances-inner';
     financesInner.setAttribute('aria-label', 'Finances');
-    setupSidebarPaneHeaderToggle(paneFinances, financesInner, financesHeaderTitle, 'finances');
     const financesPlaceholder = document.createElement('p');
     financesPlaceholder.className = 'finances-placeholder';
     financesPlaceholder.textContent = 'No finance items yet.';
@@ -2871,6 +3381,7 @@ function renderSidebar() {
     teacherList.appendChild(paneTeachers);
     teacherList.appendChild(paneStudents);
     teacherList.appendChild(paneClassReport);
+    teacherList.appendChild(paneRepositionClasses);
     teacherList.appendChild(paneFinances);
     const googleMeetSchoolToggle = document.getElementById('googleMeetSchoolToggle');
     if (googleMeetSchoolToggle) {
@@ -2892,12 +3403,27 @@ function renderSidebar() {
         classReportEmpty.className = 'class-report-empty';
         classReportEmpty.textContent = "No student's info to show.";
         classReportInner.appendChild(classReportEmpty);
+
+        const repositionEmpty = document.createElement('p');
+        repositionEmpty.className = 'class-report-empty';
+        repositionEmpty.textContent = 'Log in to manage class positions.';
+        repositionInner.appendChild(repositionEmpty);
         return;
     }
 
+    const repositionPlaceholder = document.createElement('p');
+    repositionPlaceholder.className = 'reposition-classes-placeholder';
+    repositionPlaceholder.textContent = 'No tools here yet.';
+    repositionInner.appendChild(repositionPlaceholder);
+
     const studentGroups = new Map();
     const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
-    allStudents.forEach((name) => {
+    const rosterScopeStudents = loggedInStudentFullName
+        ? allStudents.filter(
+            (name) => name.trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
+        )
+        : allStudents;
+    rosterScopeStudents.forEach((name) => {
         const school = getStudentSchoolName(name) || 'HomeTeachers';
         const key = school.trim().toLowerCase();
         if (!studentGroups.has(key)) {
@@ -2932,13 +3458,27 @@ function renderSidebar() {
             parent: studentsInner,
             usesSchoolLinkHeader: schoolSectionUsesPassportStyleHeader(group.title)
         }))
+        .filter((g) => !loggedInStudentFullName || g.names.length > 0)
         .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
 
-    const visibleTeachers = isTeacherLoggedIn && loggedInTeacherName
-        ? teachersList.filter((name) => String(name || '').trim().toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase())
-        : teachersList;
+    const visibleTeachers = loggedInStudentFullName
+        ? []
+        : (isTeacherLoggedIn && loggedInTeacherName
+            ? teachersList.filter((name) => String(name || '').trim().toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase())
+            : teachersList);
     const categories = [
-        { title: 'Teachers', names: visibleTeachers, itemClass: 'category-teachers', deletable: false, parent: teachersInner, collapsible: false },
+        ...(loggedInStudentFullName
+            ? []
+            : [
+                  {
+                      title: 'Teachers',
+                      names: visibleTeachers,
+                      itemClass: 'category-teachers',
+                      deletable: false,
+                      parent: teachersInner,
+                      collapsible: false
+                  }
+              ]),
         ...studentCategories
     ];
 
@@ -2997,14 +3537,16 @@ function renderSidebar() {
             });
 
             actions.appendChild(offsiteBtn);
-            actions.appendChild(settingsBtn);
+            if (!loggedInStudentFullName) {
+                actions.appendChild(settingsBtn);
+            }
             titleRow.appendChild(label);
             titleRow.appendChild(actions);
             section.appendChild(titleRow);
         } else if (isCollapsible) {
             const sectionTitle = document.createElement('div');
             sectionTitle.className = 'sidebar-section-title';
-            if (category.deletable) {
+            if (category.deletable && !loggedInStudentFullName) {
                 sectionTitle.classList.add('sidebar-section-title--with-settings');
                 const label = document.createElement('span');
                 label.textContent = category.title;
@@ -3022,6 +3564,13 @@ function renderSidebar() {
                 actions.appendChild(settingsBtn);
                 sectionTitle.appendChild(label);
                 sectionTitle.appendChild(actions);
+            } else if (loggedInStudentFullName && category.schoolTheme) {
+                const label = document.createElement('button');
+                label.type = 'button';
+                label.className = 'sidebar-section-title-text-trigger';
+                label.textContent = category.title;
+                label.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                sectionTitle.appendChild(label);
             } else {
                 sectionTitle.textContent = category.title;
             }
@@ -3052,7 +3601,11 @@ function renderSidebar() {
             nameEl.textContent = name;
             teacherItem.appendChild(nameEl);
 
-            if (category.deletable) {
+            const allowEditRow =
+                category.deletable &&
+                (!loggedInStudentFullName ||
+                    name.trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase());
+            if (allowEditRow) {
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
                 editBtn.className = 'teacher-item-edit';
@@ -3079,11 +3632,20 @@ function renderSidebar() {
 
         if (isCollapsible) {
             setSidebarSectionCollapsed(section, collapsed, false);
-            const sectionTitle = section.querySelector('.sidebar-section-title');
-            sectionTitle.addEventListener('click', () => {
+            const sectionTitleEl = section.querySelector('.sidebar-section-title');
+            const studentTextToggle = section.querySelector('.sidebar-section-title-text-trigger');
+            const toggleCollapsed = () => {
                 const willCollapse = !section.classList.contains('collapsed');
                 setSidebarSectionCollapsed(section, willCollapse, true);
-            });
+                if (studentTextToggle) {
+                    studentTextToggle.setAttribute('aria-expanded', willCollapse ? 'false' : 'true');
+                }
+            };
+            if (studentTextToggle) {
+                studentTextToggle.addEventListener('click', toggleCollapsed);
+            } else if (sectionTitleEl) {
+                sectionTitleEl.addEventListener('click', toggleCollapsed);
+            }
         }
     });
 
@@ -3262,6 +3824,12 @@ function populateClassReportStudentLists(container) {
 
     const grouped = new Map();
     [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        if (
+            loggedInStudentFullName &&
+            name.trim().toLowerCase() !== String(loggedInStudentFullName).trim().toLowerCase()
+        ) {
+            return;
+        }
         const school = getStudentSchoolName(name) || 'HomeTeachers';
         const key = school.trim().toLowerCase();
         if (!grouped.has(key)) {
@@ -3278,6 +3846,7 @@ function populateClassReportStudentLists(container) {
         }
     });
     [...grouped.values()]
+        .filter((g) => !loggedInStudentFullName || g.names.length > 0)
         .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
         .forEach((group) => {
             wrap.appendChild(makeGroup(group.title, group.names, group.kind, group.title.trim().toLowerCase()));
@@ -3368,6 +3937,7 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
         delete passportFollowupLinks[name];
         delete studentSchoolByName[name];
         delete studentPhonesByName[name];
+        delete studentTeacherByName[name];
         delete studentGoogleMeetLinksByName[name];
     });
 
@@ -3387,14 +3957,18 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
     saveAllSchedules();
     renderSidebar();
 
-    const fallbackTeacher = currentTeacher
-        || teachersList[0]
-        || privateStudentsList[0]
-        || speakonStudentsList[0]
-        || passportStudentsList[0]
-        || '';
-    if (fallbackTeacher) {
-        selectTeacher(fallbackTeacher);
+    if (loggedInStudentFullName) {
+        resyncSelectionAfterSidebarRender();
+    } else {
+        const fallbackTeacher = currentTeacher
+            || teachersList[0]
+            || privateStudentsList[0]
+            || speakonStudentsList[0]
+            || passportStudentsList[0]
+            || '';
+        if (fallbackTeacher) {
+            selectTeacher(fallbackTeacher);
+        }
     }
 }
 
@@ -3437,11 +4011,6 @@ function setupDeleteSchoolModal() {
         closeDeleteSchoolModal();
         if (title) {
             deleteSchoolFromSidebarConfirmed(title);
-        }
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-            closeDeleteSchoolModal();
         }
     });
 }
@@ -3590,8 +4159,8 @@ function saveSchoolSettingsFromModal() {
     saveRoster();
     refreshContextMenuTheme();
     renderSidebar();
-    if (currentTeacher) {
-        selectTeacher(currentTeacher);
+    if (currentTeacher || loggedInStudentFullName) {
+        resyncSelectionAfterSidebarRender();
     } else if (teachersList[0]) {
         selectTeacher(teachersList[0]);
     }
@@ -3649,11 +4218,6 @@ function setupSchoolSettingsModal() {
             window.setTimeout(() => externalUrl?.focus(), 220);
         }
     });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-            closeSchoolSettingsModal();
-        }
-    });
 }
 
 function openAppMessageModal(title, message) {
@@ -3685,11 +4249,34 @@ function setupAppMessageModal() {
     if (!modal || !okBtn) return;
     okBtn.addEventListener('click', () => closeAppMessageModal());
     backdrop?.addEventListener('click', () => closeAppMessageModal());
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-            closeAppMessageModal();
-        }
-    });
+}
+
+function openStudentRepositionModal(day, hour) {
+    const modal = document.getElementById('studentRepositionModal');
+    const dayInput = document.getElementById('studentRepositionModalDay');
+    const timeInput = document.getElementById('studentRepositionModalTime');
+    if (!modal || !dayInput || !timeInput) return;
+    dayInput.value = String(day || '').trim();
+    timeInput.value = formatHour(hour);
+    modal.dataset.repositionDay = String(day || '').trim();
+    modal.dataset.repositionHour = String(hour);
+    openModalWithAnimation(modal);
+    window.setTimeout(() => dayInput.focus(), 0);
+}
+
+function closeStudentRepositionModal() {
+    const modal = document.getElementById('studentRepositionModal');
+    if (!modal) return;
+    closeModalWithAnimation(modal);
+}
+
+function setupStudentRepositionModal() {
+    const modal = document.getElementById('studentRepositionModal');
+    const closeBtn = document.getElementById('studentRepositionModalClose');
+    const backdrop = document.getElementById('studentRepositionModalBackdrop');
+    if (!modal || !closeBtn) return;
+    closeBtn.addEventListener('click', () => closeStudentRepositionModal());
+    backdrop?.addEventListener('click', () => closeStudentRepositionModal());
 }
 
 function setPasswordToggleVisual(inputEl, btnEl) {
@@ -3769,11 +4356,12 @@ function setupTeacherLoginModal() {
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const email = String(emailInput.value || '').trim().toLowerCase();
+        const rawLogin = String(emailInput.value || '').trim();
+        const emailLc = rawLogin.toLowerCase();
         const password = String(passwordInput.value || '').trim();
 
-        if (!email) {
-            setError('Email is required to log in.');
+        if (!rawLogin) {
+            setError('Enter your teacher email, or @FirstName / your first name (student).');
             emailInput.focus();
             return;
         }
@@ -3782,55 +4370,98 @@ function setupTeacherLoginModal() {
             passwordInput.focus();
             return;
         }
-        if (password.length < 8) {
-            setError('Password must have at least 8 characters.');
-            passwordInput.focus();
-            return;
-        }
 
         const teacherNameByEmail = teachersList.find((name) => {
             const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
-            return teacherEmail && teacherEmail === email;
+            return teacherEmail && teacherEmail === emailLc;
         });
-        if (!teacherNameByEmail) {
-            setError('Email not found. Make sure you created your profile with this email.');
-            emailInput.focus();
-            return;
-        }
-        const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
-        if (!expectedPassword) {
-            setError('This profile has no password saved. Please create it again.');
-            return;
-        }
-        if (password !== expectedPassword) {
-            setError('Incorrect password.');
-            passwordInput.focus();
-            return;
-        }
 
-        if (saveCredentialsCheckbox?.checked) {
-            saveLoginCredentials(email, password);
-        } else {
-            clearSavedLoginCredentials();
-        }
+        if (teacherNameByEmail) {
+            if (password.length < 8) {
+                setError('Teacher passwords must be at least 8 characters.');
+                passwordInput.focus();
+                return;
+            }
+            const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
+            if (!expectedPassword) {
+                setError('This profile has no password saved. Please create it again.');
+                return;
+            }
+            if (password !== expectedPassword) {
+                setError('Incorrect password.');
+                passwordInput.focus();
+                return;
+            }
 
-        try {
-            sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
-        } catch {
-            /* ignore */
-        }
+            if (saveCredentialsCheckbox?.checked) {
+                saveLoginCredentials(emailLc, password);
+            } else {
+                clearSavedLoginCredentials();
+            }
 
-        closeTeacherLoginModal();
-        isTeacherLoggedIn = true;
-        loggedInTeacherName = teacherNameByEmail;
-        renderSidebar();
-        selectTeacher(teacherNameByEmail, { view: 'calendar' });
-    });
+            try {
+                sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+            } catch {
+                /* ignore */
+            }
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
             closeTeacherLoginModal();
+            loggedInStudentFullName = '';
+            isTeacherLoggedIn = true;
+            loggedInTeacherName = teacherNameByEmail;
+            renderSidebar();
+            selectTeacher(teacherNameByEmail, { view: 'calendar' });
+            return;
         }
+
+        const studentFirst = getStudentLoginFirstNameFromUsernameField(rawLogin);
+        if (studentFirst !== null) {
+            if (!studentFirst) {
+                setError('Students: use @FirstName (e.g. @Alexandre) or your first name, then your phone number (no country code).');
+                emailInput.focus();
+                return;
+            }
+            const v = verifyStudentLogin(studentFirst, password);
+            if (!v.ok) {
+                setError(
+                    v.error
+                        || 'No teacher account matches that email. Students: use @FirstName or first name and your phone (no country code).'
+                );
+                emailInput.focus();
+                return;
+            }
+            const tutor = getTutorRosterNameForStudent(v.studentName);
+            if (!tutor) {
+                setError(
+                    'Your student profile has no teacher assigned in this app. Ask your teacher to choose their name in the Teacher field on your profile.'
+                );
+                emailInput.focus();
+                return;
+            }
+
+            if (saveCredentialsCheckbox?.checked) {
+                saveLoginCredentials(rawLogin.trim(), password);
+            } else {
+                clearSavedLoginCredentials();
+            }
+
+            try {
+                sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+            } catch {
+                /* ignore */
+            }
+
+            closeTeacherLoginModal();
+            loggedInStudentFullName = v.studentName;
+            loggedInTeacherName = tutor;
+            isTeacherLoggedIn = true;
+            renderSidebar();
+            selectTeacher(v.studentName, { view: 'calendar' });
+            return;
+        }
+
+        setError('Email not found. Make sure you created your teacher profile with this email.');
+        emailInput.focus();
     });
 }
 
@@ -3839,7 +4470,7 @@ async function initTeachers() {
     await loadAllSchedules();
     initRoster();
     syncSpeakOnWeeklyToAllTeacherSchedules();
-    const restoredTeacher = tryRestoreTeacherSessionFromSavedCredentials();
+    const restoredTeacher = tryRestoreSessionFromSavedCredentials();
     renderSidebar();
     setupTeacherListEditDelegation();
 
@@ -3848,7 +4479,7 @@ async function initTeachers() {
         return;
     }
 
-    if (teachersList.length > 0) {
+    if (restoredTeacher || teachersList.length > 0) {
         const initialTeacher = restoredTeacher || loggedInTeacherName || teachersList[0];
         selectTeacher(initialTeacher, restoredTeacher ? { view: 'calendar' } : undefined);
     }
@@ -3862,6 +4493,13 @@ function selectTeacher(teacherName, opts) {
     if (!isTeacherLoggedIn) {
         setLoggedOutDashboard();
         return;
+    }
+
+    if (loggedInStudentFullName) {
+        if (String(teacherName || '').trim().toLowerCase() !== String(loggedInStudentFullName).trim().toLowerCase()) {
+            showAppMessage('You can only view your own schedule.');
+            return;
+        }
     }
 
     if (isActiveTeacherName(teacherName) && !isTeacherSelectionAllowed(teacherName)) {
@@ -3883,12 +4521,23 @@ function selectTeacher(teacherName, opts) {
         showClassReport = isStudentName(teacherName);
     }
 
-    currentTeacher = teacherName;
+    let scheduleLoadKey = String(teacherName || '').trim();
+    if (loggedInStudentFullName && !showClassReport) {
+        // Student sessions: their class slots + tutor "available" (green); see mergeStudentCalendarWithTutorFreeSlots.
+        scheduleLoadKey = String(loggedInStudentFullName).trim();
+    }
+
+    currentTeacher = scheduleLoadKey;
     renderSidebarHeaderProfile();
 
     document.querySelectorAll('.teacher-item').forEach((item) => {
         item.classList.remove('active');
-        if (item.dataset.teacher === teacherName) {
+        if (loggedInStudentFullName) {
+            const ds = String(item.dataset.teacher || '').trim().toLowerCase();
+            if (ds === String(loggedInStudentFullName || '').trim().toLowerCase()) {
+                item.classList.add('active');
+            }
+        } else if (item.dataset.teacher === teacherName) {
             item.classList.add('active');
         }
     });
@@ -3900,7 +4549,7 @@ function selectTeacher(teacherName, opts) {
         );
     });
 
-    loadTeacherSchedule(teacherName);
+    loadTeacherSchedule(scheduleLoadKey);
     applyCalendarStatePaletteCssVars();
     refreshContextMenuTheme();
 
@@ -3922,6 +4571,18 @@ function selectTeacher(teacherName, opts) {
         refreshCalendarDisplay();
         updateSummary();
     }
+}
+
+/** After `renderSidebar()`, re-apply selection: student sessions always use the roster name, not the tutor calendar key in `currentTeacher`. */
+function resyncSelectionAfterSidebarRender() {
+    if (!isTeacherLoggedIn) return;
+    const reportPanel = document.getElementById('studentClassReportPanel');
+    const classReportVisible = reportPanel && !reportPanel.hidden;
+    const sidebarName = String(loggedInStudentFullName || currentTeacher || '').trim();
+    if (!sidebarName) return;
+    const opts =
+        classReportVisible && isStudentName(sidebarName) ? { view: 'classReport' } : { view: 'calendar' };
+    selectTeacher(sidebarName, opts);
 }
 
 function removeStudentFromRoster(name, rosterKey) {
@@ -3955,6 +4616,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete passportFollowupLinks[removedName];
     delete studentSchoolByName[removedName];
     delete studentPhonesByName[removedName];
+    delete studentTeacherByName[removedName];
     delete studentGoogleMeetLinksByName[removedName];
     saveStudentClassReportRows();
     syncSpeakOnWeeklyToAllTeacherSchedules();
@@ -3966,7 +4628,7 @@ function removeStudentFromRoster(name, rosterKey) {
     if (wasCurrent) {
         selectTeacher(teachersList[0]);
     } else {
-        selectTeacher(currentTeacher);
+        resyncSelectionAfterSidebarRender();
     }
 }
 
@@ -4026,6 +4688,22 @@ function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {
     const iso = String(countryIsoRaw || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
     const countryIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
     studentPhonesByName[name] = { countryIso, number };
+}
+
+function getStudentTeacherInfo(studentName) {
+    const name = String(studentName || '').trim();
+    return name ? String(studentTeacherByName[name] || '').trim() : '';
+}
+
+function saveStudentTeacherInfo(studentName, teacherRaw) {
+    const name = String(studentName || '').trim();
+    if (!name) return;
+    const teacher = String(teacherRaw || '').trim();
+    if (!teacher) {
+        delete studentTeacherByName[name];
+        return;
+    }
+    studentTeacherByName[name] = teacher;
 }
 
 function buildStudentWhatsappUrl(studentName, message = '') {
@@ -4163,6 +4841,7 @@ function openEditStudentModal(studentName, rosterKey) {
     refreshEditStudentSchoolSelect(currentSchool);
     originalNameInput.value = studentName;
     originalCategoryInput.value = rosterKey;
+    refreshEditStudentTeacherSelect(getStudentTeacherInfo(studentName));
 
     openModalWithAnimation(modal);
     firstInput.focus();
@@ -4259,6 +4938,18 @@ function upsertStudentFromEditForm(action = 'save') {
     if (originalName !== fullName) {
         delete studentPhonesByName[originalName];
     }
+    const teacherVal = document.getElementById('editStudentTeacher')?.value || '';
+    saveStudentTeacherInfo(fullName, teacherVal);
+    if (originalName !== fullName) {
+        delete studentTeacherByName[originalName];
+    }
+
+    if (
+        loggedInStudentFullName &&
+        String(loggedInStudentFullName).trim().toLowerCase() === originalName.trim().toLowerCase()
+    ) {
+        loggedInStudentFullName = fullName;
+    }
 
     if (currentTeacher && currentTeacher.trim().toLowerCase() === originalName.trim().toLowerCase()) {
         currentTeacher = fullName;
@@ -4320,18 +5011,37 @@ function upsertStudentFromEditForm(action = 'save') {
     } else {
         teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy({}, fullName);
     }
-    if (currentTeacher && currentTeacher.trim().toLowerCase() === fullName.trim().toLowerCase()) {
+    const reportPanelEl = document.getElementById('studentClassReportPanel');
+    const classReportOpen = reportPanelEl && !reportPanelEl.hidden;
+    if (loggedInStudentFullName) {
+        if (classReportOpen && currentTeacher && currentTeacher.trim().toLowerCase() === fullName.trim().toLowerCase()) {
+            const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
+            if (tk && fullName.trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()) {
+                slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tk);
+            } else {
+                slotStates = { ...teacherSchedules[fullName] };
+            }
+        }
+    } else if (currentTeacher && currentTeacher.trim().toLowerCase() === fullName.trim().toLowerCase()) {
         slotStates = { ...teacherSchedules[fullName] };
     }
 
     syncSpeakOnWeeklyToAllTeacherSchedules();
+
+    if (loggedInStudentFullName && !classReportOpen) {
+        loadTeacherSchedule(String(loggedInStudentFullName).trim());
+    }
 
     saveRoster();
     saveAllSchedulesLocal();
     saveAllSchedules();
 
     renderSidebar();
-    selectTeacher(currentTeacher || teachersList[0] || fullName);
+    if (currentTeacher || loggedInStudentFullName) {
+        resyncSelectionAfterSidebarRender();
+    } else {
+        selectTeacher(teachersList[0] || fullName);
+    }
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
@@ -4366,15 +5076,6 @@ function setupEditStudentModal() {
         e.preventDefault();
         upsertStudentFromEditForm('save');
     });
-
-    if (!editStudentEscHandlerBound) {
-        editStudentEscHandlerBound = true;
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-                closeEditStudentModal();
-            }
-        });
-    }
 }
 
 function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw) {
@@ -4427,8 +5128,8 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw) {
     saveRoster();
     refreshContextMenuTheme();
     renderSidebar();
-    if (currentTeacher) {
-        selectTeacher(currentTeacher);
+    if (currentTeacher || loggedInStudentFullName) {
+        resyncSelectionAfterSidebarRender();
     } else if (teachersList[0]) {
         selectTeacher(teachersList[0]);
     }
@@ -4520,11 +5221,26 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const addPhoneInput = document.getElementById('addStudentPhone');
     const addPhoneCountrySelect = document.getElementById('addStudentPhoneCountry');
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
+    const addTeacherSelect = document.getElementById('addStudentTeacher');
+    saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
+    const schoolKey = schoolName.trim().toLowerCase();
+    if (schoolKey) {
+        const primaryEl = document.getElementById('addSchoolPrimaryColor');
+        const secondaryEl = document.getElementById('addSchoolSecondaryColor');
+        schoolThemeColors[schoolKey] = normalizeSchoolTheme(
+            {
+                primary: primaryEl?.value || '#5c6bc0',
+                secondary: secondaryEl?.value || '#1e88e5'
+            },
+            schoolName
+        );
+    }
     if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
 
     saveRoster();
+    refreshContextMenuTheme();
     saveAllSchedulesLocal();
     saveAllSchedules();
     renderSidebar();
@@ -4627,8 +5343,13 @@ function updateAddStudentPassportFieldVisibility() {
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
     const passportLinkWrap = document.getElementById('addStudentPassportLinkWrap');
     const passportLinkInput = document.getElementById('addStudentPassportLink');
+    const teacherWrap = document.getElementById('addStudentTeacherWrap');
+    const teacherSelect = document.getElementById('addStudentTeacher');
+    const rowTeacherTheme = document.getElementById('addStudentRowTeacherTheme');
+    const schoolReadonlyWrap = document.getElementById('addStudentSchoolReadonlyWrap');
+    const schoolReadonlyText = document.getElementById('addStudentSchoolReadonly');
+    const schoolFieldLabel = document.querySelector('.add-student-school-field-label');
     const addSchoolExternalWrap = document.getElementById('addSchoolExternalWrap');
-    const addSchoolThemeWrap = document.getElementById('addSchoolThemeWrap');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
     const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
@@ -4642,6 +5363,21 @@ function updateAddStudentPassportFieldVisibility() {
     const isTeacherMode = addStudentModalMode === 'teacher';
     const isStudentEntryMode = addStudentModalMode === 'student-entry';
     const isStudentGlobalMode = addStudentModalMode === 'student-global';
+    const isAddSchoolMode = addStudentModalMode === 'student';
+    const showStudentTeacherField = isStudentEntryMode || isStudentGlobalMode;
+    if (teacherWrap && teacherSelect) {
+        teacherWrap.classList.toggle('is-hidden', !showStudentTeacherField);
+        teacherWrap.setAttribute('aria-hidden', showStudentTeacherField ? 'false' : 'true');
+        if (showStudentTeacherField) {
+            refreshAddStudentTeacherSelect(teacherSelect.value);
+        } else {
+            teacherSelect.value = '';
+        }
+    }
+    if (rowTeacherTheme) {
+        rowTeacherTheme.classList.toggle('is-hidden', isTeacherMode);
+        rowTeacherTheme.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
+    }
     const useNameFields = isTeacherMode || isStudentEntryMode;
     const useNameFieldsAny = useNameFields || isStudentGlobalMode;
     if (nameRow && firstInput && lastInput) {
@@ -4669,52 +5405,74 @@ function updateAddStudentPassportFieldVisibility() {
             if (teacherPasswordInput) teacherPasswordInput.value = '';
         }
     }
-    const hideSchoolInput = isTeacherMode || isStudentEntryMode;
-    schoolWrap.classList.toggle('is-hidden', hideSchoolInput);
-    schoolWrap.setAttribute('aria-hidden', hideSchoolInput ? 'true' : 'false');
-    if (hideSchoolInput) {
+    const showLocationRow = !isTeacherMode;
+    schoolWrap.classList.toggle('is-hidden', !showLocationRow);
+    schoolWrap.setAttribute('aria-hidden', showLocationRow ? 'false' : 'true');
+    if (!showLocationRow) {
         if (cityInput) cityInput.value = '';
         if (stateInput) stateInput.value = '';
+        if (schoolReadonlyWrap) {
+            schoolReadonlyWrap.classList.add('is-hidden');
+            schoolReadonlyWrap.setAttribute('aria-hidden', 'true');
+        }
+        if (schoolReadonlyText) schoolReadonlyText.textContent = '';
     }
+
     const useSchoolSelect = isStudentGlobalMode;
+    const showSchoolReadonly = isStudentEntryMode;
+
+    if (schoolReadonlyWrap && schoolReadonlyText) {
+        if (showSchoolReadonly && addStudentTargetSchool) {
+            schoolReadonlyText.textContent = addStudentTargetSchool;
+            schoolReadonlyWrap.classList.remove('is-hidden');
+            schoolReadonlyWrap.setAttribute('aria-hidden', 'false');
+        } else {
+            schoolReadonlyWrap.classList.add('is-hidden');
+            schoolReadonlyWrap.setAttribute('aria-hidden', 'true');
+            schoolReadonlyText.textContent = '';
+        }
+    }
+    if (schoolFieldLabel) {
+        schoolFieldLabel.classList.toggle('is-hidden', showSchoolReadonly);
+        schoolFieldLabel.setAttribute('aria-hidden', showSchoolReadonly ? 'true' : 'false');
+    }
+
     if (schoolInput) {
-        schoolInput.classList.toggle('is-hidden', useSchoolSelect);
-        schoolInput.setAttribute('aria-hidden', useSchoolSelect ? 'true' : 'false');
-        schoolInput.required = !hideSchoolInput && !useSchoolSelect;
-        if (isTeacherMode || useSchoolSelect) {
+        const hideSchoolText = useSchoolSelect || showSchoolReadonly;
+        schoolInput.classList.toggle('is-hidden', hideSchoolText);
+        schoolInput.setAttribute('aria-hidden', hideSchoolText ? 'true' : 'false');
+        schoolInput.required = isAddSchoolMode;
+        if (hideSchoolText || isTeacherMode) {
             schoolInput.value = '';
         }
     }
     if (schoolSelect) {
         schoolSelect.classList.toggle('is-hidden', !useSchoolSelect);
         schoolSelect.setAttribute('aria-hidden', useSchoolSelect ? 'false' : 'true');
-        schoolSelect.required = !hideSchoolInput && useSchoolSelect;
+        schoolSelect.required = useSchoolSelect;
         if (!useSchoolSelect) {
             schoolSelect.value = '';
         } else {
             refreshAddStudentSchoolSelect(schoolSelect.value);
+            syncAddStudentModalThemeFromSchoolTitle(schoolSelect.value);
         }
     }
 
-    const hideExternalLinkControls = isTeacherMode || isStudentEntryMode;
+    if (isStudentEntryMode && addStudentTargetSchool) {
+        syncAddStudentModalThemeFromSchoolTitle(addStudentTargetSchool);
+    }
+
     if (addSchoolExternalWrap) {
-        addSchoolExternalWrap.classList.toggle('is-hidden', hideExternalLinkControls);
-        addSchoolExternalWrap.setAttribute('aria-hidden', hideExternalLinkControls ? 'true' : 'false');
+        addSchoolExternalWrap.classList.toggle('is-hidden', !isAddSchoolMode);
+        addSchoolExternalWrap.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
     }
-    if (addSchoolThemeWrap) {
-        addSchoolThemeWrap.classList.toggle('is-hidden', hideExternalLinkControls);
-        addSchoolThemeWrap.setAttribute('aria-hidden', hideExternalLinkControls ? 'true' : 'false');
-    }
-    if (hideExternalLinkControls) {
+    if (!isAddSchoolMode) {
         if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;
         if (addSchoolExternalPanel) {
             addSchoolExternalPanel.classList.add('is-collapsed');
             addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
         }
         if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
-        if (addSchoolPrimaryColor) addSchoolPrimaryColor.value = '#5c6bc0';
-        if (addSchoolSecondaryColor) addSchoolSecondaryColor.value = '#1e88e5';
-        renderAddSchoolThemeSquares();
         closeAddSchoolColorPopup();
     }
 
@@ -4754,11 +5512,12 @@ function openAddStudentModal(mode = 'student') {
         return;
     }
 
+    const preservedEntrySchool = mode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';
     addStudentModalMode =
         mode === 'teacher'
             ? 'teacher'
             : (mode === 'student-entry' ? 'student-entry' : (mode === 'student-global' ? 'student-global' : 'student'));
-    addStudentTargetSchool = '';
+    addStudentTargetSchool = addStudentModalMode === 'student-entry' ? preservedEntrySchool : '';
     if (addStudentModalMode === 'teacher' && (!firstInput || !lastInput)) {
         return;
     }
@@ -4766,6 +5525,10 @@ function openAddStudentModal(mode = 'student') {
     if (lastInput) lastInput.value = '';
     if (phoneInput) phoneInput.value = '';
     if (phoneCountrySelect) phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+    const addTeacherSelect = document.getElementById('addStudentTeacher');
+    if (addTeacherSelect) {
+        refreshAddStudentTeacherSelect('');
+    }
     schoolInput.value = '';
     if (cityInput) cityInput.value = '';
     if (stateInput) stateInput.value = '';
@@ -4815,9 +5578,15 @@ function openAddStudentModalForSchool(schoolTitle) {
 function getStudentNamesForSchool(schoolTitle) {
     const schoolKey = String(schoolTitle || '').trim().toLowerCase();
     if (!schoolKey) return [];
-    return [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
+    let names = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
         .filter((name) => (getStudentSchoolName(name) || '').trim().toLowerCase() === schoolKey)
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const asStudent = String(loggedInStudentFullName || '').trim();
+    if (asStudent) {
+        const me = asStudent.toLowerCase();
+        names = names.filter((n) => n.trim().toLowerCase() === me);
+    }
+    return names;
 }
 
 function getGoogleMeetSchoolKey(schoolTitle) {
@@ -4965,10 +5734,6 @@ function findGoogleMeetStudentIndicator(studentName) {
 }
 
 function closeGoogleMeetStudentLinkPopover() {
-    if (googleMeetLinkPopoverEscapeHandler) {
-        document.removeEventListener('keydown', googleMeetLinkPopoverEscapeHandler, true);
-        googleMeetLinkPopoverEscapeHandler = null;
-    }
     googleMeetLinkPopoverStudent = '';
     const pop = document.getElementById('googleMeetStudentLinkPopover');
     if (pop) {
@@ -5011,13 +5776,6 @@ function openGoogleMeetStudentLinkPopover(studentName, anchorRef) {
             if (typeof input.select === 'function') input.select();
         });
     });
-    googleMeetLinkPopoverEscapeHandler = (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            closeGoogleMeetStudentLinkPopover();
-        }
-    };
-    document.addEventListener('keydown', googleMeetLinkPopoverEscapeHandler, true);
 }
 
 function openGoogleMeetStudentAccordion() {
@@ -5524,6 +6282,17 @@ function setupAddStudentModal() {
     }
     schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
     phoneCountrySelect?.addEventListener('change', updateAddStudentPhonePlaceholder);
+    const schoolSelectEl = document.getElementById('addStudentSchoolSelect');
+    schoolSelectEl?.addEventListener('change', () => {
+        if (addStudentModalMode !== 'student-global') return;
+        syncAddStudentModalThemeFromSchoolTitle(schoolSelectEl.value);
+    });
+    const stateField = document.getElementById('addStudentState');
+    stateField?.addEventListener('input', (e) => {
+        const t = e.target;
+        const u = String(t.value || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+        if (t.value !== u) t.value = u;
+    });
 
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
@@ -5600,13 +6369,6 @@ function setupAddStudentModal() {
             addSchoolSecondaryColor?.value || '#1e88e5'
         );
     });
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.classList.contains('is-open')) {
-            closeAddSchoolColorPopup();
-            closeAddStudentModal();
-        }
-    });
 }
 
 // Save current schedule to teacherSchedules
@@ -5616,21 +6378,77 @@ function saveTeacherSchedule(teacherName) {
     if (isActiveTeacherName(teacherName)) {
         teacherSchedules[teacherName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(copy);
     } else {
-        teacherSchedules[teacherName] = mergeSpeakonWeeklyClassIntoScheduleCopy(copy, teacherName);
+        let next = mergeSpeakonWeeklyClassIntoScheduleCopy(copy, teacherName);
+        if (isStudentName(teacherName)) {
+            next = stripTeacherAvailabilityFromStudentScheduleCopy(next);
+        }
+        teacherSchedules[teacherName] = next;
         syncSpeakOnWeeklyToAllTeacherSchedules();
     }
     // Save to Cloudflare (will also save to localStorage as backup)
     saveAllSchedules();
 }
 
+/**
+ * Processed slot map for a roster name (teacher profile or student), without mutating globals.
+ */
+function computeSlotStatesForProfile(name) {
+    const raw = teacherSchedules[name] ? { ...teacherSchedules[name] } : {};
+    if (isActiveTeacherName(name)) {
+        return applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
+    }
+    return mergeSpeakonWeeklyClassIntoScheduleCopy(raw, name);
+}
+
+/**
+ * Student calendar view: their class/extra cells (school colors) plus tutor "available" (green) where they have no class.
+ */
+function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
+    const stu = stripTeacherAvailabilityFromStudentScheduleCopy(computeSlotStatesForProfile(studentName));
+    const tut = computeSlotStatesForProfile(tutorKey);
+    const merged = {};
+    DAYS.forEach((day) => {
+        for (let hour = START_HOUR; hour < END_HOUR; hour++) {
+            const key = `${day}-${hour}`;
+            const s = stu[key];
+            const t = tut[key];
+            const sLow = s != null ? String(s).trim().toLowerCase() : '';
+            const tLow = t != null ? String(t).trim().toLowerCase() : '';
+            if (sLow && sLow !== 'available') {
+                merged[key] = s;
+            } else if (tLow === 'available') {
+                merged[key] = 'available';
+            } else if (s) {
+                merged[key] = s;
+            } else {
+                merged[key] = null;
+            }
+        }
+    });
+    return merged;
+}
+
 // Load schedule from teacherSchedules
 function loadTeacherSchedule(teacherName) {
     const raw = teacherSchedules[teacherName] ? { ...teacherSchedules[teacherName] } : {};
+    if (
+        loggedInStudentFullName &&
+        String(teacherName || '').trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
+    ) {
+        const tutorKey = getTutorRosterNameForStudent(loggedInStudentFullName);
+        if (tutorKey) {
+            slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tutorKey);
+            return;
+        }
+    }
     if (isActiveTeacherName(teacherName)) {
         slotStates = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
         teacherSchedules[teacherName] = { ...slotStates };
     } else {
         slotStates = mergeSpeakonWeeklyClassIntoScheduleCopy(raw, teacherName);
+        if (isStudentName(teacherName)) {
+            slotStates = stripTeacherAvailabilityFromStudentScheduleCopy(slotStates);
+        }
     }
 }
 
@@ -5744,12 +6562,14 @@ function initCalendar() {
 
             // Right click: show context menu
             slot.addEventListener('contextmenu', (e) => {
-                if (!isCustomContextMenuEnabledForCurrentSelection()) {
+                const hasSchoolMenu = isCustomContextMenuEnabledForCurrentSelection();
+                const hasTeacherGreenMenu = isTeacherGreenCellContextMenuEnabled(day, hour);
+                if (!hasSchoolMenu && !hasTeacherGreenMenu) {
                     hideContextMenu();
                     return;
                 }
                 e.preventDefault();
-                showContextMenu(e, day, hour);
+                showContextMenu(e, day, hour, hasTeacherGreenMenu ? 'teacher-green' : 'school');
             });
 
             timeSlotsContainer.appendChild(slot);
@@ -5765,14 +6585,81 @@ function initCalendar() {
 
     // Handle context menu item clicks (delegated; menu rows are rebuilt dynamically)
     contextMenu?.addEventListener('click', (e) => {
-        const item = e.target.closest('.context-menu-item');
-        if (!item || !contextMenu.contains(item)) return;
-        const color = item.dataset.color;
-        if (currentSlot) {
-            setSlotState(currentSlot.day, currentSlot.hour, color || null);
-            hideContextMenu();
+        e.stopPropagation();
+        const submenuTrigger = e.target.closest('.context-menu-chevron-btn--trigger');
+        if (submenuTrigger && contextMenu.contains(submenuTrigger)) {
+            contextMenu.classList.add('context-menu--book-submenu-open');
+            requestAnimationFrame(() => {
+                positionSchoolSubmenu();
+                updateStudentListScrollIndicators();
+            });
+            refreshStudentListScrollIndicatorsAfterLayout();
+            return;
         }
+        const studentItem = e.target.closest('.context-submenu-student-item');
+        if (studentItem && contextMenu.contains(studentItem)) {
+            const list = studentItem.closest('.context-students-submenu-list');
+            list?.querySelectorAll('.context-submenu-student-item.is-selected').forEach((el) => el.classList.remove('is-selected'));
+            studentItem.classList.add('is-selected');
+            contextMenu.dataset.selectedStudent = String(studentItem.dataset.student || '').trim();
+            if (currentContextMenuMode === 'teacher-green' && currentSlot && currentTeacher) {
+                const selectedStudentName = String(studentItem.dataset.student || '').trim();
+                if (selectedStudentName) {
+                    const slotKey = `${currentSlot.day}-${currentSlot.hour}`;
+                    if (!teacherUnavailableStudentNamesByTeacher[currentTeacher]) {
+                        teacherUnavailableStudentNamesByTeacher[currentTeacher] = {};
+                    }
+                    teacherUnavailableStudentNamesByTeacher[currentTeacher][slotKey] = selectedStudentName;
+                    setSlotState(currentSlot.day, currentSlot.hour, 'unavailable');
+                }
+                hideContextMenu();
+            }
+            return;
+        }
+        const item = e.target.closest('.context-menu-item, .context-submenu-item');
+        if (!item || !contextMenu.contains(item)) return;
+        const selectedSchool = String(item.dataset.school || '').trim();
+        if (selectedSchool) {
+            contextMenu.dataset.selectedSchool = selectedSchool;
+        }
+        if (item.classList.contains('context-submenu-item--has-students') && selectedSchool) {
+            showBookClassStudentsSubmenu(selectedSchool);
+            return;
+        }
+        const action = String(item.dataset.action || '').trim();
+        if (currentContextMenuMode === 'teacher-green' && action) {
+            handleTeacherGreenContextMenuAction(action);
+            if (action === 'book-school') {
+                hideContextMenu();
+                return;
+            }
+            hideContextMenu();
+            return;
+        }
+        if (currentContextMenuMode === 'teacher-green') return;
+        const color = item.dataset.color;
+        if (!currentSlot || typeof color === 'undefined') {
+            hideContextMenu();
+            return;
+        }
+        setSlotState(currentSlot.day, currentSlot.hour, color || null);
+        hideContextMenu();
     });
+    contextMenu?.addEventListener('scroll', (e) => {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const listEl = t.closest('.context-students-submenu-list');
+        if (!listEl || !contextMenu.contains(listEl)) return;
+        updateStudentListScrollIndicators();
+    }, true);
+    if (document.body.dataset.bookSubmenuPositionBound !== '1') {
+        document.body.dataset.bookSubmenuPositionBound = '1';
+        window.addEventListener('resize', () => {
+            positionSchoolSubmenu();
+            positionIndependentStudentsSubmenu();
+            updateStudentListScrollIndicators();
+        });
+    }
 }
 
 // Refresh calendar display based on current slotStates
@@ -5807,11 +6694,23 @@ function getSlotState(day, hour) {
 // Set state of a slot
 function setSlotState(day, hour, state) {
     if (!currentTeacher) return;
-    
+    if (isLoggedInStudentCalendarReadOnly()) {
+        showAppMessage('View only — your teacher manages this schedule.');
+        return;
+    }
+
     const key = `${day}-${hour}`;
     const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
     
     if (!slot) return;
+
+    const normalizedState = String(state || '').trim().toLowerCase();
+    if (normalizedState !== 'unavailable') {
+        const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
+        if (byTeacher && Object.prototype.hasOwnProperty.call(byTeacher, key)) {
+            delete byTeacher[key];
+        }
+    }
     
     if (state) {
         slotStates[key] = state;
@@ -5830,7 +6729,14 @@ function setSlotState(day, hour, state) {
 // Cycle through states on left click: null <-> available
 function cycleSlotState(day, hour) {
     if (!currentTeacher) return;
-    
+    if (isLoggedInStudentCalendarReadOnly()) {
+        const st = getSlotState(day, hour);
+        if (String(st || '').trim().toLowerCase() === 'available') {
+            openStudentRepositionModal(day, hour);
+        }
+        return;
+    }
+
     const currentState = getSlotState(day, hour);
     const currentIndex = STATE_CYCLE.indexOf(currentState);
     const nextState = currentIndex === -1
@@ -5841,35 +6747,170 @@ function cycleSlotState(day, hour) {
 }
 
 // Show context menu on right click
-function showContextMenu(event, day, hour) {
+function showContextMenu(event, day, hour, mode = 'school') {
     if (!currentTeacher) return;
     
     currentSlot = { day, hour };
+    currentContextMenuMode = mode;
     refreshContextMenuTheme();
     contextMenu.classList.add('show');
-    
-    // Position menu near cursor
-    contextMenu.style.left = `${event.pageX}px`;
-    contextMenu.style.top = `${event.pageY}px`;
-    
-    // Adjust if menu goes off screen
-    setTimeout(() => {
-        const rect = contextMenu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) {
-            contextMenu.style.left = `${event.pageX - rect.width}px`;
-        }
-        if (rect.bottom > window.innerHeight) {
-            contextMenu.style.top = `${event.pageY - rect.height}px`;
-        }
-    }, 0);
+
+    // Anchor menu top-left to cursor bottom-right.
+    const cursorOffset = 15; // previous 8px + requested extra 7px
+    const pointerX = Number.isFinite(event.clientX) ? event.clientX : 0;
+    const pointerY = Number.isFinite(event.clientY) ? event.clientY : 0;
+    let targetLeft = pointerX + cursorOffset;
+    let targetTop = pointerY + cursorOffset;
+    contextMenu.style.left = `${targetLeft}px`;
+    contextMenu.style.top = `${targetTop}px`;
+
+    // Keep the menu inside the viewport.
+    const rect = contextMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        targetLeft = Math.max(0, pointerX - rect.width - cursorOffset);
+    }
+    if (rect.bottom > window.innerHeight) {
+        targetTop = Math.max(0, pointerY - rect.height - cursorOffset);
+    }
+    contextMenu.style.left = `${targetLeft}px`;
+    contextMenu.style.top = `${targetTop}px`;
+    updateBookSubmenuDirectionCue();
 }
 
 // Hide context menu
 function hideContextMenu() {
     if (contextMenu) {
         contextMenu.classList.remove('show');
+        contextMenu.classList.remove('context-menu--book-submenu-open');
+        contextMenu.classList.remove('context-menu--book-submenu-expanded');
+        contextMenu.classList.remove('context-menu--book-submenu-left');
+        const schoolSubmenu = contextMenu.querySelector('.context-submenu');
+        if (schoolSubmenu) {
+            schoolSubmenu.classList.remove('context-submenu--to-left', 'context-submenu--align-bottom');
+        }
+        const studentsMenu = contextMenu.querySelector('.context-students-submenu');
+        if (studentsMenu) {
+            studentsMenu.hidden = true;
+            studentsMenu.classList.remove('context-students-submenu--to-left');
+            studentsMenu.style.removeProperty('left');
+            studentsMenu.style.removeProperty('top');
+        }
     }
     currentSlot = null;
+    currentContextMenuMode = 'school';
+}
+
+function updateStudentListScrollIndicators() {
+    if (!contextMenu) return;
+    const listEl = contextMenu.querySelector('.context-students-submenu-list');
+    const upEl = contextMenu.querySelector('.context-students-submenu-scroll-indicator--up');
+    const downEl = contextMenu.querySelector('.context-students-submenu-scroll-indicator--down');
+    if (!listEl || !upEl || !downEl) return;
+    const hasUp = listEl.scrollTop > 0;
+    const hasDown = (listEl.scrollTop + listEl.clientHeight) < listEl.scrollHeight;
+    upEl.hidden = !hasUp;
+    downEl.hidden = !hasDown;
+}
+
+function updateBookSubmenuDirectionCue() {
+    if (!contextMenu) return;
+    const wrap = contextMenu.querySelector('.context-menu-item-with-submenu');
+    const submenu = contextMenu.querySelector('.context-submenu');
+    if (!wrap || !submenu) {
+        contextMenu.classList.remove('context-menu--book-submenu-left');
+        return;
+    }
+    const viewportPad = 12;
+    const gap = 5;
+    const wrapRect = wrap.getBoundingClientRect();
+    const wasOpen = contextMenu.classList.contains('context-menu--book-submenu-open');
+    if (!wasOpen) {
+        contextMenu.classList.add('context-menu--book-submenu-open');
+        submenu.style.visibility = 'hidden';
+    }
+    const submenuRect = submenu.getBoundingClientRect();
+    const rightFits = (wrapRect.right + gap + submenuRect.width) <= (window.innerWidth - viewportPad);
+    const leftFits = (wrapRect.left - gap - submenuRect.width) >= viewportPad;
+    contextMenu.classList.toggle('context-menu--book-submenu-left', !rightFits && leftFits);
+    if (!wasOpen) {
+        submenu.style.removeProperty('visibility');
+        contextMenu.classList.remove('context-menu--book-submenu-open');
+    }
+}
+
+function positionSchoolSubmenu() {
+    if (!contextMenu || !contextMenu.classList.contains('context-menu--book-submenu-open')) return;
+    const wrap = contextMenu.querySelector('.context-menu-item-with-submenu');
+    const submenu = contextMenu.querySelector('.context-submenu');
+    if (!wrap || !submenu) return;
+
+    const viewportPad = 12;
+    const minBottomOffset = 20;
+    const gap = 5;
+    submenu.classList.remove('context-submenu--to-left', 'context-submenu--align-bottom');
+    contextMenu.classList.remove('context-menu--book-submenu-left');
+
+    const wrapRect = wrap.getBoundingClientRect();
+    let submenuRect = submenu.getBoundingClientRect();
+
+    const rightFits = (wrapRect.right + gap + submenuRect.width) <= (window.innerWidth - viewportPad);
+    const leftFits = (wrapRect.left - gap - submenuRect.width) >= viewportPad;
+    updateBookSubmenuDirectionCue();
+    if (!rightFits && leftFits) {
+        submenu.classList.add('context-submenu--to-left');
+        submenuRect = submenu.getBoundingClientRect();
+    }
+
+    const maxBottomEdge = window.innerHeight - minBottomOffset;
+    if (wrapRect.top + submenuRect.height > maxBottomEdge) {
+        submenu.classList.add('context-submenu--align-bottom');
+    }
+}
+
+function positionIndependentStudentsSubmenu() {
+    if (!contextMenu || !contextMenu.classList.contains('context-menu--book-submenu-expanded')) return;
+    const schoolSubmenu = contextMenu.querySelector('.context-submenu');
+    const studentsMenu = contextMenu.querySelector('.context-students-submenu');
+    if (!schoolSubmenu || !studentsMenu || studentsMenu.hidden) return;
+
+    const viewportPad = 12;
+    const minBottomOffset = 20;
+    const gap = -4;
+    const schoolRect = schoolSubmenu.getBoundingClientRect();
+    studentsMenu.classList.remove('context-students-submenu--to-left');
+
+    // Measure submenu with neutral placement first.
+    studentsMenu.style.left = `${viewportPad}px`;
+    studentsMenu.style.top = `${viewportPad}px`;
+
+    const studentsRect = studentsMenu.getBoundingClientRect();
+    const maxLeft = Math.max(viewportPad, window.innerWidth - studentsRect.width - viewportPad);
+    const maxTop = Math.max(viewportPad, window.innerHeight - studentsRect.height - minBottomOffset);
+    const schoolOpensLeft = schoolSubmenu.classList.contains('context-submenu--to-left');
+    const preferRightLeft = schoolRect.right + gap;
+    const preferLeftLeft = schoolRect.left - studentsRect.width - gap;
+    let nextLeft = schoolOpensLeft ? preferLeftLeft : preferRightLeft;
+    if (schoolOpensLeft) {
+        studentsMenu.classList.add('context-students-submenu--to-left');
+    }
+    nextLeft = Math.max(viewportPad, Math.min(nextLeft, maxLeft));
+
+    // Keep a consistent anchor, but always preserve safe top/bottom margins.
+    let nextTop = schoolRect.top;
+    nextTop = Math.max(viewportPad, Math.min(nextTop, maxTop));
+
+    studentsMenu.style.left = `${nextLeft}px`;
+    studentsMenu.style.top = `${nextTop}px`;
+}
+
+function refreshStudentListScrollIndicatorsAfterLayout() {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            positionSchoolSubmenu();
+            positionIndependentStudentsSubmenu();
+            updateStudentListScrollIndicators();
+        });
+    });
 }
 
 function getContextMenuSchoolConfig() {
@@ -5948,8 +6989,133 @@ function applyCalendarStatePaletteCssVars() {
     });
 }
 
+function escapeHtmlAttr(value) {
+    return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function showBookClassStudentsSubmenu(schoolTitle) {
+    if (!contextMenu) return;
+    const studentsMenu = contextMenu.querySelector('.context-students-submenu');
+    const titleEl = contextMenu.querySelector('.context-students-submenu-title');
+    const listEl = contextMenu.querySelector('.context-students-submenu-list');
+    if (!studentsMenu || !titleEl || !listEl) return;
+    const school = String(schoolTitle || '').trim();
+    const schoolButtons = contextMenu.querySelectorAll('.context-submenu-item[data-school]');
+    schoolButtons.forEach((btn) => {
+        const isSelected = String(btn.dataset.school || '').trim().toLowerCase() === school.toLowerCase();
+        btn.classList.toggle('is-selected', !!school && isSelected);
+    });
+    if (!school) {
+        listEl.innerHTML = '';
+        studentsMenu.hidden = true;
+        contextMenu.classList.remove('context-menu--book-submenu-expanded');
+        updateStudentListScrollIndicators();
+        return;
+    }
+    const names = getStudentNamesForSchool(school);
+    titleEl.textContent = school;
+    if (names.length === 0) {
+        listEl.innerHTML = '<div class="context-submenu-empty">No students found</div>';
+    } else {
+        listEl.innerHTML = names
+            .map((name) => {
+                const safe = escapeHtmlAttr(String(name || '').trim());
+                return `<button type="button" class="context-submenu-student-item" data-student="${safe}">${safe}</button>`;
+            })
+            .join('');
+    }
+    studentsMenu.hidden = false;
+    contextMenu.classList.add('context-menu--book-submenu-expanded');
+    requestAnimationFrame(() => {
+        positionIndependentStudentsSubmenu();
+        updateStudentListScrollIndicators();
+    });
+    refreshStudentListScrollIndicatorsAfterLayout();
+}
+
 function refreshContextMenuTheme() {
     if (!contextMenu) return;
+    contextMenu.classList.remove('context-menu--book-submenu-open');
+    contextMenu.classList.remove('context-menu--book-submenu-expanded');
+    contextMenu.classList.remove('context-menu--book-submenu-left');
+    delete contextMenu.dataset.selectedStudent;
+    if (currentContextMenuMode === 'teacher-green') {
+        delete contextMenu.dataset.selectedSchool;
+        const schools = getAvailableSchoolNames();
+        const schoolItems = schools.length
+            ? schools
+                .map((schoolName, index) => {
+                    const safe = escapeHtmlAttr(String(schoolName || '').trim());
+                    const delay = ((index + 1) * 0.1).toFixed(2);
+                    const hasStudents = getStudentNamesForSchool(schoolName).length > 0;
+                    const chevron = hasStudents
+                        ? '<span class="context-submenu-item-chevron" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-submenu-item-chevron-icon"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg></span>'
+                        : '';
+                    return `<button type="button" class="context-submenu-item${hasStudents ? ' context-submenu-item--has-students' : ''}" style="--submenu-delay:${delay}s" data-action="book-school" data-school="${safe}"><span class="context-submenu-item-label">${safe}</span>${chevron}</button>`;
+                })
+                .join('')
+            : '<div class="context-submenu-empty">No schools available</div>';
+        contextMenu.innerHTML = `
+            <div class="context-menu-group">
+                <div class="context-menu-group-title">Schedule</div>
+                <div class="context-menu-item-with-submenu">
+                    <button type="button" class="context-menu-item context-menu-item--stacked context-menu-item--has-submenu context-menu-item--chevron-row">
+                        <span class="context-menu-label">Book Class</span>
+                        <span class="context-menu-chevron-btn context-menu-chevron-btn--trigger" role="button" tabindex="0" aria-label="Open schools submenu">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--right">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--left">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                            </svg>
+                        </span>
+                    </button>
+                    <div class="context-submenu" role="menu" aria-label="Schools">
+                        <div class="context-submenu-col context-submenu-col--school-options">
+                            ${schoolItems}
+                        </div>
+                    </div>
+                    <div class="context-students-submenu" hidden>
+                        <div class="context-students-submenu-title"></div>
+                        <div class="context-students-submenu-scroll-indicator context-students-submenu-scroll-indicator--up" hidden aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-students-submenu-scroll-indicator-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+                            </svg>
+                        </div>
+                        <div class="context-students-submenu-list"></div>
+                        <div class="context-students-submenu-scroll-indicator context-students-submenu-scroll-indicator--down" hidden aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-students-submenu-scroll-indicator-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="context-menu-item context-menu-item--stacked context-menu-item--chevron-row" data-action="set-class-reposition">
+                    <span class="context-menu-label">Set Class</span>
+                    <span class="context-menu-chevron-btn" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--right">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--left">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                        </svg>
+                    </span>
+                </button>
+            </div>
+            <div class="context-menu-group context-menu-group--separated">
+                <div class="context-menu-group-title">Slot Management</div>
+                <button type="button" class="context-menu-item context-menu-item--stacked" data-action="clear">
+                    <span class="context-menu-label">Clear</span>
+                </button>
+            </div>
+        `;
+        return;
+    }
     const cfg = getContextMenuSchoolConfig();
     const selectedState = currentSlot ? getSlotState(currentSlot.day, currentSlot.hour) : null;
     const classChecked = selectedState === cfg.classState;
@@ -5972,12 +7138,13 @@ function refreshContextMenuTheme() {
     if (rows[1]) rows[1].style.setProperty('--menu-option-color', cfg.extraColor);
 }
 
-// Update the summary panel - show only Available slots
+// Update the summary panel - show only Available slots (teacher open time; merged view for students)
 function updateSummary() {
     if (!currentTeacher) return;
 
     const summaryContent = document.getElementById('summaryContent');
     const summaryPanel = document.getElementById('summaryPanel');
+    const studentSeesTutorOpen = isLoggedInStudentCalendarReadOnly();
 
     const availableSlots = {};
 
@@ -5995,16 +7162,21 @@ function updateSummary() {
 
     const hasAvailable = Object.values(availableSlots).some((hours) => hours.length > 0);
 
+    const availTitle = studentSeesTutorOpen ? 'Teacher open time' : 'Available';
+    const availEmptyMsg = studentSeesTutorOpen
+        ? 'Your teacher has not marked open time slots yet.'
+        : 'No available hours selected yet. Left-click to mark available time slots.';
+
     if (!hasAvailable) {
         summaryContent.innerHTML =
             '<div class="day-summary day-summary-available">' +
-            '<h3>Available</h3>' +
-            '<p class="empty-message">No available hours selected yet. Left-click to mark available time slots.</p>' +
+            `<h3>${availTitle}</h3>` +
+            `<p class="empty-message">${availEmptyMsg}</p>` +
             '</div>';
     } else {
         let html = '';
         html += '<div class="day-summary day-summary-available">';
-        html += '<h3>Available</h3>';
+        html += `<h3>${availTitle}</h3>`;
 
         DAYS.forEach((day) => {
             if (!availableSlots[day] || availableSlots[day].length === 0) return;
@@ -6058,7 +7230,11 @@ function groupConsecutiveHours(hours) {
 // Select all time slots as available
 function selectAll() {
     if (!currentTeacher) return;
-    
+    if (isLoggedInStudentCalendarReadOnly()) {
+        showAppMessage('View only — your teacher manages this schedule.');
+        return;
+    }
+
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
         DAYS.forEach(day => {
             const key = `${day}-${hour}`;
@@ -6079,7 +7255,11 @@ function selectAll() {
 // Clear all selections
 function clearAll() {
     if (!currentTeacher) return;
-    
+    if (isLoggedInStudentCalendarReadOnly()) {
+        showAppMessage('View only — your teacher manages this schedule.');
+        return;
+    }
+
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
         DAYS.forEach(day => {
             const key = `${day}-${hour}`;
@@ -6103,7 +7283,11 @@ function exportSchedule() {
         alert('Please select a teacher first.');
         return;
     }
-    
+    if (isLoggedInStudentCalendarReadOnly()) {
+        showAppMessage('Export is only available when you are signed in as a teacher.');
+        return;
+    }
+
     // Save current schedule before exporting
     saveTeacherSchedule(currentTeacher);
     
@@ -6310,9 +7494,30 @@ function exportSchedulePDF() {
 }
 
 // Event listeners
+function setupSidebarExpandableStickyBehavior() {
+    const teacherList = document.getElementById('teacherList');
+    if (!teacherList || teacherList.dataset.expandableStickyBound === '1') return;
+    teacherList.dataset.expandableStickyBound = '1';
+    teacherList.addEventListener(
+        'click',
+        (e) => {
+            const btn = e.target && e.target.closest && e.target.closest('.sidebar-add-btn--expandable');
+            if (!btn || !teacherList.contains(btn)) return;
+            document.querySelectorAll('.sidebar-add-btn--expandable-sticky').forEach((b) => {
+                b.classList.remove('sidebar-add-btn--expandable-sticky');
+            });
+            btn.classList.add('sidebar-add-btn--expandable-sticky');
+        },
+        true
+    );
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     await initTeachers();
     setupAppMessageModal();
+    setupStudentRepositionModal();
+    setupGlobalEscapeToDismissOverlays();
+    setupGlobalPointerDownToDismissOverlays();
     setupPasswordToggles();
     setupSidebarProfileAvatarUpload();
     setupTeacherLoginModal();
@@ -6321,6 +7526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshCalendarDisplay();
         updateSummary();
     }
+    setupSidebarExpandableStickyBehavior();
     setupAddStudentModal();
     setupGoogleMeetModal();
     setupEditStudentModal();

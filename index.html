@@ -42,13 +42,13 @@
                     <div class="calendar-sticky-head">
                         <div class="calendar-grid">
                             <div class="time-header time-header--toolbar-host" id="calendarHeaderCorner" aria-label="Calendar tools"></div>
-                            <div class="day-header">Sunday</div>
-                            <div class="day-header">Monday</div>
-                            <div class="day-header">Tuesday</div>
-                            <div class="day-header">Wednesday</div>
-                            <div class="day-header">Thursday</div>
-                            <div class="day-header">Friday</div>
-                            <div class="day-header">Saturday</div>
+                            <div class="day-header">Sun</div>
+                            <div class="day-header">Mon</div>
+                            <div class="day-header">Tue</div>
+                            <div class="day-header">Wed</div>
+                            <div class="day-header">Thu</div>
+                            <div class="day-header">Fri</div>
+                            <div class="day-header">Sat</div>
                         </div>
                     </div>
 
@@ -94,7 +94,7 @@
         <div class="add-student-dialog" role="dialog" aria-labelledby="addStudentModalTitle">
             <h3 id="addStudentModalTitle" class="add-student-title">Add Teacher/Student</h3>
             <form id="addStudentForm" class="add-student-form">
-                <div class="add-student-name-row add-teacher-name-row is-hidden" id="addTeacherNameRow" aria-hidden="true">
+                <div class="add-student-name-row add-teacher-name-row add-student-form-row add-student-form-row--names is-hidden" id="addTeacherNameRow" aria-hidden="true">
                     <label class="add-student-label">
                         <span>First name</span>
                         <input type="text" id="addStudentFirst" name="firstName" autocomplete="given-name" maxlength="80">
@@ -110,46 +110,56 @@
                                 <img id="addStudentPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
                                 <select id="addStudentPhoneCountry" name="phoneCountry" aria-label="Country code"></select>
                             </div>
-                            <input type="tel" id="addStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="11 99999-9999">
+                            <input type="tel" id="addStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="(__) ____-____">
                         </div>
                     </label>
                 </div>
                 <div class="add-teacher-email-wrap is-hidden" id="addTeacherEmailWrap" aria-hidden="true">
-                    <label class="add-student-label" for="addTeacherEmail">
-                        <span>Email</span>
-                        <input type="email" id="addTeacherEmail" name="email" autocomplete="email" maxlength="120" placeholder="youremail@example.com">
-                    </label>
-                    <label class="add-student-label" for="addTeacherPassword">
-                        <span>Password</span>
-                        <div class="password-input-wrap">
-                            <input type="password" id="addTeacherPassword" name="password" autocomplete="new-password" minlength="8" maxlength="120" placeholder="Enter your password">
-                            <button type="button" id="addTeacherPasswordToggle" class="password-toggle-btn" aria-label="Show password" title="Show password" aria-pressed="false">
-                                <span class="password-toggle-btn-icon" aria-hidden="true"></span>
-                            </button>
-                        </div>
-                    </label>
+                    <div class="email-and-password">
+                        <label class="add-student-label" for="addTeacherEmail">
+                            <span>Email</span>
+                            <input type="email" id="addTeacherEmail" name="email" autocomplete="email" maxlength="120" placeholder="youremail@example.com">
+                        </label>
+                        <label class="add-student-label" for="addTeacherPassword">
+                            <span>Password</span>
+                            <div class="password-input-wrap">
+                                <input type="password" id="addTeacherPassword" name="password" autocomplete="new-password" minlength="8" maxlength="120" placeholder="Enter your password">
+                                <button type="button" id="addTeacherPasswordToggle" class="password-toggle-btn" aria-label="Show password" title="Show password" aria-pressed="false">
+                                    <span class="password-toggle-btn-icon" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                        </label>
+                    </div>
                     <p class="add-teacher-email-hint">Password must have at least 8 characters.</p>
                 </div>
                 <div class="add-student-label" id="addStudentSchoolWrap" aria-hidden="true">
                     <div class="add-student-location-row">
-                        <label class="add-student-label add-student-location-field add-student-location-field--school" for="addStudentSchool">
-                            <span>School's Name</span>
-                            <input type="text" id="addStudentSchool" name="school" autocomplete="organization" maxlength="120">
-                            <select id="addStudentSchoolSelect" name="schoolSelect" class="is-hidden" aria-hidden="true">
-                                <option value="" disabled selected hidden>Select a school</option>
-                            </select>
-                        </label>
                         <label class="add-student-label add-student-location-field" for="addStudentCity">
                             <span>City</span>
                             <input type="text" id="addStudentCity" name="city" autocomplete="address-level2" maxlength="80" placeholder="Your city">
                         </label>
-                        <label class="add-student-label add-student-location-field" for="addStudentState">
+                        <label class="add-student-label add-student-location-field add-student-location-field--state" for="addStudentState">
                             <span>State</span>
-                            <input type="text" id="addStudentState" name="state" autocomplete="address-level1" maxlength="80" placeholder="Your state">
+                            <input type="text" id="addStudentState" name="state" autocomplete="address-level1" maxlength="2" placeholder="SP" inputmode="text" autocapitalize="characters">
                         </label>
+                        <div class="add-student-location-field add-student-location-field--school">
+                            <label class="add-student-label add-student-school-field-label" for="addStudentSchool">
+                                <span>School's Name</span>
+                                <input type="text" id="addStudentSchool" name="school" autocomplete="organization" maxlength="120">
+                                <select id="addStudentSchoolSelect" name="schoolSelect" class="is-hidden" aria-hidden="true">
+                                    <option value="" disabled selected hidden>Select a school</option>
+                                </select>
+                            </label>
+                        </div>
                     </div>
                 </div>
-                <div id="addSchoolExternalWrap" class="add-school-external-wrap is-hidden" aria-hidden="true">
+                <div id="addStudentRowTeacherTheme" class="add-student-row-teacher-theme is-hidden" aria-hidden="true">
+                    <div class="add-student-teacher-wrap is-hidden" id="addStudentTeacherWrap" aria-hidden="true">
+                        <label class="add-student-label" for="addStudentTeacher">
+                            <span>Teacher</span>
+                            <select id="addStudentTeacher" name="teacher" aria-label="Teacher"></select>
+                        </label>
+                    </div>
                     <div id="addSchoolThemeWrap" class="add-school-theme-wrap">
                         <div class="add-school-theme-title">Color Theme</div>
                         <div class="add-school-theme-row">
@@ -168,6 +178,8 @@
                             <div id="addSchoolColorPopupOptions" class="school-settings-color-popup-options"></div>
                         </div>
                     </div>
+                </div>
+                <div id="addSchoolExternalWrap" class="add-school-external-wrap is-hidden" aria-hidden="true">
                     <div class="add-school-external-checkbox-row">
                         <input type="checkbox" id="addSchoolExternalCheckbox" name="schoolExternal" aria-label="Does this school use an external link (e.g. a spreadsheet)?">
                         <span>Does this school use an external link (e.g. a spreadsheet)?</span>
@@ -262,7 +274,6 @@
     <div id="editStudentModal" class="edit-student-modal" aria-hidden="true">
         <div class="edit-student-modal-backdrop" id="editStudentModalBackdrop"></div>
         <div class="edit-student-dialog" role="dialog" aria-labelledby="editStudentModalTitle">
-            <h3 id="editStudentModalTitle" class="edit-student-title">Edit student</h3>
             <form id="editStudentForm" class="edit-student-form">
                 <input type="hidden" id="editStudentOriginalName" name="originalName">
                 <input type="hidden" id="editStudentOriginalCategory" name="originalCategory">
@@ -283,12 +294,16 @@
                             <img id="editStudentPhoneCountryFlag" class="edit-student-phone-country-flag" alt="" aria-hidden="true">
                             <select id="editStudentPhoneCountry" name="phoneCountry" aria-label="Country"></select>
                         </div>
-                        <input type="tel" id="editStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="+55 11 99999-9999">
+                        <input type="tel" id="editStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="(__) _____-____">
                     </div>
                 </label>
                 <label class="edit-student-label">
                     <span>School's Name</span>
                     <select id="editStudentSchool" name="school" required></select>
+                </label>
+                <label class="edit-student-label" for="editStudentTeacher">
+                    <span>Teacher</span>
+                    <select id="editStudentTeacher" name="teacher" aria-label="Teacher"></select>
                 </label>
                 <div class="edit-student-actions">
                     <button type="button" class="btn-edit-student-delete" id="editStudentDelete">Delete student</button>
@@ -393,16 +408,16 @@
     <div id="teacherLoginModal" class="teacher-login-modal" aria-hidden="true">
         <div class="teacher-login-modal-backdrop" id="teacherLoginModalBackdrop"></div>
         <div class="teacher-login-dialog" role="dialog" aria-modal="true" aria-labelledby="teacherLoginModalTitle">
-            <h3 id="teacherLoginModalTitle" class="teacher-login-title">Teacher log in</h3>
+            <h3 id="teacherLoginModalTitle" class="teacher-login-title">Log in</h3>
             <form id="teacherLoginForm" class="teacher-login-form">
                 <label class="teacher-login-label" for="teacherLoginEmail">
-                    <span>Email</span>
-                    <input type="email" id="teacherLoginEmail" autocomplete="email" required maxlength="120" placeholder="youremail@example.com">
+                    <span>Email (teacher) or @FirstName / first name (student)</span>
+                    <input type="text" id="teacherLoginEmail" autocomplete="username" required maxlength="120" placeholder="you@example.com or @Alexandre">
                 </label>
                 <label class="teacher-login-label" for="teacherLoginPassword">
                     <span>Password</span>
                     <div class="password-input-wrap">
-                        <input type="password" id="teacherLoginPassword" autocomplete="current-password" required maxlength="120" placeholder="Enter your password">
+                        <input type="password" id="teacherLoginPassword" autocomplete="current-password" required maxlength="120" placeholder="Teacher password or phone (10–15 digits, with or without +55)">
                         <button type="button" id="teacherLoginPasswordToggle" class="password-toggle-btn" aria-label="Show password" title="Show password" aria-pressed="false">
                             <span class="password-toggle-btn-icon" aria-hidden="true"></span>
                         </button>
@@ -418,6 +433,27 @@
                     <button type="submit" class="btn-teacher-login-submit">Log In</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Student: reposition from teacher open (green) slot -->
+    <div id="studentRepositionModal" class="app-message-modal student-reposition-modal" aria-hidden="true">
+        <div class="app-message-modal-backdrop" id="studentRepositionModalBackdrop"></div>
+        <div class="app-message-dialog student-reposition-dialog" role="dialog" aria-modal="true" aria-labelledby="studentRepositionModalTitle">
+            <h3 id="studentRepositionModalTitle" class="app-message-title">Schedule a reposition</h3>
+            <div class="student-reposition-fields">
+                <label class="teacher-login-label" for="studentRepositionModalDay">
+                    <span>Day</span>
+                    <input type="text" id="studentRepositionModalDay" name="repositionDay" autocomplete="off" />
+                </label>
+                <label class="teacher-login-label" for="studentRepositionModalTime">
+                    <span>Time</span>
+                    <input type="text" id="studentRepositionModalTime" name="repositionTime" autocomplete="off" />
+                </label>
+            </div>
+            <div class="app-message-actions">
+                <button type="button" class="btn-app-message-ok" id="studentRepositionModalSchedule">Book your Class!</button>
+            </div>
         </div>
     </div>
 
