@@ -1631,10 +1631,15 @@ function applyAllSpeakOnStudentColorsToTeacherScheduleCopy(sched) {
 function syncSpeakOnWeeklyToAllTeacherSchedules() {
     teachersList.forEach((tName) => {
         const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
-        teacherSchedules[tName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
+        const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
+        const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
+        teacherSchedules[tName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(slotsOnly);
+        if (Object.keys(unavailableMeta).length > 0) {
+            teacherSchedules[tName][TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = unavailableMeta;
+        }
     });
     if (currentTeacher && isActiveTeacherName(currentTeacher)) {
-        slotStates = { ...teacherSchedules[currentTeacher] };
+        slotStates = getScheduleSlotMapWithoutMeta(teacherSchedules[currentTeacher]);
         if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
             refreshCalendarDisplay();
             updateSummary();
@@ -1659,6 +1664,9 @@ let calendarStudentPopoverOpen = false;
 let calendarStudentNamesInCellsVisible = false;
 let calendarLinkPopoverOpen = false;
 let calendarNameVisibleSchoolKeys = new Set();
+let calendarStudentPopoverHideTimer = null;
+let calendarPromptPopoverOpen = false;
+let calendarPromptSelectedDays = new Set(['Monday']);
 
 function getAllRosterStudentNamesSorted() {
     const names = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
@@ -1678,11 +1686,7 @@ function isStudentNameVisibleBySchoolFilter(name) {
 }
 
 function ensureCalendarSchoolFilterSelection() {
-    if (calendarNameVisibleSchoolKeys.size > 0) return;
-    getAvailableSchoolNames().forEach((schoolName) => {
-        const k = schoolThemeKey(schoolName);
-        if (k) calendarNameVisibleSchoolKeys.add(k);
-    });
+    // Keep current manual selection only; default remains all options OFF.
 }
 
 function getStudentNamesForTeacherSlot(day, hour, state) {
@@ -1727,6 +1731,21 @@ function getStudentNamesForTeacherSlot(day, hour, state) {
         }
     }
     return names;
+}
+
+function getSchoolManagedTeacherStateTokenForSlot(teacherName, day, hour) {
+    if (!teacherName || !isActiveTeacherName(teacherName)) return '';
+    const key = `${day}-${hour}`;
+    const aggregated = applyAllSpeakOnStudentColorsToTeacherScheduleCopy({});
+    const raw = String(aggregated[key] || '').trim().toLowerCase();
+    if (!raw) return '';
+    const resolved = resolveSchoolTokenInfoFromState(raw);
+    if (resolved?.token) return resolved.token;
+    return (parseSchoolStateToken(raw) || isLegacyOverlayState(raw)) ? raw : '';
+}
+
+function isSchoolManagedTeacherSlotLocked(day, hour) {
+    return !!getSchoolManagedTeacherStateTokenForSlot(currentTeacher, day, hour);
 }
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
@@ -1920,7 +1939,22 @@ function closeCalendarStudentNamesPopover() {
     const pop = document.getElementById('calendarStudentNamesPopover');
     const btn = document.getElementById('calendarToolbarStudentsBtn');
     if (pop) {
-        pop.hidden = true;
+        if (calendarStudentPopoverHideTimer) {
+            clearTimeout(calendarStudentPopoverHideTimer);
+            calendarStudentPopoverHideTimer = null;
+        }
+        pop.classList.remove('calendar-student-names-popover--enter');
+        if (!pop.hidden) {
+            pop.classList.add('calendar-student-names-popover--leave');
+            calendarStudentPopoverHideTimer = window.setTimeout(() => {
+                pop.hidden = true;
+                pop.classList.remove('calendar-student-names-popover--leave');
+                calendarStudentPopoverHideTimer = null;
+            }, 190);
+        } else {
+            pop.hidden = true;
+            pop.classList.remove('calendar-student-names-popover--leave');
+        }
     }
     if (btn) {
         btn.setAttribute('aria-expanded', 'false');
@@ -1935,9 +1969,18 @@ function toggleCalendarStudentNamesPopover(anchorEl) {
         closeCalendarStudentNamesPopover();
         return;
     }
+    if (calendarStudentPopoverHideTimer) {
+        clearTimeout(calendarStudentPopoverHideTimer);
+        calendarStudentPopoverHideTimer = null;
+    }
     renderCalendarStudentNamesList();
-    setCalendarStudentNamesInCellsVisible(true);
+    setCalendarStudentNamesInCellsVisible(calendarNameVisibleSchoolKeys.size > 0);
+    closeCalendarPromptPopover();
+    pop.classList.remove('calendar-student-names-popover--leave');
     pop.hidden = false;
+    pop.classList.remove('calendar-student-names-popover--enter');
+    void pop.offsetWidth;
+    pop.classList.add('calendar-student-names-popover--enter');
     calendarStudentPopoverOpen = true;
     anchorEl?.setAttribute('aria-expanded', 'true');
     positionCalendarStudentPopover(anchorEl);
@@ -1963,6 +2006,194 @@ function positionCalendarLinkPopover(anchorEl) {
     pop.style.top = `${top}px`;
 }
 
+function ensureCalendarPromptPopover() {
+    let pop = document.getElementById('calendarPromptPopover');
+    if (!pop) {
+        pop = document.createElement('div');
+        pop.id = 'calendarPromptPopover';
+        pop.className = 'calendar-prompt-popover';
+        pop.hidden = true;
+        pop.innerHTML =
+            '<h4 class="calendar-prompt-popover-title">Weekly Prompt</h4>' +
+            '<p class="calendar-prompt-popover-hint">Choose weekdays, then copy a ready-to-send text with class times only.</p>' +
+            '<ul id="calendarPromptDaysList" class="calendar-prompt-days-list"></ul>' +
+            '<div class="calendar-prompt-popover-actions">' +
+            '  <button type="button" id="calendarPromptCancelBtn" class="calendar-prompt-popover-btn calendar-prompt-popover-btn--cancel">Close</button>' +
+            '  <button type="button" id="calendarPromptCopyBtn" class="calendar-prompt-popover-btn calendar-prompt-popover-btn--copy">Copy text</button>' +
+            '</div>';
+        document.body.appendChild(pop);
+    }
+    if (pop.dataset.actionsBound !== '1') {
+        pop.dataset.actionsBound = '1';
+        const promptCopyBtn = pop.querySelector('#calendarPromptCopyBtn');
+        const promptCloseBtn = pop.querySelector('#calendarPromptCancelBtn');
+        promptCopyBtn?.addEventListener('click', () => copyWeeklyPromptFromCalendar());
+        promptCloseBtn?.addEventListener('click', () => closeCalendarPromptPopover());
+    }
+}
+
+function renderCalendarPromptDayOptions() {
+    const list = document.getElementById('calendarPromptDaysList');
+    if (!list) return;
+    list.innerHTML = '';
+    DAYS.forEach((dayName) => {
+        const li = document.createElement('li');
+        li.className = 'calendar-prompt-day-item';
+        const label = document.createElement('label');
+        label.className = 'calendar-prompt-day-option';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = calendarPromptSelectedDays.has(dayName);
+        input.dataset.day = dayName;
+        input.addEventListener('change', () => {
+            const day = String(input.dataset.day || '').trim();
+            if (!day) return;
+            if (input.checked) calendarPromptSelectedDays.add(day);
+            else calendarPromptSelectedDays.delete(day);
+        });
+        const text = document.createElement('span');
+        text.textContent = dayName;
+        label.appendChild(input);
+        label.appendChild(text);
+        li.appendChild(label);
+        list.appendChild(li);
+    });
+}
+
+function positionCalendarPromptPopover(anchorEl) {
+    const pop = document.getElementById('calendarPromptPopover');
+    if (!pop || !anchorEl) return;
+    const r = anchorEl.getBoundingClientRect();
+    const pad = 8;
+    let left = r.left;
+    let top = r.bottom + pad;
+    const w = pop.offsetWidth || 320;
+    const h = pop.offsetHeight || 260;
+    if (left + w > window.innerWidth - pad) {
+        left = Math.max(pad, window.innerWidth - w - pad);
+    }
+    if (top + h > window.innerHeight - pad) {
+        top = Math.max(pad, r.top - h - pad);
+    }
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+}
+
+function closeCalendarPromptPopover() {
+    const pop = document.getElementById('calendarPromptPopover');
+    const btn = document.getElementById('classReportWeeklyPromptBtn');
+    if (pop) {
+        pop.hidden = true;
+        pop.classList.remove('calendar-prompt-popover--enter');
+    }
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+    calendarPromptPopoverOpen = false;
+}
+
+function getNextDateForWeekday(dayName, now = new Date()) {
+    const todayIndex = now.getDay();
+    const targetIndex = DAYS.findIndex((d) => d === dayName);
+    if (targetIndex === -1) return null;
+    const offset = (targetIndex - todayIndex + 7) % 7;
+    const date = new Date(now);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + offset);
+    return date;
+}
+
+function getScheduledTeacherHoursForDay(dayName) {
+    const hours = [];
+    for (let hour = START_HOUR; hour < END_HOUR; hour++) {
+        const state = String(getSlotState(dayName, hour) || '').trim().toLowerCase();
+        if (!state || state === 'available') continue;
+        hours.push(hour);
+    }
+    return hours;
+}
+
+function buildTeacherWeeklyPromptFromSelectedDays() {
+    const selectedDays = DAYS.filter((d) => calendarPromptSelectedDays.has(d));
+    if (selectedDays.length === 0) return '';
+    const blocks = [];
+    selectedDays.forEach((dayName) => {
+        const hours = getScheduledTeacherHoursForDay(dayName);
+        if (hours.length === 0) return;
+        const date = getNextDateForWeekday(dayName);
+        if (!date) return;
+        const month = date.toLocaleString('en-US', { month: 'long' });
+        const dayNum = date.getDate();
+        const title = `*${month}, ${dayNum}${getOrdinalSuffix(dayNum)} — ${dayName}*`;
+        const lines = [title];
+        let prevHour = null;
+        hours.forEach((hour) => {
+            if (prevHour != null && hour - prevHour > 1) {
+                lines.push('');
+            }
+            lines.push(`${formatHour(hour)} —`);
+            prevHour = hour;
+        });
+        blocks.push(lines.join('\n'));
+    });
+    return blocks.join('\n\n');
+}
+
+async function copyWeeklyPromptFromCalendar() {
+    if (!currentTeacher) {
+        showAppMessage('Please select a teacher first.');
+        return;
+    }
+    if (calendarPromptSelectedDays.size === 0) {
+        showAppMessage('Select at least one weekday.');
+        return;
+    }
+    const text = buildTeacherWeeklyPromptFromSelectedDays();
+    if (!text) {
+        showAppMessage('No scheduled classes found for selected days.');
+        return;
+    }
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', 'true');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+        showAppMessage('Weekly prompt copied.');
+    } catch (error) {
+        console.error('Error copying weekly prompt:', error);
+        showAppMessage('Could not copy text. Please try again.');
+    }
+}
+
+function toggleCalendarPromptPopover(anchorEl) {
+    ensureCalendarPromptPopover();
+    const pop = document.getElementById('calendarPromptPopover');
+    if (!pop) return;
+    if (calendarPromptPopoverOpen) {
+        closeCalendarPromptPopover();
+        return;
+    }
+    renderCalendarPromptDayOptions();
+    closeCalendarStudentNamesPopover();
+    closeCalendarLinkPopover();
+    pop.hidden = false;
+    pop.classList.remove('calendar-prompt-popover--enter');
+    void pop.offsetWidth;
+    pop.classList.add('calendar-prompt-popover--enter');
+    calendarPromptPopoverOpen = true;
+    anchorEl?.setAttribute('aria-expanded', 'true');
+    positionCalendarPromptPopover(anchorEl);
+    requestAnimationFrame(() => positionCalendarPromptPopover(anchorEl));
+}
+
 function closeCalendarLinkPopover() {
     const pop = document.getElementById('calendarLinkPopover');
     if (pop) pop.hidden = true;
@@ -1974,6 +2205,7 @@ function openCalendarLinkPopover(anchorEl) {
     const input = document.getElementById('calendarLinkInput');
     if (!pop || !input) return;
     closeCalendarStudentNamesPopover();
+    closeCalendarPromptPopover();
     input.value = String(calendarToolbarExternalLink || '').trim();
     pop.hidden = false;
     calendarLinkPopoverOpen = true;
@@ -2017,21 +2249,32 @@ function setupCalendarStudentPopoverDismiss() {
     document.addEventListener('click', (e) => {
         const pop = document.getElementById('calendarStudentNamesPopover');
         const linkPop = document.getElementById('calendarLinkPopover');
+        const promptPop = document.getElementById('calendarPromptPopover');
         const t = e.target;
         if (!pop || pop.hidden) return;
-        if (pop.contains(t) || (linkPop && linkPop.contains(t))) return;
+        if (pop.contains(t) || (linkPop && linkPop.contains(t)) || (promptPop && promptPop.contains(t))) return;
         const btn = document.getElementById('calendarToolbarStudentsBtn');
         if (btn && btn.contains(t)) return;
         closeCalendarStudentNamesPopover();
     });
     document.addEventListener('click', (e) => {
         const pop = document.getElementById('calendarLinkPopover');
+        const promptPop = document.getElementById('calendarPromptPopover');
         const t = e.target;
         if (!pop || pop.hidden) return;
-        if (pop.contains(t)) return;
+        if (pop.contains(t) || (promptPop && promptPop.contains(t))) return;
         const btn = document.getElementById('calendarToolbarCalendarBtn');
         if (btn && btn.contains(t)) return;
         closeCalendarLinkPopover();
+    });
+    document.addEventListener('click', (e) => {
+        const pop = document.getElementById('calendarPromptPopover');
+        const t = e.target;
+        if (!pop || pop.hidden) return;
+        if (pop.contains(t)) return;
+        const btn = document.getElementById('classReportWeeklyPromptBtn');
+        if (btn && btn.contains(t)) return;
+        closeCalendarPromptPopover();
     });
     window.addEventListener('resize', () => {
         const btn = document.getElementById('calendarToolbarStudentsBtn');
@@ -2041,6 +2284,10 @@ function setupCalendarStudentPopoverDismiss() {
         const linkBtn = document.getElementById('calendarToolbarCalendarBtn');
         if (calendarLinkPopoverOpen && linkBtn) {
             positionCalendarLinkPopover(linkBtn);
+        }
+        const promptBtn = document.getElementById('classReportWeeklyPromptBtn');
+        if (calendarPromptPopoverOpen && promptBtn) {
+            positionCalendarPromptPopover(promptBtn);
         }
     });
     const saveBtn = document.getElementById('calendarLinkSaveBtn');
@@ -2162,6 +2409,10 @@ const CALENDAR_TOOLBAR_CALENDAR_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
     '<path d="M12 11.993a.75.75 0 0 0-.75.75v.006c0 .414.336.75.75.75h.006a.75.75 0 0 0 .75-.75v-.006a.75.75 0 0 0-.75-.75H12ZM12 16.494a.75.75 0 0 0-.75.75v.005c0 .414.335.75.75.75h.005a.75.75 0 0 0 .75-.75v-.005a.75.75 0 0 0-.75-.75H12ZM8.999 17.244a.75.75 0 0 1 .75-.75h.006a.75.75 0 0 1 .75.75v.006a.75.75 0 0 1-.75.75h-.006a.75.75 0 0 1-.75-.75v-.006ZM7.499 16.494a.75.75 0 0 0-.75.75v.005c0 .414.336.75.75.75h.005a.75.75 0 0 0 .75-.75v-.005a.75.75 0 0 0-.75-.75H7.5ZM13.499 14.997a.75.75 0 0 1 .75-.75h.006a.75.75 0 0 1 .75.75v.005a.75.75 0 0 1-.75.75h-.006a.75.75 0 0 1-.75-.75v-.005ZM14.25 16.494a.75.75 0 0 0-.75.75v.006c0 .414.335.75.75.75h.005a.75.75 0 0 0 .75-.75v-.006a.75.75 0 0 0-.75-.75h-.005ZM15.75 14.995a.75.75 0 0 1 .75-.75h.005a.75.75 0 0 1 .75.75v.006a.75.75 0 0 1-.75.75H16.5a.75.75 0 0 1-.75-.75v-.006ZM13.498 12.743a.75.75 0 0 1 .75-.75h2.25a.75.75 0 1 1 0 1.5h-2.25a.75.75 0 0 1-.75-.75ZM6.748 14.993a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Z" />' +
     '<path fill-rule="evenodd" d="M18 2.993a.75.75 0 0 0-1.5 0v1.5h-9V2.994a.75.75 0 1 0-1.5 0v1.497h-.752a3 3 0 0 0-3 3v11.252a3 3 0 0 0 3 3h13.5a3 3 0 0 0 3-3V7.492a3 3 0 0 0-3-3H18V2.993ZM3.748 18.743v-7.5a1.5 1.5 0 0 1 1.5-1.5h13.5a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5h-13.5a1.5 1.5 0 0 1-1.5-1.5Z" clip-rule="evenodd" />' +
+    '</svg>';
+const CALENDAR_TOOLBAR_PROMPT_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
+    '<path fill-rule="evenodd" d="M3.25 4A2.75 2.75 0 0 1 6 1.25h8A2.75 2.75 0 0 1 16.75 4v12A2.75 2.75 0 0 1 14 18.75H6A2.75 2.75 0 0 1 3.25 16V4ZM6 2.75A1.25 1.25 0 0 0 4.75 4v12A1.25 1.25 0 0 0 6 17.25h8A1.25 1.25 0 0 0 15.25 16V4A1.25 1.25 0 0 0 14 2.75H6Zm1.25 2.5a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 0 1.5H8a.75.75 0 0 1-.75-.75ZM7 8a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 7 8Zm0 2.75A.75.75 0 0 1 7.75 10h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Zm0 2.75a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" />' +
     '</svg>';
 
 const CLASS_REPORT_STATUS_OPTIONS = [
@@ -2810,6 +3061,57 @@ let contextMenu = null;
 let currentSlot = null;
 let currentContextMenuMode = 'school';
 const teacherUnavailableStudentNamesByTeacher = {};
+const TEACHER_UNAVAILABLE_STUDENTS_META_KEY = '__unavailableStudentNames';
+
+function getScheduleSlotMapWithoutMeta(schedule) {
+    const out = {};
+    if (!schedule || typeof schedule !== 'object') return out;
+    Object.entries(schedule).forEach(([key, value]) => {
+        if (key === TEACHER_UNAVAILABLE_STUDENTS_META_KEY) return;
+        out[key] = value;
+    });
+    return out;
+}
+
+function getUnavailableStudentNamesMetaFromSchedule(schedule) {
+    if (!schedule || typeof schedule !== 'object') return {};
+    const raw = schedule[TEACHER_UNAVAILABLE_STUDENTS_META_KEY];
+    if (!raw || typeof raw !== 'object') return {};
+    const cleaned = {};
+    Object.entries(raw).forEach(([slotKey, studentName]) => {
+        const key = String(slotKey || '').trim();
+        const name = String(studentName || '').trim();
+        if (!key || !name) return;
+        cleaned[key] = name;
+    });
+    return cleaned;
+}
+
+function withUnavailableStudentNamesMeta(teacherName, schedule) {
+    const next = { ...(schedule || {}) };
+    if (!isActiveTeacherName(teacherName)) {
+        delete next[TEACHER_UNAVAILABLE_STUDENTS_META_KEY];
+        return next;
+    }
+    const byTeacher = teacherUnavailableStudentNamesByTeacher[teacherName];
+    if (!byTeacher || typeof byTeacher !== 'object') {
+        delete next[TEACHER_UNAVAILABLE_STUDENTS_META_KEY];
+        return next;
+    }
+    const cleaned = {};
+    Object.entries(byTeacher).forEach(([slotKey, studentName]) => {
+        const key = String(slotKey || '').trim();
+        const name = String(studentName || '').trim();
+        if (!key || !name) return;
+        cleaned[key] = name;
+    });
+    if (Object.keys(cleaned).length === 0) {
+        delete next[TEACHER_UNAVAILABLE_STUDENTS_META_KEY];
+        return next;
+    }
+    next[TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = cleaned;
+    return next;
+}
 
 // Cloudflare API endpoint
 const API_ENDPOINT = '/api/schedules';
@@ -3325,8 +3627,22 @@ function renderSidebar() {
     classReportDownloadBtn.setAttribute('aria-label', 'Download class report as PDF');
     classReportDownloadBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
+    const classReportPromptBtn = document.createElement('button');
+    classReportPromptBtn.type = 'button';
+    classReportPromptBtn.className = 'sidebar-class-report-prompt-btn';
+    classReportPromptBtn.id = 'classReportWeeklyPromptBtn';
+    classReportPromptBtn.title = 'Copy weekly prompt';
+    classReportPromptBtn.setAttribute('aria-label', 'Copy weekly prompt');
+    classReportPromptBtn.setAttribute('aria-expanded', 'false');
+    classReportPromptBtn.innerHTML = CALENDAR_TOOLBAR_PROMPT_SVG;
+    classReportPromptBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        toggleCalendarPromptPopover(classReportPromptBtn);
+    });
     const classReportHeaderActions = document.createElement('div');
     classReportHeaderActions.className = 'sidebar-section-actions';
+    classReportHeaderActions.appendChild(classReportPromptBtn);
     classReportHeaderActions.appendChild(classReportDownloadBtn);
     classReportHeader.appendChild(classReportHeaderTitle);
     classReportHeader.appendChild(classReportHeaderActions);
@@ -6376,7 +6692,8 @@ function saveTeacherSchedule(teacherName) {
     if (!teacherName) return;
     const copy = { ...slotStates };
     if (isActiveTeacherName(teacherName)) {
-        teacherSchedules[teacherName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(copy);
+        const nextTeacherSlots = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(copy);
+        teacherSchedules[teacherName] = withUnavailableStudentNamesMeta(teacherName, nextTeacherSlots);
     } else {
         let next = mergeSpeakonWeeklyClassIntoScheduleCopy(copy, teacherName);
         if (isStudentName(teacherName)) {
@@ -6393,7 +6710,7 @@ function saveTeacherSchedule(teacherName) {
  * Processed slot map for a roster name (teacher profile or student), without mutating globals.
  */
 function computeSlotStatesForProfile(name) {
-    const raw = teacherSchedules[name] ? { ...teacherSchedules[name] } : {};
+    const raw = teacherSchedules[name] ? getScheduleSlotMapWithoutMeta(teacherSchedules[name]) : {};
     if (isActiveTeacherName(name)) {
         return applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
     }
@@ -6430,7 +6747,9 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
 
 // Load schedule from teacherSchedules
 function loadTeacherSchedule(teacherName) {
-    const raw = teacherSchedules[teacherName] ? { ...teacherSchedules[teacherName] } : {};
+    const rawSchedule = teacherSchedules[teacherName] ? { ...teacherSchedules[teacherName] } : {};
+    const raw = getScheduleSlotMapWithoutMeta(rawSchedule);
+    const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(rawSchedule);
     if (
         loggedInStudentFullName &&
         String(teacherName || '').trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
@@ -6442,8 +6761,9 @@ function loadTeacherSchedule(teacherName) {
         }
     }
     if (isActiveTeacherName(teacherName)) {
+        teacherUnavailableStudentNamesByTeacher[teacherName] = unavailableMeta;
         slotStates = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
-        teacherSchedules[teacherName] = { ...slotStates };
+        teacherSchedules[teacherName] = withUnavailableStudentNamesMeta(teacherName, { ...slotStates });
     } else {
         slotStates = mergeSpeakonWeeklyClassIntoScheduleCopy(raw, teacherName);
         if (isStudentName(teacherName)) {
@@ -6491,7 +6811,6 @@ function initCalendarHeaderToolbar() {
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
         '<path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />' +
         '</svg>';
-
     toolbar.appendChild(btnCalendar);
     toolbar.appendChild(btnStudents);
     toolbar.appendChild(btnClear);
@@ -6524,6 +6843,7 @@ function initCalendarHeaderToolbar() {
         e.preventDefault();
         closeCalendarStudentNamesPopover();
         closeCalendarLinkPopover();
+        closeCalendarPromptPopover();
         clearAll();
     });
 }
@@ -6704,6 +7024,20 @@ function setSlotState(day, hour, state) {
     
     if (!slot) return;
 
+    if (isActiveTeacherName(currentTeacher)) {
+        const managedToken = getSchoolManagedTeacherStateTokenForSlot(currentTeacher, day, hour);
+        if (managedToken) {
+            const normalizedNext = String(state || '').trim().toLowerCase();
+            const resolvedNext = resolveSchoolTokenInfoFromState(normalizedNext);
+            const normalizedManaged = String(managedToken || '').trim().toLowerCase();
+            const normalizedResolvedNext = String(resolvedNext?.token || normalizedNext || '').trim().toLowerCase();
+            if (normalizedResolvedNext !== normalizedManaged) {
+                showAppMessage('This class is managed by Schools and cannot be edited here.');
+                return;
+            }
+        }
+    }
+
     const normalizedState = String(state || '').trim().toLowerCase();
     if (normalizedState !== 'unavailable') {
         const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
@@ -6734,6 +7068,10 @@ function cycleSlotState(day, hour) {
         if (String(st || '').trim().toLowerCase() === 'available') {
             openStudentRepositionModal(day, hour);
         }
+        return;
+    }
+    if (isSchoolManagedTeacherSlotLocked(day, hour)) {
+        showAppMessage('This class is managed by Schools and cannot be edited here.');
         return;
     }
 
@@ -7241,8 +7579,16 @@ function selectAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
+                if (isSchoolManagedTeacherSlotLocked(day, hour)) {
+                    return;
+                }
                 slotStates[key] = 'available';
                 applyStateVisualToSlot(slot, 'available');
+                renderStudentNamesInSlot(slot, day, hour, 'available');
+                const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
+                if (byTeacher && Object.prototype.hasOwnProperty.call(byTeacher, key)) {
+                    delete byTeacher[key];
+                }
             }
         });
     }
@@ -7266,8 +7612,13 @@ function clearAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
+                const currentState = String(slotStates[key] || '').trim().toLowerCase();
+                if (currentState !== 'available') {
+                    return;
+                }
                 slotStates[key] = null;
                 applyStateVisualToSlot(slot, null);
+                renderStudentNamesInSlot(slot, day, hour, null);
             }
         });
     }
