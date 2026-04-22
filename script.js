@@ -24,28 +24,26 @@ const SCHOOL_THEME_PALETTE_GROUPS = [
 const SCHOOL_THEME_COLOR_SET = new Set(SCHOOL_THEME_COLORS.map((c) => c.toLowerCase()));
 const PHONE_COUNTRY_OPTIONS = [
     { iso: 'BR', flag: '🇧🇷', name: 'Brazil', dialCode: '+55', sample: '(__) _____-____' },
-    { iso: 'US', flag: '🇺🇸', name: 'United States', dialCode: '+1', sample: '(555) 123-4567' },
-    { iso: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', sample: '(555) 123-4567' },
-    { iso: 'GB', flag: '🇬🇧', name: 'United Kingdom', dialCode: '+44', sample: '7400 123456' },
-    { iso: 'PT', flag: '🇵🇹', name: 'Portugal', dialCode: '+351', sample: '912 345 678' },
-    { iso: 'ES', flag: '🇪🇸', name: 'Spain', dialCode: '+34', sample: '612 34 56 78' },
-    { iso: 'FR', flag: '🇫🇷', name: 'France', dialCode: '+33', sample: '6 12 34 56 78' },
-    { iso: 'DE', flag: '🇩🇪', name: 'Germany', dialCode: '+49', sample: '1512 3456789' },
-    { iso: 'IT', flag: '🇮🇹', name: 'Italy', dialCode: '+39', sample: '312 345 6789' },
-    { iso: 'IE', flag: '🇮🇪', name: 'Ireland', dialCode: '+353', sample: '85 123 4567' },
-    { iso: 'MX', flag: '🇲🇽', name: 'Mexico', dialCode: '+52', sample: '55 1234 5678' },
-    { iso: 'AR', flag: '🇦🇷', name: 'Argentina', dialCode: '+54', sample: '9 11 1234-5678' },
-    { iso: 'CL', flag: '🇨🇱', name: 'Chile', dialCode: '+56', sample: '9 1234 5678' },
-    { iso: 'CO', flag: '🇨🇴', name: 'Colombia', dialCode: '+57', sample: '300 123 4567' },
-    { iso: 'PE', flag: '🇵🇪', name: 'Peru', dialCode: '+51', sample: '912 345 678' },
-    { iso: 'AU', flag: '🇦🇺', name: 'Australia', dialCode: '+61', sample: '412 345 678' },
-    { iso: 'NZ', flag: '🇳🇿', name: 'New Zealand', dialCode: '+64', sample: '21 123 4567' },
-    { iso: 'JP', flag: '🇯🇵', name: 'Japan', dialCode: '+81', sample: '90-1234-5678' },
-    { iso: 'KR', flag: '🇰🇷', name: 'South Korea', dialCode: '+82', sample: '10-1234-5678' },
-    { iso: 'IN', flag: '🇮🇳', name: 'India', dialCode: '+91', sample: '91234 56789' }
+    { iso: 'GB', flag: '🇬🇧', name: 'United Kingdom', dialCode: '+44', sample: '____ ______' },
+    { iso: 'IE', flag: '🇮🇪', name: 'Ireland', dialCode: '+353', sample: '__ ___ ____' },
+    { iso: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', sample: '(___) ___-____' }
 ];
 const DEFAULT_PHONE_COUNTRY_ISO = 'BR';
-const BRAZIL_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%2036%2036%22%3E%3Cpath%20fill%3D%22%23009B3A%22%20d%3D%22M36%2027a4%204%200%200%201-4%204H4a4%204%200%200%201-4-4V9a4%204%200%200%201%204-4h28a4%204%200%200%201%204%204v18z%22/%3E%3Cpath%20fill%3D%22%23FEDF01%22%20d%3D%22M32.728%2018L18%2029.124L3.272%2018L18%206.875z%22/%3E%3Ccircle%20cx%3D%2217.976%22%20cy%3D%2217.924%22%20r%3D%226.458%22%20fill%3D%22%23002776%22/%3E%3Cpath%20fill%3D%22%23CBE9D4%22%20d%3D%22M12.277%2014.887a6.406%206.406%200%200%200-.672%202.023c3.995-.29%209.417%201.891%2011.744%204.595c.402-.604.7-1.28.883-2.004c-2.872-2.808-7.917-4.63-11.955-4.614z%22/%3E%3Cpath%20fill%3D%22%2388C9F9%22%20d%3D%22M12%2018.233h1v1h-1zm1%202h1v1h-1z%22/%3E%3Cpath%20fill%3D%22%2355ACEE%22%20d%3D%22M15%2018.233h1v1h-1zm2%201h1v1h-1zm4%202h1v1h-1zm-3%201h1v1h-1zm3-6h1v1h-1z%22/%3E%3Cpath%20fill%3D%22%233B88C3%22%20d%3D%22M19%2020.233h1v1h-1z%22/%3E%3C/svg%3E';
+const BRAZIL_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsBr0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsBr0)%22%3E%3Cpath%20fill%3D%22%236da544%22%20d%3D%22M0%200h512v512H0z%22/%3E%3Cpath%20fill%3D%22%23ffda44%22%20d%3D%22M256%20100.2L467.5%20256L256%20411.8L44.5%20256z%22/%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22M174.2%20221a87%2087%200%200%200-7.2%2036.3l162%2049.8a88.5%2088.5%200%200%200%2014.4-34c-40.6-65.3-119.7-80.3-169.1-52z%22/%3E%3Cpath%20fill%3D%22%230052b4%22%20d%3D%22M255.7%20167a89%2089%200%200%200-41.9%2010.6a89%2089%200%200%200-39.6%2043.4a181.7%20181.7%200%200%201%20169.1%2052.2a89%2089%200%200%200-9-59.4a89%2089%200%200%200-78.6-46.8zM212%20250.5a149%20149%200%200%200-45%206.8a89%2089%200%200%200%2010.5%2040.9a89%2089%200%200%200%20120.6%2036.2a89%2089%200%200%200%2030.7-27.3A151%20151%200%200%200%20212%20250.5z%22/%3E%3C/g%3E%3C/svg%3E';
+const IRELAND_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsCi0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsCi0)%22%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22M167%200h178l31%20253.2L345%20512H167l-33.4-257.4z%22/%3E%3Cpath%20fill%3D%22%23ff9811%22%20d%3D%22M0%200h167v512H0z%22/%3E%3Cpath%20fill%3D%22%236da544%22%20d%3D%22M345%200h167v512H345z%22/%3E%3C/g%3E%3C/svg%3E';
+const UNITED_KINGDOM_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20width%3D%22200%22%20height%3D%22200%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsEn0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsEn0)%22%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22m0%200l8%2022l-8%2023v23l32%2054l-32%2054v32l32%2048l-32%2048v32l32%2054l-32%2054v68l22-8l23%208h23l54-32l54%2032h32l48-32l48%2032h32l54-32l54%2032h68l-8-22l8-23v-23l-32-54l32-54v-32l-32-48l32-48v-32l-32-54l32-54V0l-22%208l-23-8h-23l-54%2032l-54-32h-32l-48%2032l-48-32h-32l-54%2032L68%200z%22/%3E%3Cpath%20fill%3D%22%230052b4%22%20d%3D%22M336%200v108L444%200Zm176%2068L404%20176h108zM0%20176h108L0%2068ZM68%200l108%20108V0Zm108%20512V404L68%20512ZM0%20444l108-108H0Zm512-108H404l108%20108Zm-68%20176L336%20404v108z%22/%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M0%200v45l131%20131h45zm208%200v208H0v96h208v208h96V304h208v-96H304V0zm259%200L336%20131v45L512%200zM176%20336L0%20512h45l131-131zm160%200l176%20176v-45L381%20336z%22/%3E%3C/g%3E%3C/svg%3E';
+const CANADA_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsCa0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsCa0)%22%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M0%200v512h144l112-64l112%2064h144V0H368L256%2064L144%200Z%22/%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22M144%200h224v512H144Z%22/%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22m301%20289l44-22l-22-11v-22l-45%2022l23-44h-23l-22-34l-22%2033h-23l23%2045l-45-22v22l-22%2011l45%2022l-12%2023h45v33h22v-33h45z%22/%3E%3C/g%3E%3C/svg%3E';
+const PHONE_COUNTRY_FLAG_DATA_URIS = {
+    BR: BRAZIL_FLAG_SVG_DATA_URI,
+    GB: UNITED_KINGDOM_FLAG_SVG_DATA_URI,
+    IE: IRELAND_FLAG_SVG_DATA_URI,
+    CA: CANADA_FLAG_SVG_DATA_URI
+};
+
+function getPhoneCountryFlagImageSrc(countryIso) {
+    const iso = String(countryIso || '').trim().toUpperCase();
+    return PHONE_COUNTRY_FLAG_DATA_URIS[iso] || BRAZIL_FLAG_SVG_DATA_URI;
+}
 
 /** @type {Record<string, Array<Record<string, string>>>} */
 let studentClassReportRows = {};
@@ -60,6 +58,11 @@ let studentSchoolByName = {};
 let studentPhonesByName = {};
 /** Display / assignment: instructor name per student (optional). */
 let studentTeacherByName = {};
+/** Optional account / location fields for roster students (persisted with roster). */
+let studentEmailsByName = {};
+let studentPasswordsByName = {};
+let studentCityByName = {};
+let studentCountryByName = {};
 let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
@@ -745,6 +748,57 @@ function getDialCodeDigitsForCountryIso(iso) {
     return c ? digitsOnly(c.dialCode) : '';
 }
 
+function stripLeadingCountryDigitsFromFormattedPhone(formatted, dialDigits) {
+    if (!dialDigits) return String(formatted || '').trim();
+    const all = digitsOnly(formatted);
+    if (!all.startsWith(dialDigits)) return String(formatted || '').trim();
+    let toDrop = dialDigits.length;
+    let out = '';
+    for (const ch of formatted) {
+        if (/\d/.test(ch)) {
+            if (toDrop > 0) {
+                toDrop--;
+                continue;
+            }
+        }
+        out += ch;
+    }
+    return out.replace(/^[\s\-()./]+/, '').trim();
+}
+
+/**
+ * Removes a duplicate country calling code from the start of `raw` when it matches `countryIso`.
+ * Roster `number` is stored as the national/local part only; the flag selector holds the dial code.
+ */
+function normalizeStudentPhoneLocalInput(raw, countryIso) {
+    const iso = String(countryIso || '').trim().toUpperCase();
+    const c =
+        PHONE_COUNTRY_OPTIONS.find((item) => item.iso === iso)
+        || PHONE_COUNTRY_OPTIONS.find((item) => item.iso === DEFAULT_PHONE_COUNTRY_ISO)
+        || PHONE_COUNTRY_OPTIONS[0];
+    const dial = String(c?.dialCode || '').trim();
+    let s = String(raw || '').trim();
+    if (!s || !dial) return s;
+
+    const dialEsc = dial.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    s = s.replace(new RegExp(`^\\s*00\\s*${dialEsc}\\s*`, 'i'), '').trim();
+    s = s.replace(new RegExp(`^\\s*${dialEsc}\\s*`, 'i'), '').trim();
+    s = s.replace(/^\s*00\s*/, '').trim();
+
+    const dialDigits = digitsOnly(dial);
+    if (dialDigits) {
+        s = stripLeadingCountryDigitsFromFormattedPhone(s, dialDigits);
+    }
+    return s.trim();
+}
+
+function syncPhoneInputWithCountrySelector(phoneInput, countrySelect) {
+    if (!phoneInput || !countrySelect) return;
+    if (!String(phoneInput.value || '').trim()) return;
+    const next = normalizeStudentPhoneLocalInput(phoneInput.value, countrySelect.value);
+    if (next !== phoneInput.value) phoneInput.value = next;
+}
+
 /**
  * Digit strings that count as the same phone for student login (national and international forms).
  */
@@ -974,6 +1028,10 @@ function initRoster() {
         studentSchoolByName = {};
         studentPhonesByName = {};
         studentTeacherByName = {};
+        studentEmailsByName = {};
+        studentPasswordsByName = {};
+        studentCityByName = {};
+        studentCountryByName = {};
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
         customSchoolsList = [];
@@ -1021,8 +1079,8 @@ function initRoster() {
         const normalizedIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === countryIso)
             ? countryIso
             : DEFAULT_PHONE_COUNTRY_ISO;
-        const number = String(entry.number || '').trim();
-        if (!number) return;
+        const number = normalizeStudentPhoneLocalInput(String(entry.number || ''), normalizedIso);
+        if (!number || !digitsOnly(number)) return;
         studentPhonesByName[name] = { countryIso: normalizedIso, number };
     });
     const teachersRaw =
@@ -1033,6 +1091,42 @@ function initRoster() {
     [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
         const t = String(teachersRaw[name] || '').trim();
         if (t) studentTeacherByName[name] = t;
+    });
+    const studentEmailsRaw =
+        saved.studentEmails && typeof saved.studentEmails === 'object' && !Array.isArray(saved.studentEmails)
+            ? { ...saved.studentEmails }
+            : {};
+    studentEmailsByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const e = String(studentEmailsRaw[name] || '').trim();
+        if (e) studentEmailsByName[name] = e;
+    });
+    const studentPasswordsRaw =
+        saved.studentPasswords && typeof saved.studentPasswords === 'object' && !Array.isArray(saved.studentPasswords)
+            ? { ...saved.studentPasswords }
+            : {};
+    studentPasswordsByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const p = String(studentPasswordsRaw[name] || '').trim();
+        if (p) studentPasswordsByName[name] = p;
+    });
+    const studentCitiesRaw =
+        saved.studentCities && typeof saved.studentCities === 'object' && !Array.isArray(saved.studentCities)
+            ? { ...saved.studentCities }
+            : {};
+    studentCityByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const c = String(studentCitiesRaw[name] || '').trim();
+        if (c) studentCityByName[name] = c;
+    });
+    const studentCountriesRaw =
+        saved.studentCountries && typeof saved.studentCountries === 'object' && !Array.isArray(saved.studentCountries)
+            ? { ...saved.studentCountries }
+            : {};
+    studentCountryByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const c = String(studentCountriesRaw[name] || '').trim();
+        if (c) studentCountryByName[name] = c;
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -3036,6 +3130,10 @@ function saveRoster() {
             speakonWeeklyClass: speakonStudentWeeklyClass,
             studentPhones: studentPhonesByName,
             studentTeachers: studentTeacherByName,
+            studentEmails: studentEmailsByName,
+            studentPasswords: studentPasswordsByName,
+            studentCities: studentCityByName,
+            studentCountries: studentCountryByName,
             studentGoogleMeetLinks: studentGoogleMeetLinksByName,
             googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey
         }));
@@ -3777,6 +3875,13 @@ function renderSidebar() {
         .filter((g) => !loggedInStudentFullName || g.names.length > 0)
         .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
 
+    if (studentCategories.length === 0) {
+        const schoolsPlaceholder = document.createElement('p');
+        schoolsPlaceholder.className = 'class-report-empty';
+        schoolsPlaceholder.textContent = 'No schools yet.';
+        studentsInner.appendChild(schoolsPlaceholder);
+    }
+
     const visibleTeachers = loggedInStudentFullName
         ? []
         : (isTeacherLoggedIn && loggedInTeacherName
@@ -3897,6 +4002,8 @@ function renderSidebar() {
 
         const sectionItems = document.createElement('div');
         sectionItems.className = 'sidebar-category-items';
+        const isSchoolSection = category.parent === studentsInner;
+        sectionItems.classList.toggle('empty', !isSchoolSection && category.names.length === 0);
 
         category.names.forEach(name => {
             if (!teacherSchedules[name]) {
@@ -4161,12 +4268,19 @@ function populateClassReportStudentLists(container) {
             grouped.set(key, { title: school, names: [], kind: rosterKindFromSchoolName(school) });
         }
     });
-    [...grouped.values()]
+    const classReportGroups = [...grouped.values()]
         .filter((g) => !loggedInStudentFullName || g.names.length > 0)
-        .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
-        .forEach((group) => {
+        .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+    if (classReportGroups.length === 0) {
+        const classReportPlaceholder = document.createElement('p');
+        classReportPlaceholder.className = 'class-report-empty';
+        classReportPlaceholder.textContent = 'No class report items yet.';
+        wrap.appendChild(classReportPlaceholder);
+    } else {
+        classReportGroups.forEach((group) => {
             wrap.appendChild(makeGroup(group.title, group.names, group.kind, group.title.trim().toLowerCase()));
         });
+    }
     container.appendChild(wrap);
 }
 
@@ -4255,6 +4369,10 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
         delete studentPhonesByName[name];
         delete studentTeacherByName[name];
         delete studentGoogleMeetLinksByName[name];
+        delete studentEmailsByName[name];
+        delete studentPasswordsByName[name];
+        delete studentCityByName[name];
+        delete studentCountryByName[name];
     });
 
     customSchoolsList = customSchoolsList.filter((school) => String(school || '').trim().toLowerCase() !== schoolKey);
@@ -4595,6 +4713,29 @@ function setupStudentRepositionModal() {
     backdrop?.addEventListener('click', () => closeStudentRepositionModal());
 }
 
+function randomIntBelow(max) {
+    const m = Math.max(1, Math.floor(Number(max)) || 1);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const buf = new Uint32Array(1);
+        crypto.getRandomValues(buf);
+        return buf[0] % m;
+    }
+    return Math.floor(Math.random() * m);
+}
+
+function randomUppercaseLetterChar() {
+    return String.fromCharCode(65 + randomIntBelow(26));
+}
+
+function randomDigitCharForPassword() {
+    return String.fromCharCode(48 + randomIntBelow(10));
+}
+
+/** Add Student plate-style password: fixed `@` + 3 letters + 1 digit + 1 letter + 2 digits (8 chars). */
+function generateAddStudentPlatePassword() {
+    return `@${randomUppercaseLetterChar()}${randomUppercaseLetterChar()}${randomUppercaseLetterChar()}${randomDigitCharForPassword()}${randomUppercaseLetterChar()}${randomDigitCharForPassword()}${randomDigitCharForPassword()}`;
+}
+
 function setPasswordToggleVisual(inputEl, btnEl) {
     if (!inputEl || !btnEl) return;
     const showing = inputEl.type === 'text';
@@ -4621,6 +4762,15 @@ function setupPasswordToggle(inputId, buttonId) {
 
 function setupPasswordToggles() {
     setupPasswordToggle('addTeacherPassword', 'addTeacherPasswordToggle');
+    const addStudentPwdInput = document.getElementById('addStudentPassword');
+    const addStudentPwdGen = document.getElementById('addStudentPasswordGenerate');
+    if (addStudentPwdGen && addStudentPwdInput && addStudentPwdGen.dataset.bound !== '1') {
+        addStudentPwdGen.dataset.bound = '1';
+        addStudentPwdGen.addEventListener('click', () => {
+            addStudentPwdInput.value = generateAddStudentPlatePassword();
+            addStudentPwdInput.focus();
+        });
+    }
     setupPasswordToggle('teacherLoginPassword', 'teacherLoginPasswordToggle');
 }
 
@@ -4934,6 +5084,10 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentPhonesByName[removedName];
     delete studentTeacherByName[removedName];
     delete studentGoogleMeetLinksByName[removedName];
+    delete studentEmailsByName[removedName];
+    delete studentPasswordsByName[removedName];
+    delete studentCityByName[removedName];
+    delete studentCountryByName[removedName];
     saveStudentClassReportRows();
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
@@ -4989,20 +5143,26 @@ function getStudentPhoneInfo(studentName) {
     }
     const iso = String(raw.countryIso || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
     const countryIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
-    const number = String(raw.number || '').trim();
+    const numberRaw = String(raw.number || '').trim();
+    const number = numberRaw ? normalizeStudentPhoneLocalInput(numberRaw, countryIso) : '';
     return { countryIso, number };
 }
 
 function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {
     const name = String(studentName || '').trim();
     if (!name) return;
-    const number = String(numberRaw || '').trim();
-    if (!number) {
+    const trimmed = String(numberRaw || '').trim();
+    if (!trimmed) {
         delete studentPhonesByName[name];
         return;
     }
     const iso = String(countryIsoRaw || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
     const countryIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
+    const number = normalizeStudentPhoneLocalInput(numberRaw, countryIso);
+    if (!digitsOnly(number)) {
+        delete studentPhonesByName[name];
+        return;
+    }
     studentPhonesByName[name] = { countryIso, number };
 }
 
@@ -5020,6 +5180,23 @@ function saveStudentTeacherInfo(studentName, teacherRaw) {
         return;
     }
     studentTeacherByName[name] = teacher;
+}
+
+function saveStudentAccountExtras(studentName, extras) {
+    const name = String(studentName || '').trim();
+    if (!name) return;
+    const email = String(extras?.email || '').trim();
+    const password = String(extras?.password || '').trim();
+    const city = String(extras?.city || '').trim();
+    const country = String(extras?.country || '').trim();
+    if (email) studentEmailsByName[name] = email;
+    else delete studentEmailsByName[name];
+    if (password) studentPasswordsByName[name] = password;
+    else delete studentPasswordsByName[name];
+    if (city) studentCityByName[name] = city;
+    else delete studentCityByName[name];
+    if (country) studentCountryByName[name] = country;
+    else delete studentCountryByName[name];
 }
 
 function buildStudentWhatsappUrl(studentName, message = '') {
@@ -5244,6 +5421,22 @@ function upsertStudentFromEditForm(action = 'save') {
             studentGoogleMeetLinksByName[fullName] = studentGoogleMeetLinksByName[originalName];
         }
         delete studentGoogleMeetLinksByName[originalName];
+        if (Object.prototype.hasOwnProperty.call(studentEmailsByName, originalName)) {
+            studentEmailsByName[fullName] = studentEmailsByName[originalName];
+            delete studentEmailsByName[originalName];
+        }
+        if (Object.prototype.hasOwnProperty.call(studentPasswordsByName, originalName)) {
+            studentPasswordsByName[fullName] = studentPasswordsByName[originalName];
+            delete studentPasswordsByName[originalName];
+        }
+        if (Object.prototype.hasOwnProperty.call(studentCityByName, originalName)) {
+            studentCityByName[fullName] = studentCityByName[originalName];
+            delete studentCityByName[originalName];
+        }
+        if (Object.prototype.hasOwnProperty.call(studentCountryByName, originalName)) {
+            studentCountryByName[fullName] = studentCountryByName[originalName];
+            delete studentCountryByName[originalName];
+        }
     } else if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
@@ -5376,6 +5569,7 @@ function setupEditStudentModal() {
     }
     populateEditStudentPhoneCountrySelect();
     updateEditStudentPhonePlaceholder();
+    bindStudentPhoneLocalFieldBlur(document.getElementById('editStudentPhone'));
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeEditStudentModal());
@@ -5386,7 +5580,7 @@ function setupEditStudentModal() {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => upsertStudentFromEditForm('delete'));
     }
-    phoneCountrySelect?.addEventListener('change', updateEditStudentPhonePlaceholder);
+    phoneCountrySelect?.addEventListener('change', handleEditStudentPhoneCountryChanged);
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -5518,6 +5712,21 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
         return;
     }
 
+    const emailEl = document.getElementById('addStudentEmail');
+    const passwordEl = document.getElementById('addStudentPassword');
+    const email = String(emailEl?.value || '').trim();
+    const password = String(passwordEl?.value || '').trim();
+    const city = String(document.getElementById('addStudentCity')?.value || '').trim();
+    const country = String(document.getElementById('addStudentCountry')?.value || '').trim();
+    if (password && password.length < 8) {
+        alert('Password must have at least 8 characters.');
+        return;
+    }
+    if (email && emailEl && typeof emailEl.checkValidity === 'function' && !emailEl.checkValidity()) {
+        if (typeof emailEl.reportValidity === 'function') emailEl.reportValidity();
+        return;
+    }
+
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
     const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
         (n) => n.trim().toLowerCase() === fullName.toLowerCase()
@@ -5539,6 +5748,7 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
     const addTeacherSelect = document.getElementById('addStudentTeacher');
     saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
+    saveStudentAccountExtras(fullName, { email, password, city, country });
     const schoolKey = schoolName.trim().toLowerCase();
     if (schoolKey) {
         const primaryEl = document.getElementById('addSchoolPrimaryColor');
@@ -5575,7 +5785,7 @@ function populateAddStudentPhoneCountrySelect() {
         option.textContent = country.flag;
         option.dataset.dialCode = country.dialCode;
         option.dataset.sample = country.sample;
-        option.dataset.flagUrl = `https://flagcdn.com/w40/${country.iso.toLowerCase()}.png`;
+        option.dataset.flagUrl = getPhoneCountryFlagImageSrc(country.iso);
         countrySelect.appendChild(option);
     });
 
@@ -5592,16 +5802,16 @@ function updateAddStudentPhonePlaceholder() {
         || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
         || PHONE_COUNTRY_OPTIONS[0];
     if (!selected) return;
-    phoneInput.placeholder = `${selected.dialCode} ${selected.sample}`;
+    phoneInput.placeholder = selected.sample;
     if (flagImg) {
-        const flagUrl = `https://flagcdn.com/w40/${selected.iso.toLowerCase()}.png`;
+        const flagUrl = getPhoneCountryFlagImageSrc(selected.iso);
         flagImg.src = flagUrl;
         flagImg.alt = `${selected.name} flag`;
-        flagImg.onerror = () => {
-            if (selected.iso === 'BR') {
-                flagImg.src = BRAZIL_FLAG_SVG_DATA_URI;
-            }
-        };
+        flagImg.onerror = null;
+    }
+    const addStudentCountryInput = document.getElementById('addStudentCountry');
+    if (addStudentCountryInput) {
+        addStudentCountryInput.value = selected.name;
     }
 }
 
@@ -5630,27 +5840,58 @@ function updateEditStudentPhonePlaceholder() {
         || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
         || PHONE_COUNTRY_OPTIONS[0];
     if (!selected) return;
-    phoneInput.placeholder = `${selected.dialCode} ${selected.sample}`;
+    phoneInput.placeholder = selected.sample;
     if (flagImg) {
-        const flagUrl = `https://flagcdn.com/w40/${selected.iso.toLowerCase()}.png`;
+        const flagUrl = getPhoneCountryFlagImageSrc(selected.iso);
         flagImg.src = flagUrl;
         flagImg.alt = `${selected.name} flag`;
-        flagImg.onerror = () => {
-            if (selected.iso === 'BR') {
-                flagImg.src = BRAZIL_FLAG_SVG_DATA_URI;
-            }
-        };
+        flagImg.onerror = null;
     }
+}
+
+function handleAddStudentPhoneCountryChanged() {
+    updateAddStudentPhonePlaceholder();
+    syncPhoneInputWithCountrySelector(
+        document.getElementById('addStudentPhone'),
+        document.getElementById('addStudentPhoneCountry')
+    );
+}
+
+function handleEditStudentPhoneCountryChanged() {
+    updateEditStudentPhonePlaceholder();
+    syncPhoneInputWithCountrySelector(
+        document.getElementById('editStudentPhone'),
+        document.getElementById('editStudentPhoneCountry')
+    );
+}
+
+function bindStudentPhoneLocalFieldBlur(phoneInput) {
+    if (!phoneInput) return;
+    phoneInput.addEventListener('blur', () => {
+        const countrySelect =
+            phoneInput.id === 'addStudentPhone'
+                ? document.getElementById('addStudentPhoneCountry')
+                : document.getElementById('editStudentPhoneCountry');
+        syncPhoneInputWithCountrySelector(phoneInput, countrySelect);
+    });
 }
 
 function updateAddStudentPassportFieldVisibility() {
     const nameRow = document.getElementById('addTeacherNameRow');
+    const studentFields = document.getElementById('addStudentFields');
+    const schoolFields = document.getElementById('addSchoolFields');
     const firstInput = document.getElementById('addStudentFirst');
     const lastInput = document.getElementById('addStudentLast');
     const phoneInput = document.getElementById('addStudentPhone');
     const schoolWrap = document.getElementById('addStudentSchoolWrap');
     const cityInput = document.getElementById('addStudentCity');
-    const stateInput = document.getElementById('addStudentState');
+    const countryInput = document.getElementById('addStudentCountry');
+    const contactRow = document.getElementById('addModalContactRow');
+    const contactCityWrap = document.getElementById('addModalContactCityWrap');
+    const contactCountryWrap = document.getElementById('addModalContactCountryWrap');
+    const accountWrap = document.getElementById('addStudentAccountWrap');
+    const studentEmailInput = document.getElementById('addStudentEmail');
+    const studentPasswordInput = document.getElementById('addStudentPassword');
     const schoolInput = document.getElementById('addStudentSchool');
     const schoolSelect = document.getElementById('addStudentSchoolSelect');
     const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
@@ -5661,7 +5902,7 @@ function updateAddStudentPassportFieldVisibility() {
     const passportLinkInput = document.getElementById('addStudentPassportLink');
     const teacherWrap = document.getElementById('addStudentTeacherWrap');
     const teacherSelect = document.getElementById('addStudentTeacher');
-    const rowTeacherTheme = document.getElementById('addStudentRowTeacherTheme');
+    const rowTeacherTheme = document.getElementById('addStudentTeacherRow');
     const schoolReadonlyWrap = document.getElementById('addStudentSchoolReadonlyWrap');
     const schoolReadonlyText = document.getElementById('addStudentSchoolReadonly');
     const schoolFieldLabel = document.querySelector('.add-student-school-field-label');
@@ -5674,12 +5915,51 @@ function updateAddStudentPassportFieldVisibility() {
     const dialog = document.querySelector('.add-student-dialog');
     const title = document.getElementById('addStudentModalTitle');
     const submitBtn = document.getElementById('addStudentFormSubmit');
-    if (!passportLinkWrap || !passportLinkInput || !dialog || !title || !schoolWrap || !schoolInput) return;
+    if (!dialog || !title || !schoolInput || !schoolSelect) return;
 
     const isTeacherMode = addStudentModalMode === 'teacher';
     const isStudentEntryMode = addStudentModalMode === 'student-entry';
     const isStudentGlobalMode = addStudentModalMode === 'student-global';
     const isAddSchoolMode = addStudentModalMode === 'student';
+    const showStudentFields = isStudentEntryMode || isStudentGlobalMode;
+    const useNameFields = isTeacherMode || isStudentEntryMode;
+    const useNameFieldsAny = useNameFields || isStudentGlobalMode;
+
+    if (contactRow) {
+        contactRow.classList.toggle('is-hidden', !useNameFieldsAny);
+        contactRow.setAttribute('aria-hidden', useNameFieldsAny ? 'false' : 'true');
+    }
+    if (contactCityWrap) {
+        contactCityWrap.classList.toggle('is-hidden', !showStudentFields);
+        contactCityWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (contactCountryWrap) {
+        contactCountryWrap.classList.toggle('is-hidden', !showStudentFields);
+        contactCountryWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+
+    if (accountWrap) {
+        accountWrap.classList.toggle('is-hidden', !showStudentFields);
+        accountWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (!showStudentFields) {
+        if (studentEmailInput) studentEmailInput.value = '';
+        if (studentPasswordInput) {
+            studentPasswordInput.value = '';
+        }
+        if (cityInput) cityInput.value = '';
+        if (countryInput) countryInput.value = '';
+    }
+
+    if (studentFields) {
+        studentFields.classList.toggle('is-hidden', !showStudentFields);
+        studentFields.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (schoolFields) {
+        schoolFields.classList.toggle('is-hidden', !isAddSchoolMode);
+        schoolFields.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
+    }
+
     const showStudentTeacherField = isStudentEntryMode || isStudentGlobalMode;
     if (teacherWrap && teacherSelect) {
         teacherWrap.classList.toggle('is-hidden', !showStudentTeacherField);
@@ -5694,8 +5974,6 @@ function updateAddStudentPassportFieldVisibility() {
         rowTeacherTheme.classList.toggle('is-hidden', isTeacherMode);
         rowTeacherTheme.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
     }
-    const useNameFields = isTeacherMode || isStudentEntryMode;
-    const useNameFieldsAny = useNameFields || isStudentGlobalMode;
     if (nameRow && firstInput && lastInput) {
         nameRow.classList.toggle('is-hidden', !useNameFieldsAny);
         nameRow.setAttribute('aria-hidden', useNameFieldsAny ? 'false' : 'true');
@@ -5721,12 +5999,10 @@ function updateAddStudentPassportFieldVisibility() {
             if (teacherPasswordInput) teacherPasswordInput.value = '';
         }
     }
-    const showLocationRow = !isTeacherMode;
+    const showLocationRow = isStudentGlobalMode;
     schoolWrap.classList.toggle('is-hidden', !showLocationRow);
     schoolWrap.setAttribute('aria-hidden', showLocationRow ? 'false' : 'true');
     if (!showLocationRow) {
-        if (cityInput) cityInput.value = '';
-        if (stateInput) stateInput.value = '';
         if (schoolReadonlyWrap) {
             schoolReadonlyWrap.classList.add('is-hidden');
             schoolReadonlyWrap.setAttribute('aria-hidden', 'true');
@@ -5754,13 +6030,10 @@ function updateAddStudentPassportFieldVisibility() {
     }
 
     if (schoolInput) {
-        const hideSchoolText = useSchoolSelect || showSchoolReadonly;
-        schoolInput.classList.toggle('is-hidden', hideSchoolText);
-        schoolInput.setAttribute('aria-hidden', hideSchoolText ? 'true' : 'false');
         schoolInput.required = isAddSchoolMode;
-        if (hideSchoolText || isTeacherMode) {
-            schoolInput.value = '';
-        }
+        schoolInput.classList.toggle('is-hidden', !isAddSchoolMode);
+        schoolInput.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
+        if (!isAddSchoolMode) schoolInput.value = '';
     }
     if (schoolSelect) {
         schoolSelect.classList.toggle('is-hidden', !useSchoolSelect);
@@ -5792,15 +6065,20 @@ function updateAddStudentPassportFieldVisibility() {
         closeAddSchoolColorPopup();
     }
 
-    passportLinkWrap.classList.remove('is-visible');
-    passportLinkWrap.setAttribute('aria-hidden', 'true');
-    passportLinkInput.required = false;
-    passportLinkInput.value = '';
+    if (passportLinkWrap && passportLinkInput) {
+        passportLinkWrap.classList.remove('is-visible');
+        passportLinkWrap.setAttribute('aria-hidden', 'true');
+        passportLinkInput.required = false;
+        passportLinkInput.value = '';
+    }
     dialog.classList.remove('add-student-dialog--expanded');
 
     title.textContent = isTeacherMode ? 'Add Teacher Profile' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add Student' : 'Add School');
     if (submitBtn) {
         submitBtn.textContent = isTeacherMode ? 'Add' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
+    }
+    if (phoneCountrySelect && useNameFieldsAny) {
+        updateAddStudentPhonePlaceholder();
     }
     renderAddSchoolThemeSquares();
 }
@@ -5814,7 +6092,8 @@ function openAddStudentModal(mode = 'student') {
     const schoolInput = document.getElementById('addStudentSchool');
     const schoolSelect = document.getElementById('addStudentSchoolSelect');
     const cityInput = document.getElementById('addStudentCity');
-    const stateInput = document.getElementById('addStudentState');
+    const countryInput = document.getElementById('addStudentCountry');
+    const studentPasswordInput = document.getElementById('addStudentPassword');
     const passportLinkInput = document.getElementById('addStudentPassportLink');
     const teacherEmailInput = document.getElementById('addTeacherEmail');
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
@@ -5847,7 +6126,12 @@ function openAddStudentModal(mode = 'student') {
     }
     schoolInput.value = '';
     if (cityInput) cityInput.value = '';
-    if (stateInput) stateInput.value = '';
+    if (countryInput) countryInput.value = '';
+    const studentEmailInput = document.getElementById('addStudentEmail');
+    if (studentEmailInput) studentEmailInput.value = '';
+    if (studentPasswordInput) {
+        studentPasswordInput.value = '';
+    }
     if (schoolSelect) {
         refreshAddStudentSchoolSelect();
         schoolSelect.value = '';
@@ -6589,6 +6873,7 @@ function setupAddStudentModal() {
 
     populateAddStudentPhoneCountrySelect();
     updateAddStudentPhonePlaceholder();
+    bindStudentPhoneLocalFieldBlur(document.getElementById('addStudentPhone'));
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
@@ -6597,19 +6882,12 @@ function setupAddStudentModal() {
         backdrop.addEventListener('click', () => closeAddStudentModal());
     }
     schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
-    phoneCountrySelect?.addEventListener('change', updateAddStudentPhonePlaceholder);
+    phoneCountrySelect?.addEventListener('change', handleAddStudentPhoneCountryChanged);
     const schoolSelectEl = document.getElementById('addStudentSchoolSelect');
     schoolSelectEl?.addEventListener('change', () => {
         if (addStudentModalMode !== 'student-global') return;
         syncAddStudentModalThemeFromSchoolTitle(schoolSelectEl.value);
     });
-    const stateField = document.getElementById('addStudentState');
-    stateField?.addEventListener('input', (e) => {
-        const t = e.target;
-        const u = String(t.value || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
-        if (t.value !== u) t.value = u;
-    });
-
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
