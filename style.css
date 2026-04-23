@@ -5629,6 +5629,10 @@ header h1 {
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
+.time-slot.current-time-cell {
+    z-index: 30;
+}
+
 .time-slot.time-slot--with-student-names {
     font-size: 0.6rem;
     line-height: 1;
@@ -6106,10 +6110,19 @@ header h1 {
 }
 
 .time-slot.state-school {
-    background: var(--slot-school-bg, #206dac);
     color: white;
+    background: var(--slot-school-bg, #206dac);
     border-color: var(--slot-school-border, #206dac);
     box-shadow: 0 2px 8px var(--slot-school-shadow, rgba(0, 0, 128, 0.4));
+}
+
+/* Manual override for the live intersection cell (today + current hour). */
+.time-slot.current-time-cell {
+    position: relative;
+    z-index: 30;
+
+    border: 1px solid #334461;
+    border-radius: 10px;
 }
 
 .summary-panel {

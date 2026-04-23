@@ -8284,6 +8284,9 @@ function updateCurrentTimeIndicator() {
     const indicator = ensureCurrentTimeIndicatorElement();
     const timeSlotsContainer = document.getElementById('timeSlots');
     if (!indicator || !timeSlotsContainer) return;
+    timeSlotsContainer.querySelectorAll('.time-slot.current-time-cell').forEach((slot) => {
+        slot.classList.remove('current-time-cell');
+    });
     const firstDay = DAYS[0];
     const lastDay = DAYS[DAYS.length - 1];
     const firstSlot = timeSlotsContainer.querySelector(`.time-slot[data-day="${firstDay}"][data-hour="${START_HOUR}"]`);
@@ -8311,13 +8314,21 @@ function updateCurrentTimeIndicator() {
     const startY = firstSlot.offsetTop;
     const endY = lastSlot.offsetTop + lastSlot.offsetHeight;
     const top = startY + ((endY - startY) * progress);
-    const left = firstSlot.offsetLeft;
-    const rightEdge = lastSlot.offsetLeft + lastSlot.offsetWidth;
-    const width = Math.max(0, rightEdge - left);
+    const left = 0;
+    const width = Math.max(0, timeSlotsContainer.clientWidth);
 
     indicator.style.top = `${top}px`;
     indicator.style.left = `${left}px`;
     indicator.style.width = `${width}px`;
+
+    const todayName = DAYS[now.getDay()];
+    const currentHour = now.getHours();
+    const currentSlot = timeSlotsContainer.querySelector(
+        `.time-slot[data-day="${todayName}"][data-hour="${currentHour}"]`
+    );
+    if (currentSlot) {
+        currentSlot.classList.add('current-time-cell');
+    }
 }
 
 function initCurrentTimeIndicator() {
