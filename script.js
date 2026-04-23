@@ -10,6 +10,9 @@ const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
 const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
 /** When set in sessionStorage, skip auto-login until the next successful manual login (same tab). */
 const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
+const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
+const DEFAULT_ADMIN_USERNAME = '@Admin';
+const DEFAULT_ADMIN_PASSWORD = 'admin';
 const PROFILE_AVATARS_STORAGE_KEY = 'timetable_profile_avatars';
 const SCHOOL_THEME_COLORS = [
     '#c2185b','#f57c00','#fbc02d','#388e3c','#009688','#7b1fa2','#e91e63','#ef6c00','#afb42b','#26a69a','#5c6bc0','#6d4c41','#d32f2f','#7cb342','#9575cd','#757575','#e57373','#43a047','#42a5f5','#7986cb','#616161','#ef9a9a','#fdd835','#66bb6a','#1e88e5','#5e35b1','#bdbdbd'
@@ -71,6 +74,10 @@ let customSchoolsList = [];
 let schoolExternalLinks = {};
 /** Per-school UI colors (primary/secondary), keyed by normalized school title. */
 let schoolThemeColors = {};
+/** Per-school billing model, keyed by normalized school title. */
+let schoolBillingModels = {};
+/** Per-school billing configuration values, keyed by normalized school title. */
+let schoolBillingConfigs = {};
 let addStudentModalMode = 'student';
 let addStudentTargetSchool = '';
 let pendingDeleteSchoolTitle = '';
@@ -84,8 +91,10 @@ let calendarToolbarExternalLink = '';
 let speakonStudentWeeklyClass = {};
 let isTeacherLoggedIn = false;
 let loggedInTeacherName = '';
-/** When set, the signed-in user is this student (first name + phone login); may only view their own schedule. */
+let isAdminLoggedIn = false;
+/** When set, the signed-in user is this student (email + password login); may only view their own schedule. */
 let loggedInStudentFullName = '';
+let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
@@ -102,12 +111,6 @@ let googleMeetUseSharedSchoolLink = false;
 let googleMeetSharedLinkModeBySchoolKey = {};
 const MODAL_CLOSE_ANIMATION_MS = 220;
 const modalCloseTimers = new WeakMap();
-
-function clearSidebarExpandableSticky() {
-    document.querySelectorAll('.sidebar-add-btn--expandable-sticky').forEach((b) => {
-        b.classList.remove('sidebar-add-btn--expandable-sticky');
-    });
-}
 
 function openModalWithAnimation(modal) {
     if (!modal) return;
@@ -165,7 +168,6 @@ function closeModalWithAnimation(modal) {
     const nextTimer = window.setTimeout(() => {
         modal.classList.remove('is-open', 'is-closing');
         modalCloseTimers.delete(modal);
-        clearSidebarExpandableSticky();
     }, MODAL_CLOSE_ANIMATION_MS);
     modalCloseTimers.set(modal, nextTimer);
 }
@@ -598,6 +600,8 @@ function renderAddSchoolThemeSquares() {
     const secondaryInput = document.getElementById('addSchoolSecondaryColor');
     const primarySquare = document.querySelector('.add-school-theme-square--primary');
     const secondarySquare = document.querySelector('.add-school-theme-square--secondary');
+    const primaryCode = document.getElementById('addSchoolPrimaryColorCode');
+    const secondaryCode = document.getElementById('addSchoolSecondaryColorCode');
     const primary = String(primaryInput?.value || '').trim().toLowerCase();
     const secondary = String(secondaryInput?.value || '').trim().toLowerCase();
     if (primarySquare && /^#[0-9a-f]{6}$/i.test(primary)) {
@@ -606,6 +610,150 @@ function renderAddSchoolThemeSquares() {
     if (secondarySquare && /^#[0-9a-f]{6}$/i.test(secondary)) {
         secondarySquare.style.background = secondary;
     }
+    if (primaryCode) {
+        primaryCode.value = /^#[0-9a-f]{6}$/i.test(primary) ? primary.toUpperCase() : '#5C6BC0';
+    }
+    if (secondaryCode) {
+        secondaryCode.value = /^#[0-9a-f]{6}$/i.test(secondary) ? secondary.toUpperCase() : '#1E88E5';
+    }
+}
+
+function getSchoolBillingModelExplainer(modelRaw) {
+    const model = String(modelRaw || '').trim();
+    if (model === 'per-class') return "You’re paid for each class you teach.";
+    if (model === 'monthly') return 'You receive a fixed monthly fee per student.';
+    if (model === 'package-per-student') return 'Each student has a set number of classes per month.';
+    return '';
+}
+
+function getSchoolBillingModelLabel(modelRaw) {
+    const model = String(modelRaw || '').trim();
+    if (model === 'per-class') return 'Per class';
+    if (model === 'monthly') return 'Monthly';
+    if (model === 'package-per-student') return 'Package (Classes per Student)';
+    return 'Select billing model';
+}
+
+function updateAddSchoolBillingExplainer() {
+    const input = document.getElementById('addSchoolBillingModel');
+    const selectedLabel = document.getElementById('addSchoolBillingSelectedLabel');
+    const dropdown = document.getElementById('addSchoolBillingDropdown');
+    if (!input || !selectedLabel || !dropdown) return;
+    const value = String(input.value || '').trim();
+    let selectedOption = null;
+    dropdown.querySelectorAll('.add-school-billing-option').forEach((option) => {
+        const optionValue = String(option.getAttribute('data-billing-model') || '').trim();
+        option.classList.toggle('is-selected', !!value && optionValue === value);
+        option.setAttribute('aria-selected', optionValue === value ? 'true' : 'false');
+        if (optionValue === value) {
+            selectedOption = option;
+        }
+    });
+    if (!value || !selectedOption) {
+        selectedLabel.textContent = 'Select billing model';
+        selectedLabel.classList.add('is-placeholder');
+        updateAddSchoolBillingFieldsVisibility('');
+        return;
+    }
+    const titleEl =
+        selectedOption.querySelector('.add-school-billing-option-title') ||
+        selectedOption.querySelector('.billing-option-title');
+    const descEl = selectedOption.querySelector('.add-school-billing-option-desc');
+    const titleHtml = titleEl ? titleEl.innerHTML : getSchoolBillingModelLabel(value);
+    const descText = descEl ? String(descEl.textContent || '').trim() : getSchoolBillingModelExplainer(value);
+    selectedLabel.innerHTML = `<span class="add-school-billing-selected-title">${titleHtml}</span><span class="add-school-billing-selected-desc">${descText}</span>`;
+    selectedLabel.classList.remove('is-placeholder');
+    updateAddSchoolBillingFieldsVisibility(value);
+}
+
+function updateAddSchoolBillingFieldsVisibility(modelRaw) {
+    const model = String(modelRaw || '').trim();
+    const allFields = document.querySelectorAll('.add-school-billing-fields');
+    allFields.forEach((block) => {
+        const blockModel = String(block.getAttribute('data-billing-fields') || '').trim();
+        const isActive = !!model && blockModel === model;
+        block.classList.toggle('is-hidden', !isActive);
+        block.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+        block.querySelectorAll('input').forEach((input) => {
+            const shouldRequire = isActive;
+            input.disabled = !isActive;
+            input.required = shouldRequire;
+            if (!isActive) {
+                input.value = '';
+            }
+        });
+    });
+}
+
+function parseBillingAmount(inputEl) {
+    const raw = String(inputEl?.value || '').trim();
+    if (!raw) return { ok: false, value: null };
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return { ok: false, value: null };
+    return { ok: true, value };
+}
+
+function parseBillingInteger(inputEl) {
+    const raw = String(inputEl?.value || '').trim();
+    if (!raw) return { ok: false, value: null };
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 1 || !Number.isInteger(value)) return { ok: false, value: null };
+    return { ok: true, value };
+}
+
+function getAddSchoolBillingConfigFromForm(modelRaw) {
+    const model = String(modelRaw || '').trim();
+    if (model === 'per-class') {
+        const field = document.getElementById('addSchoolPricePerClass');
+        const parsed = parseBillingAmount(field);
+        if (!parsed.ok) {
+            showAppMessage('Enter a valid price per class.');
+            field?.focus();
+            return null;
+        }
+        return { pricePerClass: parsed.value };
+    }
+    if (model === 'monthly') {
+        const field = document.getElementById('addSchoolMonthlyFeePerStudent');
+        const parsed = parseBillingAmount(field);
+        if (!parsed.ok) {
+            showAppMessage('Enter a valid monthly fee per student.');
+            field?.focus();
+            return null;
+        }
+        return { monthlyFeePerStudent: parsed.value };
+    }
+    if (model === 'package-per-student') {
+        const priceField = document.getElementById('addSchoolPackagePricePerClass');
+        const classesField = document.getElementById('addSchoolClassesPerMonth');
+        const parsedPrice = parseBillingAmount(priceField);
+        if (!parsedPrice.ok) {
+            showAppMessage('Enter a valid package price per class.');
+            priceField?.focus();
+            return null;
+        }
+        const parsedClasses = parseBillingInteger(classesField);
+        if (!parsedClasses.ok) {
+            showAppMessage('Enter a valid number of classes per month.');
+            classesField?.focus();
+            return null;
+        }
+        return {
+            pricePerClass: parsedPrice.value,
+            classesPerMonth: parsedClasses.value
+        };
+    }
+    return null;
+}
+
+function closeAddSchoolBillingDropdown() {
+    const dropdown = document.getElementById('addSchoolBillingDropdown');
+    const toggle = document.getElementById('addSchoolBillingToggle');
+    const menu = document.getElementById('addSchoolBillingMenu');
+    if (!dropdown || !toggle || !menu) return;
+    dropdown.classList.remove('is-open');
+    toggle.setAttribute('aria-expanded', 'false');
+    menu.setAttribute('aria-hidden', 'true');
 }
 
 function closeAddSchoolColorPopup() {
@@ -799,64 +947,6 @@ function syncPhoneInputWithCountrySelector(phoneInput, countrySelect) {
     if (next !== phoneInput.value) phoneInput.value = next;
 }
 
-/**
- * Digit strings that count as the same phone for student login (national and international forms).
- */
-function getStudentLoginPhoneDigitVariations(studentName) {
-    const info = getStudentPhoneInfo(studentName);
-    let d = digitsOnly(info.number);
-    const out = new Set();
-    if (!d) return out;
-    if (d.startsWith('00')) {
-        d = d.slice(2);
-    }
-    out.add(d);
-    const dial = getDialCodeDigitsForCountryIso(info.countryIso);
-    if (dial && d.startsWith(dial)) {
-        let rest = d.slice(dial.length);
-        while (rest.startsWith('0')) rest = rest.slice(1);
-        if (rest) out.add(rest);
-    } else if (dial) {
-        const body = d.replace(/^0+/, '') || d;
-        out.add(`${dial}${body}`);
-    }
-    return out;
-}
-
-function normalizeStudentLoginPassDigits(passwordRaw) {
-    let d = digitsOnly(passwordRaw);
-    if (d.startsWith('00')) d = d.slice(2);
-    return d;
-}
-
-function findStudentsByLoginFirstName(inputRaw) {
-    const want = String(inputRaw || '').trim().toLowerCase();
-    if (!want) return [];
-    const out = [];
-    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
-        const first = String(splitName(name).first || '').trim().toLowerCase();
-        if (first === want) out.push(name);
-    });
-    return out;
-}
-
-/**
- * Student login username: plain first name, or a single token `@FirstName` (no domain).
- * @returns {string|null} first name to match against the roster; null if the value looks like an email address.
- */
-function getStudentLoginFirstNameFromUsernameField(raw) {
-    const s = String(raw || '').trim();
-    if (!s) return '';
-    if (/^@[^@\s]+$/i.test(s)) {
-        const first = s.slice(1).trim();
-        return first || '';
-    }
-    if (!s.includes('@')) {
-        return s;
-    }
-    return null;
-}
-
 function getTutorRosterNameForStudent(studentFullName) {
     const tutor = String(studentTeacherByName[studentFullName] || '').trim();
     if (!tutor) return '';
@@ -866,41 +956,136 @@ function getTutorRosterNameForStudent(studentFullName) {
     return found ? String(found) : tutor;
 }
 
-/**
- * Student login: first name or `@FirstName` (case-insensitive first name) + phone digits (national or with country code).
- * @returns {{ ok: true, studentName: string } | { ok: false, error: string }}
- */
-function verifyStudentLogin(firstNameRaw, passwordRaw) {
-    const passDigits = normalizeStudentLoginPassDigits(passwordRaw);
-    if (!passDigits) {
-        return { ok: false, error: 'Password is required to log in.' };
+const STUDENT_PASSWORD_HASH_PREFIX = 'sha256$';
+
+function findStudentNameByLoginEmail(emailRaw) {
+    const emailLc = String(emailRaw || '').trim().toLowerCase();
+    if (!emailLc) return '';
+    return (
+        [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].find((name) => {
+            return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+        }) || ''
+    );
+}
+
+function isStudentPasswordHashed(storedPasswordRaw) {
+    return String(storedPasswordRaw || '').startsWith(STUDENT_PASSWORD_HASH_PREFIX);
+}
+
+async function hashStudentPassword(rawPassword) {
+    const password = String(rawPassword || '');
+    if (!password) return '';
+    const hasCrypto = typeof window !== 'undefined' && window.crypto && window.crypto.subtle && typeof TextEncoder !== 'undefined';
+    if (!hasCrypto) return password;
+    const encoded = new TextEncoder().encode(password);
+    const digestBuffer = await window.crypto.subtle.digest('SHA-256', encoded);
+    const digestBytes = Array.from(new Uint8Array(digestBuffer));
+    const digestHex = digestBytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+    return `${STUDENT_PASSWORD_HASH_PREFIX}${digestHex}`;
+}
+
+async function verifyStudentPassword(storedPasswordRaw, passwordRaw) {
+    const stored = String(storedPasswordRaw || '').trim();
+    const input = String(passwordRaw || '');
+    if (!stored || !input) return false;
+    if (isStudentPasswordHashed(stored)) {
+        const hashed = await hashStudentPassword(input);
+        return hashed === stored;
     }
-    if (passDigits.length < 10 || passDigits.length > 15) {
-        return { ok: false, error: 'Use 10–15 digits (national number or full number with country code, no spaces needed).' };
+    // Legacy plain-text student passwords from older versions.
+    return input === stored;
+}
+
+function loadAdminAccountFromStorage() {
+    try {
+        const raw = localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        const username = String(parsed.username || '').trim();
+        const passwordHash = String(parsed.passwordHash || '').trim();
+        if (!username || !passwordHash) return null;
+        return { username, passwordHash };
+    } catch {
+        return null;
     }
-    const candidates = findStudentsByLoginFirstName(firstNameRaw);
-    if (candidates.length === 0) {
+}
+
+function saveAdminAccountToStorage(account) {
+    try {
+        localStorage.setItem(
+            ADMIN_ACCOUNT_STORAGE_KEY,
+            JSON.stringify({
+                username: String(account?.username || DEFAULT_ADMIN_USERNAME).trim(),
+                passwordHash: String(account?.passwordHash || '').trim()
+            })
+        );
+    } catch (error) {
+        console.error('Error saving admin account to localStorage:', error);
+    }
+}
+
+async function ensureAdminAccountReady() {
+    const fromStorage = loadAdminAccountFromStorage();
+    if (fromStorage) {
+        adminAccount = {
+            username: String(fromStorage.username || DEFAULT_ADMIN_USERNAME).trim() || DEFAULT_ADMIN_USERNAME,
+            passwordHash: String(fromStorage.passwordHash || '').trim()
+        };
+        return;
+    }
+    const defaultHash = await hashStudentPassword(DEFAULT_ADMIN_PASSWORD);
+    adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: defaultHash };
+    saveAdminAccountToStorage(adminAccount);
+}
+
+async function verifyAdminLogin(usernameRaw, passwordRaw) {
+    const username = String(usernameRaw || '').trim();
+    const password = String(passwordRaw || '');
+    if (!username || !password) return { ok: false, error: '' };
+    const expectedUsername = String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim();
+    if (!expectedUsername || username.toLowerCase() !== expectedUsername.toLowerCase()) {
         return { ok: false, error: '' };
     }
-    const matches = candidates.filter((n) => getStudentLoginPhoneDigitVariations(n).has(passDigits));
-    if (matches.length === 1) {
-        return { ok: true, studentName: matches[0] };
+    const okPassword = await verifyStudentPassword(adminAccount.passwordHash, password);
+    if (!okPassword) return { ok: false, error: 'Incorrect admin password.' };
+    return { ok: true };
+}
+
+/**
+ * Student login: account email + account password.
+ * @returns {Promise<{ ok: true, studentName: string } | { ok: false, error: string }>}
+ */
+async function verifyStudentLogin(emailRaw, passwordRaw) {
+    const email = String(emailRaw || '').trim();
+    const password = String(passwordRaw || '');
+    if (!email) {
+        return { ok: false, error: 'Student email is required to log in.' };
     }
-    if (matches.length > 1) {
+    const studentName = findStudentNameByLoginEmail(email);
+    if (!studentName) {
+        return { ok: false, error: 'Teacher/Student account not found.' };
+    }
+    const storedPassword = String(studentPasswordsByName[studentName] || '');
+    if (!storedPassword) {
         return {
             ok: false,
-            error: 'Several students match. Ask your teacher to confirm your profile.'
+            error: 'This student account has no password saved yet. Ask your teacher to update your profile.'
         };
     }
-    return { ok: false, error: 'Incorrect password.' };
+    const okPassword = await verifyStudentPassword(storedPassword, password);
+    if (!okPassword) {
+        return { ok: false, error: 'Incorrect password.' };
+    }
+    return { ok: true, studentName };
 }
 
 /**
  * If the user previously chose to save credentials, validate them against the roster
  * and restore a teacher or student session (same rules as the login form).
- * @returns {string|null} profile key to select (teacher name or student full name), otherwise null
+ * @returns {Promise<string|null>} profile key to select (teacher name or student full name), otherwise null
  */
-function tryRestoreSessionFromSavedCredentials() {
+async function tryRestoreSessionFromSavedCredentials() {
     try {
         if (sessionStorage.getItem(LOGIN_SESSION_SUPPRESS_KEY) === '1') return null;
     } catch {
@@ -913,11 +1098,21 @@ function tryRestoreSessionFromSavedCredentials() {
     const password = String(saved.password || '').trim();
     if (!rawEmail || !password) return null;
 
+    const adminLogin = await verifyAdminLogin(rawEmail, password);
+    if (adminLogin.ok) {
+        isAdminLoggedIn = true;
+        loggedInStudentFullName = '';
+        loggedInTeacherName = '';
+        isTeacherLoggedIn = true;
+        return DEFAULT_ADMIN_USERNAME;
+    }
+
     const teacherNameByEmail = teachersList.find((name) => {
         const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
         return teacherEmail && teacherEmail === emailLc;
     });
     if (teacherNameByEmail) {
+        isAdminLoggedIn = false;
         if (password.length < 8) return null;
         const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
         if (!expectedPassword || password !== expectedPassword) return null;
@@ -927,10 +1122,9 @@ function tryRestoreSessionFromSavedCredentials() {
         return teacherNameByEmail;
     }
 
-    const studentFirst = getStudentLoginFirstNameFromUsernameField(rawEmail);
-    if (studentFirst !== null && studentFirst) {
-        const v = verifyStudentLogin(studentFirst, password);
-        if (!v.ok) return null;
+    const v = await verifyStudentLogin(rawEmail, password);
+    if (v.ok) {
+        isAdminLoggedIn = false;
         const tutor = getTutorRosterNameForStudent(v.studentName);
         if (!tutor) return null;
         loggedInStudentFullName = v.studentName;
@@ -946,6 +1140,7 @@ function isTeacherSelectionAllowed(name) {
     const requested = String(name || '').trim();
     if (!requested) return false;
     if (!isTeacherLoggedIn) return false;
+    if (isAdminLoggedIn) return true;
     if (loggedInStudentFullName) {
         return requested.toLowerCase() === String(loggedInStudentFullName || '').trim().toLowerCase();
     }
@@ -959,6 +1154,9 @@ function isLoggedInStudentCalendarReadOnly() {
 
 function getActiveTeacherProfileName() {
     if (!isTeacherLoggedIn) return '';
+    if (isAdminLoggedIn) {
+        return String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim();
+    }
     const asStudent = String(loggedInStudentFullName || '').trim();
     if (asStudent) return asStudent;
     const logged = String(loggedInTeacherName || '').trim();
@@ -970,7 +1168,16 @@ function getActiveTeacherProfileName() {
 
 function getCurrentProfileKey() {
     const name = isTeacherLoggedIn ? getActiveTeacherProfileName() : 'guest';
+    if (isAdminLoggedIn) return 'admin';
     return name.toLowerCase();
+}
+
+function hasEffectiveAdminSession() {
+    return !!(
+        isTeacherLoggedIn
+        && isAdminLoggedIn
+        && String(adminAccount?.username || '').trim()
+    );
 }
 
 function loadProfileAvatars() {
@@ -1037,6 +1244,8 @@ function initRoster() {
         customSchoolsList = [];
         schoolExternalLinks = {};
         schoolThemeColors = {};
+        schoolBillingModels = {};
+        schoolBillingConfigs = {};
         calendarToolbarExternalLink = '';
         speakonStudentWeeklyClass = {};
         studentGoogleMeetLinksByName = {};
@@ -1193,6 +1402,28 @@ function initRoster() {
         const k = String(key || '').trim().toLowerCase();
         if (!k) return;
         schoolThemeColors[k] = normalizeSchoolTheme(themesRaw[key] || {}, key);
+    });
+    const billingRaw =
+        saved.schoolBillingModels && typeof saved.schoolBillingModels === 'object' && !Array.isArray(saved.schoolBillingModels)
+            ? saved.schoolBillingModels
+            : {};
+    schoolBillingModels = {};
+    Object.keys(billingRaw).forEach((key) => {
+        const k = String(key || '').trim().toLowerCase();
+        const v = String(billingRaw[key] || '').trim();
+        if (!k || !v) return;
+        schoolBillingModels[k] = v;
+    });
+    const billingConfigRaw =
+        saved.schoolBillingConfigs && typeof saved.schoolBillingConfigs === 'object' && !Array.isArray(saved.schoolBillingConfigs)
+            ? saved.schoolBillingConfigs
+            : {};
+    schoolBillingConfigs = {};
+    Object.keys(billingConfigRaw).forEach((key) => {
+        const k = String(key || '').trim().toLowerCase();
+        const cfg = billingConfigRaw[key];
+        if (!k || !cfg || typeof cfg !== 'object') return;
+        schoolBillingConfigs[k] = { ...cfg };
     });
     calendarToolbarExternalLink = String(saved.calendarToolbarExternalLink || '').trim();
     const swcRaw =
@@ -3124,6 +3355,8 @@ function saveRoster() {
             customSchools: customSchoolsList,
             schoolExternalLinks,
             schoolThemeColors,
+            schoolBillingModels,
+            schoolBillingConfigs,
             calendarToolbarExternalLink,
             passportLinks: passportFollowupLinks,
             passportHeaderPageLink,
@@ -3536,7 +3769,7 @@ function renderSidebarHeaderProfile() {
     const displayName = isTeacherLoggedIn
         ? String(activeTeacherName || 'Teacher').trim()
         : 'Guest profile';
-    const displayRole = !isTeacherLoggedIn ? 'Guest' : (loggedInStudentFullName ? 'Student' : 'Teacher');
+    const displayRole = !isTeacherLoggedIn ? 'Guest' : (isAdminLoggedIn ? 'Admin' : (loggedInStudentFullName ? 'Student' : 'Teacher'));
 
     nameEl.textContent = displayName;
     roleEl.textContent = displayRole;
@@ -3585,12 +3818,97 @@ function setupSidebarProfileAvatarUpload() {
     });
 }
 
+const SIDEBAR_CURSOR_TOOLTIP_ID = 'sidebarCursorTooltip';
+
+function ensureSidebarCursorTooltip() {
+    let el = document.getElementById(SIDEBAR_CURSOR_TOOLTIP_ID);
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = SIDEBAR_CURSOR_TOOLTIP_ID;
+    el.className = 'sidebar-cursor-tooltip';
+    el.setAttribute('role', 'tooltip');
+    el.hidden = true;
+    el.textContent = '';
+    document.body.appendChild(el);
+    return el;
+}
+
+/**
+ * Tooltip top-left is anchored just past the pointer’s bottom-right from the hotspot (clientX/Y),
+ * or past the button’s bottom-right on focus.
+ */
+function bindSidebarCursorTooltip(button, tipText) {
+    const tip = ensureSidebarCursorTooltip();
+    const CURSOR_BR_OFFSET_X = 10;
+    const CURSOR_BR_OFFSET_Y = 12;
+    const GAP = 4;
+    const prepareTip = () => {
+        tip.textContent = tipText;
+        tip.removeAttribute('hidden');
+        tip.style.position = 'fixed';
+        tip.style.transform = 'none';
+        tip.style.pointerEvents = 'none';
+        tip.style.visibility = 'visible';
+    };
+    const positionTipFromPointerHotspot = (clientX, clientY) => {
+        prepareTip();
+        const ax = clientX + CURSOR_BR_OFFSET_X + GAP;
+        const ay = clientY + CURSOR_BR_OFFSET_Y + GAP;
+        tip.style.left = `${ax}px`;
+        tip.style.top = `${ay}px`;
+    };
+    const positionTipFromAnchorPoint = (anchorRight, anchorBottom) => {
+        prepareTip();
+        tip.style.left = `${anchorRight + GAP}px`;
+        tip.style.top = `${anchorBottom + GAP}px`;
+    };
+    const showAtFocus = () => {
+        requestAnimationFrame(() => {
+            const r = button.getBoundingClientRect();
+            positionTipFromAnchorPoint(r.right, r.bottom);
+        });
+    };
+    const hide = () => {
+        tip.setAttribute('hidden', '');
+        tip.style.left = '';
+        tip.style.top = '';
+        tip.style.transform = '';
+        tip.style.visibility = '';
+        tip.style.position = '';
+        tip.style.pointerEvents = '';
+    };
+    button.addEventListener('mousemove', (e) => {
+        positionTipFromPointerHotspot(e.clientX, e.clientY);
+    });
+    button.addEventListener('mouseleave', hide);
+    button.addEventListener('focus', () => {
+        showAtFocus();
+    });
+    button.addEventListener('blur', hide);
+}
+
+function performTeacherSessionLogout() {
+    isTeacherLoggedIn = false;
+    isAdminLoggedIn = false;
+    loggedInTeacherName = '';
+    loggedInStudentFullName = '';
+    currentTeacher = null;
+    try {
+        sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
+    } catch {
+        /* ignore */
+    }
+    renderSidebar();
+    setLoggedOutDashboard();
+}
+
 function renderSidebar() {
     const teacherList = document.getElementById('teacherList');
     if (!teacherList) return;
     const sidebarRoot = teacherList.closest('.sidebar');
     sidebarRoot?.classList.toggle('is-logged-in', !!isTeacherLoggedIn);
     sidebarRoot?.classList.toggle('is-student-session', !!loggedInStudentFullName);
+    sidebarRoot?.classList.toggle('is-admin-session', hasEffectiveAdminSession());
     renderSidebarHeaderProfile();
 
     const collapsedByTitle = {};
@@ -3602,6 +3920,122 @@ function renderSidebar() {
     });
 
     teacherList.innerHTML = '';
+    const sidebarMain = document.createElement('div');
+    sidebarMain.className = 'sidebar-main';
+    sidebarMain.hidden = !hasEffectiveAdminSession();
+
+    const sidebarTop = document.createElement('div');
+    sidebarTop.className = 'sidebar-top';
+
+    const dashboardBtn = document.createElement('button');
+    dashboardBtn.type = 'button';
+    dashboardBtn.className = 'teacher-list-dashboard-btn';
+    dashboardBtn.setAttribute('aria-label', 'Open dashboard');
+    dashboardBtn.title = 'Dashboard';
+    dashboardBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="teacher-list-dashboard-btn-icon" aria-hidden="true">' +
+        '<path d="M6 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6ZM15.75 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3h-2.25ZM6 12.75a3 3 0 0 0-3 3V18a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3v-2.25a3 3 0 0 0-3-3H6ZM17.625 13.5a.75.75 0 0 0-1.5 0v2.625H13.5a.75.75 0 0 0 0 1.5h2.625v2.625a.75.75 0 0 0 1.5 0v-2.625h2.625a.75.75 0 0 0 0-1.5h-2.625V13.5Z" />' +
+        '</svg><span class="teacher-list-dashboard-btn-label">Dashboard</span>';
+    dashboardBtn.hidden = !hasEffectiveAdminSession();
+    dashboardBtn.addEventListener('click', () => {
+        if (!hasEffectiveAdminSession()) return;
+        setAdminDashboard();
+    });
+    sidebarTop.appendChild(dashboardBtn);
+    const managementSection = document.createElement('section');
+    managementSection.className = 'teacher-list-management';
+    managementSection.hidden = !hasEffectiveAdminSession();
+    managementSection.innerHTML = `
+        <div class="management-section">
+            <h3 class="management-section-title">— Management</h3>
+            <div class="management-actions" id="teacherListManagementActions">
+                <button type="button" class="teacher-btn" data-management-nav="teachers" aria-label="Teachers">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" clip-rule="evenodd" />
+                        <path d="M5.082 14.254a8.287 8.287 0 0 0-1.308 5.135 9.687 9.687 0 0 1-1.764-.44l-.115-.04a.563.563 0 0 1-.373-.487l-.01-.121a3.75 3.75 0 0 1 3.57-4.047ZM20.226 19.389a8.287 8.287 0 0 0-1.308-5.135 3.75 3.75 0 0 1 3.57 4.047l-.01.121a.563.563 0 0 1-.373.486l-.115.04c-.567.2-1.156.349-1.764.441Z" />
+                    </svg>
+                    <span class="management-nav-btn-label">Teachers</span>
+                </button>
+                <button type="button" class="school-btn" data-management-nav="schools" aria-label="Schools">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M3 2.25a.75.75 0 0 0 0 1.5v16.5h-.75a.75.75 0 0 0 0 1.5H15v-18a.75.75 0 0 0 0-1.5H3ZM6.75 19.5v-2.25a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-.75.75h-3a.75.75 0 0 1-.75-.75ZM6 6.75A.75.75 0 0 1 6.75 6h.75a.75.75 0 0 1 0 1.5h-.75A.75.75 0 0 1 6 6.75ZM6.75 9a.75.75 0 0 0 0 1.5h.75a.75.75 0 0 0 0-1.5h-.75ZM6 12.75a.75.75 0 0 1 .75-.75h.75a.75.75 0 0 1 0 1.5h-.75a.75.75 0 0 1-.75-.75ZM10.5 6a.75.75 0 0 0 0 1.5h.75a.75.75 0 0 0 0-1.5h-.75Zm-.75 3.75A.75.75 0 0 1 10.5 9h.75a.75.75 0 0 1 0 1.5h-.75a.75.75 0 0 1-.75-.75ZM10.5 12a.75.75 0 0 0 0 1.5h.75a.75.75 0 0 0 0-1.5h-.75ZM16.5 6.75v15h5.25a.75.75 0 0 0 0-1.5H21v-12a.75.75 0 0 0 0-1.5h-4.5Zm1.5 4.5a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Zm.75 2.25a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75v-.008a.75.75 0 0 0-.75-.75h-.008ZM18 17.25a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="management-nav-btn-label">Schools</span>
+                </button>
+                <button type="button" class="student-btn" data-management-nav="students" aria-label="Students">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="management-nav-btn-label">Students</span>
+                </button>
+                <button type="button" class="class-btn" data-management-nav="classes" aria-label="Classes">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path d="M12.75 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM7.5 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8.25 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM9.75 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM10.5 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM12.75 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM14.25 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM15 17.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM16.5 15.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM15 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM16.5 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" />
+                        <path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="management-nav-btn-label">Classes</span>
+                </button>
+                <button type="button" class="payment-btn" data-management-nav="payments" aria-label="Payments">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path d="M12 7.5a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5z" />
+                        <path fill-rule="evenodd" d="M1.5 4.875C1.5 3.839 2.34 3 3.375 3h17.25c1.035 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 011.5 14.625v-9.75zM8.25 9.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM18.75 9a.75.75 0 00-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 00.75-.75V9.75a.75.75 0 00-.75-.75h-.008zM4.5 9.75A.75.75 0 015.25 9h.008a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75H5.25a.75.75 0 01-.75-.75V9.75z" clip-rule="evenodd" />
+                        <path d="M2.25 18a.75.75 0 000 1.5c5.4 0 10.63.722 15.6 2.075 1.19.324 2.4-.558 2.4-1.82V18.75a.75.75 0 00-.75-.75H2.25z" />
+                    </svg>
+                    <span class="management-nav-btn-label">Payments</span>
+                </button>
+            </div>
+        </div>
+    `;
+    sidebarTop.appendChild(managementSection);
+
+    const otherSection = document.createElement('section');
+    otherSection.className = 'teacher-list-other';
+    otherSection.hidden = !hasEffectiveAdminSession();
+    otherSection.innerHTML = `
+        <div class="other-section">
+            <h3 class="other-section-title">— Other</h3>
+            <div class="other-actions" id="teacherListOtherActions">
+                <button type="button" class="report-btn" data-other-nav="report" aria-label="Report">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M2.25 2.25a.75.75 0 0 0 0 1.5H3v10.5a3 3 0 0 0 3 3h1.21l-1.172 3.513a.75.75 0 0 0 1.424.474l.329-.987h8.418l.33.987a.75.75 0 0 0 1.422-.474l-1.17-3.513H18a3 3 0 0 0 3-3V3.75h.75a.75.75 0 0 0 0-1.5H2.25Zm6.04 16.5.5-1.5h6.42l.5 1.5H8.29Zm7.46-12a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0v-6Zm-3 2.25a.75.75 0 0 0-1.5 0v3.75a.75.75 0 0 0 1.5 0V9Zm-3 2.25a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5Z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="management-nav-btn-label">Report</span>
+                </button>
+                <button type="button" class="settings-btn" data-other-nav="settings" aria-label="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M12 6.75a5.25 5.25 0 0 1 6.775-5.025.75.75 0 0 1 .313 1.248l-3.32 3.319c.063.475.276.934.641 1.299.365.365.824.578 1.3.64l3.318-3.319a.75.75 0 0 1 1.248.313 5.25 5.25 0 0 1-5.472 6.756c-1.018-.086-1.87.1-2.309.634L7.344 21.3A3.298 3.298 0 1 1 2.7 16.657l8.684-7.151c.533-.44.72-1.291.634-2.309A5.342 5.342 0 0 1 12 6.75ZM4.117 19.125a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Z" clip-rule="evenodd" />
+                        <path d="m10.076 8.64-2.201-2.2V4.874a.75.75 0 0 0-.364-.643l-3.75-2.25a.75.75 0 0 0-.916.113l-.75.75a.75.75 0 0 0-.113.916l2.25 3.75a.75.75 0 0 0 .643.364h1.564l2.062 2.062 1.575-1.297Z" />
+                        <path fill-rule="evenodd" d="m12.556 17.329 4.183 4.182a3.375 3.375 0 0 0 4.773-4.773l-3.306-3.305a6.803 6.803 0 0 1-1.53.043c-.394-.034-.682-.006-.867.042a.589.589 0 0 0-.167.063l-3.086 3.748Zm3.414-1.36a.75.75 0 0 1 1.06 0l1.875 1.876a.75.75 0 1 1-1.06 1.06L15.97 17.03a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="management-nav-btn-label">Settings</span>
+                </button>
+                <button type="button" class="audit-logs-btn" data-other-nav="audit-logs" aria-label="Audit logs">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z" clip-rule="evenodd" />
+                        <path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" />
+                    </svg>
+                    <span class="management-nav-btn-label">Audit Logs</span>
+                </button>
+            </div>
+        </div>
+    `;
+    sidebarTop.appendChild(otherSection);
+
+    const sidebarBottom = document.createElement('div');
+    sidebarBottom.className = 'sidebar-bottom';
+    const adminLogoffBtn = document.createElement('button');
+    adminLogoffBtn.type = 'button';
+    adminLogoffBtn.id = 'sidebarAdminLogoffBtn';
+    adminLogoffBtn.className = 'sidebar-admin-logoff-btn';
+    adminLogoffBtn.setAttribute('aria-label', 'Log off');
+    adminLogoffBtn.title = 'Log off';
+    adminLogoffBtn.innerHTML =
+        `${SIDEBAR_LOGOUT_TEACHER_SVG}<span class="sidebar-admin-logoff-btn-label">Log off</span>`;
+    sidebarBottom.appendChild(adminLogoffBtn);
+
+    sidebarMain.appendChild(sidebarTop);
+    sidebarMain.appendChild(sidebarBottom);
+    teacherList.appendChild(sidebarMain);
 
     const paneTeachers = document.createElement('div');
     paneTeachers.className = 'sidebar-pane sidebar-pane-teachers';
@@ -3613,10 +4047,11 @@ function renderSidebar() {
     const addTeacherBtn = document.createElement('button');
     addTeacherBtn.type = 'button';
     addTeacherBtn.id = 'addTeacherProfileBtn';
-    addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher sidebar-add-btn--expandable';
+    addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher';
     addTeacherBtn.setAttribute('aria-label', 'Add teacher profile');
-    addTeacherBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_ADD_TEACHER_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full"><span class="sidebar-add-btn-state-label">Add Teacher</span>${SIDEBAR_ADD_TEACHER_SVG}</span>`;
+    addTeacherBtn.innerHTML = SIDEBAR_ADD_TEACHER_SVG;
     addTeacherBtn.addEventListener('click', () => openAddStudentModal('teacher'));
+    bindSidebarCursorTooltip(addTeacherBtn, 'Add your Profile');
     const loginTeacherBtn = document.createElement('button');
     loginTeacherBtn.type = 'button';
     loginTeacherBtn.className = 'sidebar-add-btn sidebar-add-btn--with-text sidebar-section-add-btn sidebar-auth-btn';
@@ -3625,33 +4060,17 @@ function renderSidebar() {
         loginTeacherBtn.setAttribute('aria-label', 'Teacher logout');
         loginTeacherBtn.innerHTML = `${SIDEBAR_LOGOUT_TEACHER_SVG}<span class="sidebar-add-btn-label">Log Out</span>`;
         loginTeacherBtn.addEventListener('click', () => {
-            isTeacherLoggedIn = false;
-            loggedInTeacherName = '';
-            loggedInStudentFullName = '';
-            currentTeacher = null;
-            try {
-                sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
-            } catch {
-                /* ignore */
-            }
-            renderSidebar();
-            setLoggedOutDashboard();
+            performTeacherSessionLogout();
         });
     } else {
         loginTeacherBtn.classList.add('sidebar-auth-btn--login');
         loginTeacherBtn.setAttribute('aria-label', 'Teacher login');
         loginTeacherBtn.innerHTML = `<span class="sidebar-add-btn-label">Log In</span>${SIDEBAR_LOGIN_TEACHER_SVG}`;
         loginTeacherBtn.addEventListener('click', () => {
-            const hasTeachers = teachersList.length > 0;
-            const hasStudents =
-                privateStudentsList.length + speakonStudentsList.length + passportStudentsList.length > 0;
-            if (!hasTeachers && !hasStudents) {
-                showAppMessage('No teacher profile found yet. Click the academic icon to create your profile.');
-                return;
-            }
             openTeacherLoginModal();
         });
     }
+    bindSidebarCursorTooltip(loginTeacherBtn, isTeacherLoggedIn ? 'Log out' : 'Log in');
     const teachersHeaderActions = document.createElement('div');
     teachersHeaderActions.className = 'sidebar-section-actions';
     teachersHeaderActions.appendChild(loginTeacherBtn);
@@ -3674,24 +4093,27 @@ function renderSidebar() {
     const addStudentEntryBtn = document.createElement('button');
     addStudentEntryBtn.type = 'button';
     addStudentEntryBtn.id = 'addStudentEntryBtn';
-    addStudentEntryBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--student-entry sidebar-add-btn--expandable';
+    addStudentEntryBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--student-entry';
     addStudentEntryBtn.setAttribute('aria-label', 'Add student');
-    addStudentEntryBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${ADD_STUDENT_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${ADD_STUDENT_SVG}<span class="sidebar-add-btn-state-label">Add Student</span></span>`;
+    addStudentEntryBtn.innerHTML = ADD_STUDENT_SVG;
     addStudentEntryBtn.addEventListener('click', () => openAddStudentModal('student-global'));
+    bindSidebarCursorTooltip(addStudentEntryBtn, 'Add a student');
     const googleMeetBtn = document.createElement('button');
     googleMeetBtn.type = 'button';
     googleMeetBtn.id = 'googleMeetBtn';
-    googleMeetBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--google-meet sidebar-add-btn--expandable';
+    googleMeetBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--google-meet';
     googleMeetBtn.setAttribute('aria-label', 'Open Google Meet');
-    googleMeetBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_GOOGLE_MEET_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${SIDEBAR_GOOGLE_MEET_SVG}<span class="sidebar-add-btn-state-label">Google Meet</span></span>`;
+    googleMeetBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SVG;
     googleMeetBtn.addEventListener('click', openGoogleMeetModal);
+    bindSidebarCursorTooltip(googleMeetBtn, 'Open Google Meet');
     const addStudentBtn = document.createElement('button');
     addStudentBtn.type = 'button';
     addStudentBtn.id = 'addSchoolBtn';
-    addStudentBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--school sidebar-add-btn--expandable';
+    addStudentBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--school';
     addStudentBtn.setAttribute('aria-label', 'Add school');
-    addStudentBtn.innerHTML = `<span class="sidebar-add-btn-state sidebar-add-btn-state--icon">${SIDEBAR_ADD_SCHOOL_SVG}</span><span class="sidebar-add-btn-state sidebar-add-btn-state--full">${SIDEBAR_ADD_SCHOOL_SVG}<span class="sidebar-add-btn-state-label">Add School</span></span>`;
+    addStudentBtn.innerHTML = SIDEBAR_ADD_SCHOOL_SVG;
     addStudentBtn.addEventListener('click', () => openAddStudentModal('student'));
+    bindSidebarCursorTooltip(addStudentBtn, 'Add a school');
     if (loggedInStudentFullName) {
         addTeacherBtn.hidden = true;
         googleMeetBtn.hidden = true;
@@ -3742,6 +4164,8 @@ function renderSidebar() {
     classReportHeaderActions.className = 'sidebar-section-actions';
     classReportHeaderActions.appendChild(classReportPromptBtn);
     classReportHeaderActions.appendChild(classReportDownloadBtn);
+    bindSidebarCursorTooltip(classReportDownloadBtn, 'Download class report (PDF)');
+    bindSidebarCursorTooltip(classReportPromptBtn, 'Copy weekly prompt');
     classReportHeader.appendChild(classReportHeaderTitle);
     classReportHeader.appendChild(classReportHeaderActions);
     const classReportInner = document.createElement('div');
@@ -3780,6 +4204,7 @@ function renderSidebar() {
     const financesHeaderActions = document.createElement('div');
     financesHeaderActions.className = 'sidebar-section-actions';
     financesHeaderActions.appendChild(financesDownloadBtn);
+    bindSidebarCursorTooltip(financesDownloadBtn, 'Download finances (PDF)');
     financesHeader.appendChild(financesHeaderTitle);
     financesHeader.appendChild(financesHeaderActions);
     const financesInner = document.createElement('div');
@@ -4073,6 +4498,7 @@ function renderSidebar() {
     });
 
     populateClassReportStudentLists(classReportInner);
+    refreshAdminPanelIfShowingOverview();
 }
 
 function populateClassReportStudentLists(container) {
@@ -4284,13 +4710,313 @@ function populateClassReportStudentLists(container) {
     container.appendChild(wrap);
 }
 
+function getAdminAccountRows() {
+    const rows = [
+        {
+            role: 'Admin',
+            name: String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim(),
+            accountKey: '__admin__',
+            email: String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim(),
+            passwordLabel: 'Configured',
+            info: 'Full platform access'
+        }
+    ];
+    teachersList.forEach((name) => {
+        rows.push({
+            role: 'Teacher',
+            name,
+            accountKey: `teacher::${name}`,
+            email: String(teacherEmailsByName[name] || '').trim(),
+            passwordLabel: String(teacherPasswordsByName[name] || '').trim() ? 'Configured' : 'Not set',
+            info: 'Teacher profile'
+        });
+    });
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const school = getStudentSchoolName(name) || 'Unassigned school';
+        const rosterKind = rosterKindFromSchoolName(school);
+        rows.push({
+            role: 'Student',
+            name,
+            accountKey: `student::${name}`,
+            email: String(studentEmailsByName[name] || '').trim(),
+            passwordLabel: String(studentPasswordsByName[name] || '').trim() ? 'Configured' : 'Not set',
+            info: school,
+            rosterKind
+        });
+    });
+    return rows;
+}
+
+/** Unique schools (from student assignments + custom schools) for admin overview. */
+function getAdminSchoolSummaries() {
+    const map = new Map();
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((rawName) => {
+        const name = String(rawName || '').trim();
+        if (!name) return;
+        const school = String(getStudentSchoolName(name) || 'Unassigned').trim() || 'Unassigned';
+        const k = school.toLowerCase();
+        if (!map.has(k)) {
+            map.set(k, { title: school, students: [] });
+        }
+        map.get(k).students.push(name);
+    });
+    customSchoolsList.forEach((raw) => {
+        const school = String(raw || '').trim();
+        if (!school) return;
+        const k = school.toLowerCase();
+        if (!map.has(k)) {
+            map.set(k, { title: school, students: [] });
+        }
+    });
+    return [...map.values()].sort((a, b) =>
+        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+    );
+}
+
+function renderAdminBlankPanel() {
+    const panel = document.getElementById('adminControlPanel');
+    if (!panel || !hasEffectiveAdminSession()) return;
+    panel.innerHTML = '<div class="admin-panel-blank" aria-hidden="true"></div>';
+}
+
+function refreshAdminPanelIfShowingOverview() {
+    if (!hasEffectiveAdminSession()) return;
+    const panel = document.getElementById('adminControlPanel');
+    if (!panel || panel.hidden) return;
+    if (panel.querySelector('.admin-dashboard')) {
+        renderAdminOverviewPanel();
+    }
+}
+
+function renderAdminOverviewPanel() {
+    const panel = document.getElementById('adminControlPanel');
+    if (!panel) return;
+    if (!hasEffectiveAdminSession()) {
+        panel.hidden = true;
+        panel.innerHTML = '';
+        return;
+    }
+
+    const teacherRows =
+        teachersList.length === 0
+            ? '<p class="admin-dashboard-empty">No teacher profiles yet.</p>'
+            : teachersList
+                  .map((raw) => {
+                      const name = String(raw || '').trim();
+                      if (!name) return '';
+                      const email = String(teacherEmailsByName[name] || '').trim();
+                      const rawPw = String(teacherPasswordsByName[name] || '').trim();
+                      const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
+                      return `<div class="admin-dashboard-item">
+                        <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
+                        <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
+                      </div>`;
+                  })
+                  .join('');
+
+    const schoolSummaries = getAdminSchoolSummaries();
+    const schoolRows =
+        schoolSummaries.length === 0
+            ? '<p class="admin-dashboard-empty">No schools yet.</p>'
+            : schoolSummaries
+                  .map(({ title, students }) => {
+                      const kind = rosterKindFromSchoolName(title) || 'private';
+                      const list =
+                          students.length === 0
+                              ? '<em>No students linked</em>'
+                              : students.map((n) => escapeHtmlAttr(n)).join(', ');
+                      return `<div class="admin-dashboard-item">
+                        <span class="admin-dashboard-item-title">${escapeHtmlAttr(title)}</span>
+                        <span class="admin-dashboard-item-meta">Roster: ${escapeHtmlAttr(kind)}</span>
+                        <span class="admin-dashboard-item-meta">Students (${students.length}): ${list}</span>
+                      </div>`;
+                  })
+                  .join('');
+
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    const studentRows =
+        allStudents.length === 0
+            ? '<p class="admin-dashboard-empty">No students yet.</p>'
+            : allStudents
+                  .map((raw) => {
+                      const name = String(raw || '').trim();
+                      if (!name) return '';
+                      const school = String(getStudentSchoolName(name) || '').trim() || '—';
+                      const email = String(studentEmailsByName[name] || '').trim();
+                      const tutor = String(studentTeacherByName[name] || '').trim();
+                      const rk = getStudentRosterKind(name) || 'private';
+                      return `<div class="admin-dashboard-item">
+                        <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
+                        <span class="admin-dashboard-item-meta">School: ${escapeHtmlAttr(school)}</span>
+                        <span class="admin-dashboard-item-meta">Profile / roster: ${escapeHtmlAttr(rk)}</span>
+                        <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Assigned teacher: ${tutor ? escapeHtmlAttr(tutor) : '<em>None</em>'}</span>
+                      </div>`;
+                  })
+                  .join('');
+
+    panel.innerHTML = `
+        <div class="admin-dashboard">
+            <h2 class="admin-panel-title">Dashboard</h2>
+            <p class="admin-panel-subtitle">Overview of teachers, schools, and students in your roster.</p>
+            <div class="admin-dashboard-grid">
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-teachers">
+                    <h3 id="admin-dash-teachers" class="admin-dashboard-category-title">Teachers</h3>
+                    <div class="admin-dashboard-category-body">${teacherRows}</div>
+                </section>
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-schools">
+                    <h3 id="admin-dash-schools" class="admin-dashboard-category-title">Schools</h3>
+                    <div class="admin-dashboard-category-body">${schoolRows}</div>
+                </section>
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-students">
+                    <h3 id="admin-dash-students" class="admin-dashboard-category-title">Students</h3>
+                    <div class="admin-dashboard-category-body">${studentRows}</div>
+                </section>
+            </div>
+        </div>
+    `;
+}
+
+async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw) {
+    const email = String(emailRaw || '').trim();
+    const password = String(passwordRaw || '').trim();
+    if (role === 'Admin') {
+        if (!email) {
+            showAppMessage('Admin username is required.');
+            return false;
+        }
+        if (password.length < 5) {
+            showAppMessage('Admin password must have at least 5 characters.');
+            return false;
+        }
+        const passwordHash = await hashStudentPassword(password);
+        adminAccount = { username: email, passwordHash };
+        saveAdminAccountToStorage(adminAccount);
+        if (isAdminLoggedIn) {
+            saveLoginCredentials(email, password);
+        }
+        showAppMessage('Admin credentials updated.');
+        return true;
+    }
+    if (!name) return false;
+    if (!email) {
+        showAppMessage('Email is required.');
+        return false;
+    }
+    if (password.length < 8) {
+        showAppMessage('Password must have at least 8 characters.');
+        return false;
+    }
+    const emailLc = email.toLowerCase();
+    const allStudentNames = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    const emailConflictTeacher = teachersList.some((n) => {
+        if (role === 'Teacher' && n === name) return false;
+        return String(teacherEmailsByName[n] || '').trim().toLowerCase() === emailLc;
+    });
+    const emailConflictStudent = allStudentNames.some((n) => {
+        if (role === 'Student' && n === name) return false;
+        return String(studentEmailsByName[n] || '').trim().toLowerCase() === emailLc;
+    });
+    if (emailConflictTeacher || emailConflictStudent || emailLc === String(adminAccount.username || '').trim().toLowerCase()) {
+        showAppMessage('This email/username is already in use.');
+        return false;
+    }
+    if (role === 'Teacher') {
+        teacherEmailsByName[name] = email;
+        teacherPasswordsByName[name] = password;
+    } else if (role === 'Student') {
+        const passwordHash = await hashStudentPassword(password);
+        studentEmailsByName[name] = email;
+        studentPasswordsByName[name] = passwordHash;
+    }
+    saveRoster();
+    showAppMessage(`${role} credentials updated.`);
+    return true;
+}
+
+function removeAccountFromAdmin(role, name) {
+    if (role === 'Admin') {
+        showAppMessage('The admin account cannot be deleted.');
+        return;
+    }
+    if (role === 'Teacher') {
+        const idx = teachersList.findIndex((t) => String(t || '').trim().toLowerCase() === String(name || '').trim().toLowerCase());
+        if (idx === -1) return;
+        const teacherName = teachersList[idx];
+        teachersList.splice(idx, 1);
+        delete teacherEmailsByName[teacherName];
+        delete teacherPasswordsByName[teacherName];
+        delete teacherSchedules[teacherName];
+        Object.keys(studentTeacherByName).forEach((student) => {
+            if (String(studentTeacherByName[student] || '').trim().toLowerCase() === teacherName.trim().toLowerCase()) {
+                delete studentTeacherByName[student];
+            }
+        });
+        if (loggedInTeacherName && loggedInTeacherName.trim().toLowerCase() === teacherName.trim().toLowerCase()) {
+            loggedInTeacherName = '';
+        }
+    } else if (role === 'Student') {
+        const school = getStudentSchoolName(name);
+        const kind = rosterKindFromSchoolName(school);
+        removeStudentFromRoster(name, kind);
+        return;
+    }
+    saveRoster();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+    renderSidebar();
+    showAppMessage(`${role} account removed.`);
+}
+
+function setAdminDashboard() {
+    if (!hasEffectiveAdminSession()) {
+        setLoggedOutDashboard();
+        return;
+    }
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const summaryPanel = document.getElementById('summaryPanel');
+    const reportPanel = document.getElementById('studentClassReportPanel');
+    const adminPanel = document.getElementById('adminControlPanel');
+    if (calendarWrapper) calendarWrapper.hidden = true;
+    if (summaryPanel) summaryPanel.hidden = true;
+    if (reportPanel) reportPanel.hidden = true;
+    if (adminPanel) {
+        adminPanel.hidden = false;
+        renderAdminOverviewPanel();
+    }
+}
+
+function showAdminBlankMainPanel() {
+    if (!hasEffectiveAdminSession()) {
+        setLoggedOutDashboard();
+        return;
+    }
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const summaryPanel = document.getElementById('summaryPanel');
+    const reportPanel = document.getElementById('studentClassReportPanel');
+    const adminPanel = document.getElementById('adminControlPanel');
+    if (calendarWrapper) calendarWrapper.hidden = true;
+    if (summaryPanel) summaryPanel.hidden = true;
+    if (reportPanel) reportPanel.hidden = true;
+    if (adminPanel) {
+        adminPanel.hidden = false;
+        renderAdminBlankPanel();
+    }
+}
+
 function setLoggedOutDashboard() {
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
+    const adminPanel = document.getElementById('adminControlPanel');
     if (calendarWrapper) calendarWrapper.hidden = true;
     if (summaryPanel) summaryPanel.hidden = true;
     if (reportPanel) reportPanel.hidden = true;
+    if (adminPanel) {
+        adminPanel.hidden = true;
+        adminPanel.innerHTML = '';
+    }
 }
 
 function setSidebarSectionCollapsed(section, collapsed, animate = true) {
@@ -4378,6 +5104,8 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
     customSchoolsList = customSchoolsList.filter((school) => String(school || '').trim().toLowerCase() !== schoolKey);
     delete schoolExternalLinks[schoolKey];
     delete schoolThemeColors[schoolKey];
+    delete schoolBillingModels[schoolKey];
+    delete schoolBillingConfigs[schoolKey];
     delete googleMeetSharedLinkModeBySchoolKey[schoolKey];
 
     if (currentTeacher && removedKeys.has(currentTeacher.trim().toLowerCase())) {
@@ -4566,6 +5294,14 @@ function saveSchoolSettingsFromModal() {
     }
     if (nextSchoolKey !== schoolKey) {
         delete schoolExternalLinks[schoolKey];
+        if (Object.prototype.hasOwnProperty.call(schoolBillingModels, schoolKey)) {
+            schoolBillingModels[nextSchoolKey] = String(schoolBillingModels[schoolKey] || '').trim();
+            delete schoolBillingModels[schoolKey];
+        }
+        if (Object.prototype.hasOwnProperty.call(schoolBillingConfigs, schoolKey)) {
+            schoolBillingConfigs[nextSchoolKey] = { ...(schoolBillingConfigs[schoolKey] || {}) };
+            delete schoolBillingConfigs[schoolKey];
+        }
         if (Object.prototype.hasOwnProperty.call(googleMeetSharedLinkModeBySchoolKey, schoolKey)) {
             googleMeetSharedLinkModeBySchoolKey[nextSchoolKey] = !!googleMeetSharedLinkModeBySchoolKey[schoolKey];
             delete googleMeetSharedLinkModeBySchoolKey[schoolKey];
@@ -4820,19 +5556,47 @@ function setupTeacherLoginModal() {
     cancelBtn?.addEventListener('click', () => closeTeacherLoginModal());
     backdrop?.addEventListener('click', () => closeTeacherLoginModal());
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const rawLogin = String(emailInput.value || '').trim();
         const emailLc = rawLogin.toLowerCase();
         const password = String(passwordInput.value || '').trim();
 
         if (!rawLogin) {
-            setError('Enter your teacher email, or @FirstName / your first name (student).');
+            setError('Enter your admin username or your teacher/student account email.');
             emailInput.focus();
             return;
         }
         if (!password) {
             setError('Password is required to log in.');
+            passwordInput.focus();
+            return;
+        }
+
+        const adminLogin = await verifyAdminLogin(rawLogin, password);
+        if (adminLogin.ok) {
+            if (saveCredentialsCheckbox?.checked) {
+                saveLoginCredentials(rawLogin.trim(), password);
+            } else {
+                clearSavedLoginCredentials();
+            }
+            try {
+                sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+            } catch {
+                /* ignore */
+            }
+            closeTeacherLoginModal();
+            isAdminLoggedIn = true;
+            loggedInStudentFullName = '';
+            loggedInTeacherName = '';
+            isTeacherLoggedIn = true;
+            currentTeacher = '';
+            renderSidebar();
+            setAdminDashboard();
+            return;
+        }
+        if (String(rawLogin || '').trim().toLowerCase() === String(adminAccount.username || '').trim().toLowerCase()) {
+            setError(adminLogin.error || 'Incorrect admin password.');
             passwordInput.focus();
             return;
         }
@@ -4872,6 +5636,7 @@ function setupTeacherLoginModal() {
             }
 
             closeTeacherLoginModal();
+            isAdminLoggedIn = false;
             loggedInStudentFullName = '';
             isTeacherLoggedIn = true;
             loggedInTeacherName = teacherNameByEmail;
@@ -4880,22 +5645,8 @@ function setupTeacherLoginModal() {
             return;
         }
 
-        const studentFirst = getStudentLoginFirstNameFromUsernameField(rawLogin);
-        if (studentFirst !== null) {
-            if (!studentFirst) {
-                setError('Students: use @FirstName (e.g. @Alexandre) or your first name, then your phone number (no country code).');
-                emailInput.focus();
-                return;
-            }
-            const v = verifyStudentLogin(studentFirst, password);
-            if (!v.ok) {
-                setError(
-                    v.error
-                        || 'No teacher account matches that email. Students: use @FirstName or first name and your phone (no country code).'
-                );
-                emailInput.focus();
-                return;
-            }
+        const v = await verifyStudentLogin(rawLogin, password);
+        if (v.ok) {
             const tutor = getTutorRosterNameForStudent(v.studentName);
             if (!tutor) {
                 setError(
@@ -4918,15 +5669,16 @@ function setupTeacherLoginModal() {
             }
 
             closeTeacherLoginModal();
+            isAdminLoggedIn = false;
             loggedInStudentFullName = v.studentName;
             loggedInTeacherName = tutor;
             isTeacherLoggedIn = true;
             renderSidebar();
-            selectTeacher(v.studentName, { view: 'calendar' });
+            selectTeacher(v.studentName, { view: 'classReport' });
             return;
         }
 
-        setError('Email not found. Make sure you created your teacher profile with this email.');
+        setError(v.error || 'Email not found. Make sure you created your teacher or student account with this email.');
         emailInput.focus();
     });
 }
@@ -4935,19 +5687,28 @@ function setupTeacherLoginModal() {
 async function initTeachers() {
     await loadAllSchedules();
     initRoster();
+    await ensureAdminAccountReady();
     syncSpeakOnWeeklyToAllTeacherSchedules();
-    const restoredTeacher = tryRestoreSessionFromSavedCredentials();
+    const restoredTeacher = await tryRestoreSessionFromSavedCredentials();
     renderSidebar();
     setupTeacherListEditDelegation();
+    setupSidebarAdminLogoffDelegation();
+    setupAdminSidebarNavDelegation();
 
     if (!isTeacherLoggedIn) {
         setLoggedOutDashboard();
         return;
     }
 
+    if (isAdminLoggedIn) {
+        setAdminDashboard();
+        return;
+    }
+
     if (restoredTeacher || teachersList.length > 0) {
         const initialTeacher = restoredTeacher || loggedInTeacherName || teachersList[0];
-        selectTeacher(initialTeacher, restoredTeacher ? { view: 'calendar' } : undefined);
+        const restoredView = loggedInStudentFullName ? { view: 'classReport' } : { view: 'calendar' };
+        selectTeacher(initialTeacher, restoredTeacher ? restoredView : undefined);
     }
 }
 
@@ -4958,6 +5719,12 @@ async function initTeachers() {
 function selectTeacher(teacherName, opts) {
     if (!isTeacherLoggedIn) {
         setLoggedOutDashboard();
+        return;
+    }
+
+    if (hasEffectiveAdminSession()) {
+        // Admin view stays anchored in the full-width control panel.
+        setAdminDashboard();
         return;
     }
 
@@ -5022,6 +5789,7 @@ function selectTeacher(teacherName, opts) {
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
+    const adminPanel = document.getElementById('adminControlPanel');
 
     if (showClassReport) {
         if (calendarWrapper) calendarWrapper.hidden = true;
@@ -5030,10 +5798,12 @@ function selectTeacher(teacherName, opts) {
             reportPanel.hidden = false;
             renderStudentClassReportTable(teacherName);
         }
+        if (adminPanel) adminPanel.hidden = true;
     } else {
         if (calendarWrapper) calendarWrapper.hidden = false;
         if (summaryPanel) summaryPanel.hidden = false;
         if (reportPanel) reportPanel.hidden = true;
+        if (adminPanel) adminPanel.hidden = true;
         refreshCalendarDisplay();
         updateSummary();
     }
@@ -5119,6 +5889,45 @@ function setupTeacherListEditDelegation() {
         if (studentName != null && rosterKind) {
             openEditStudentModal(studentName, rosterKind);
         }
+    });
+}
+
+function setupSidebarAdminLogoffDelegation() {
+    const teacherList = document.getElementById('teacherList');
+    if (!teacherList || teacherList.dataset.adminLogoffDelegation === '1') {
+        return;
+    }
+    teacherList.dataset.adminLogoffDelegation = '1';
+    teacherList.addEventListener('click', (e) => {
+        const logoffBtn = e.target && e.target.closest && e.target.closest('.sidebar-admin-logoff-btn');
+        if (!logoffBtn || !teacherList.contains(logoffBtn)) {
+            return;
+        }
+        e.preventDefault();
+        if (!hasEffectiveAdminSession()) {
+            return;
+        }
+        performTeacherSessionLogout();
+    });
+}
+
+function setupAdminSidebarNavDelegation() {
+    const teacherList = document.getElementById('teacherList');
+    if (!teacherList || teacherList.dataset.adminSidebarNav === '1') {
+        return;
+    }
+    teacherList.dataset.adminSidebarNav = '1';
+    teacherList.addEventListener('click', (e) => {
+        const managementBtn = e.target && e.target.closest && e.target.closest('[data-management-nav]');
+        const otherBtn = e.target && e.target.closest && e.target.closest('[data-other-nav]');
+        if (!managementBtn && !otherBtn) {
+            return;
+        }
+        if (!hasEffectiveAdminSession()) {
+            return;
+        }
+        e.preventDefault();
+        showAdminBlankMainPanel();
     });
 }
 
@@ -5346,6 +6155,13 @@ function closeEditStudentModal() {
     closeModalWithAnimation(modal);
 }
 
+function refreshClassReportAfterMeetLinkChange() {
+    renderSidebar();
+    if (currentTeacher || loggedInStudentFullName) {
+        resyncSelectionAfterSidebarRender();
+    }
+}
+
 function upsertStudentFromEditForm(action = 'save') {
     const originalName = document.getElementById('editStudentOriginalName')?.value || '';
     const originalKind = document.getElementById('editStudentOriginalCategory')?.value || '';
@@ -5464,61 +6280,60 @@ function upsertStudentFromEditForm(action = 'save') {
         currentTeacher = fullName;
     }
 
+    const classDayInput = document.getElementById('editStudentSpeakonClassDay');
+    const classHourInput = document.getElementById('editStudentSpeakonClassHour');
+    const extraDayInput = document.getElementById('editStudentSpeakonExtraDay');
+    const extraHourInput = document.getElementById('editStudentSpeakonExtraHour');
+    const hasScheduleInputs = !!(classDayInput && classHourInput && extraDayInput && extraHourInput);
+    const shouldEditSpeakonSchedule = nextKind === 'speakon' && hasScheduleInputs;
+
     if (nextKind === 'speakon') {
         if (originalName !== fullName && speakonStudentWeeklyClass[originalName]) {
             speakonStudentWeeklyClass[fullName] = speakonStudentWeeklyClass[originalName];
             delete speakonStudentWeeklyClass[originalName];
         }
-        const classDayInput = document.getElementById('editStudentSpeakonClassDay');
-        const classHourInput = document.getElementById('editStudentSpeakonClassHour');
-        const extraDayInput = document.getElementById('editStudentSpeakonExtraDay');
-        const extraHourInput = document.getElementById('editStudentSpeakonExtraHour');
-        const hasScheduleInputs = !!(classDayInput && classHourInput && extraDayInput && extraHourInput);
-        const bucket = hasScheduleInputs
-            ? {
+        if (shouldEditSpeakonSchedule) {
+            const bucket = {
                 classDay: String(classDayInput.value || '').trim(),
                 classHour: String(classHourInput.value || '').trim(),
                 extraDay: String(extraDayInput.value || '').trim(),
                 extraHour: String(extraHourInput.value || '').trim()
+            };
+            const templateEmpty =
+                !bucket.classDay &&
+                !String(bucket.classHour || '').trim() &&
+                !bucket.extraDay &&
+                !String(bucket.extraHour || '').trim();
+            const speakonCanonical =
+                speakonStudentsList.find((n) => n.trim().toLowerCase() === fullName.trim().toLowerCase()) || fullName;
+            if (templateEmpty) {
+                Object.keys(speakonStudentWeeklyClass).forEach((k) => {
+                    if (String(k || '').trim().toLowerCase() === fullName.trim().toLowerCase()) {
+                        delete speakonStudentWeeklyClass[k];
+                    }
+                });
+                const ts = { ...(teacherSchedules[fullName] || {}) };
+                teacherSchedules[fullName] = stripSpeakonColorsFromScheduleCopy(ts);
+            } else {
+                Object.keys(speakonStudentWeeklyClass).forEach((k) => {
+                    if (
+                        k !== speakonCanonical &&
+                        String(k || '').trim().toLowerCase() === speakonCanonical.trim().toLowerCase()
+                    ) {
+                        delete speakonStudentWeeklyClass[k];
+                    }
+                });
+                speakonStudentWeeklyClass[speakonCanonical] = bucket;
             }
-            : getSpeakonWeeklyClassEntry(originalName !== fullName ? originalName : fullName);
-        const templateEmpty =
-            !bucket.classDay &&
-            !String(bucket.classHour || '').trim() &&
-            !bucket.extraDay &&
-            !String(bucket.extraHour || '').trim();
-        const speakonCanonical =
-            speakonStudentsList.find((n) => n.trim().toLowerCase() === fullName.trim().toLowerCase()) || fullName;
-        if (templateEmpty) {
-            Object.keys(speakonStudentWeeklyClass).forEach((k) => {
-                if (String(k || '').trim().toLowerCase() === fullName.trim().toLowerCase()) {
-                    delete speakonStudentWeeklyClass[k];
-                }
-            });
-            const ts = { ...(teacherSchedules[fullName] || {}) };
-            teacherSchedules[fullName] = stripSpeakonColorsFromScheduleCopy(ts);
-        } else {
-            Object.keys(speakonStudentWeeklyClass).forEach((k) => {
-                if (
-                    k !== speakonCanonical &&
-                    String(k || '').trim().toLowerCase() === speakonCanonical.trim().toLowerCase()
-                ) {
-                    delete speakonStudentWeeklyClass[k];
-                }
-            });
-            speakonStudentWeeklyClass[speakonCanonical] = bucket;
         }
-    } else {
-        delete speakonStudentWeeklyClass[fullName];
-        delete speakonStudentWeeklyClass[originalName];
-        const ts = { ...(teacherSchedules[fullName] || {}) };
-        teacherSchedules[fullName] = stripSpeakonColorsFromScheduleCopy(ts);
     }
 
-    if (teacherSchedules[fullName]) {
-        teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy(teacherSchedules[fullName], fullName);
-    } else {
-        teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy({}, fullName);
+    if (shouldEditSpeakonSchedule) {
+        if (teacherSchedules[fullName]) {
+            teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy(teacherSchedules[fullName], fullName);
+        } else {
+            teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy({}, fullName);
+        }
     }
     const reportPanelEl = document.getElementById('studentClassReportPanel');
     const classReportOpen = reportPanelEl && !reportPanelEl.hidden;
@@ -5588,7 +6403,7 @@ function setupEditStudentModal() {
     });
 }
 
-function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw) {
+function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, billingModelRaw) {
     const schoolName = String(schoolNameRaw || '').trim();
     if (!schoolName) {
         alert("Please enter the school's name.");
@@ -5602,6 +6417,16 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw) {
     });
     if (usedByStudent || customSchoolsList.some((s) => s.trim().toLowerCase() === k)) {
         alert('That school is already listed.');
+        return;
+    }
+    const billingModel = String(billingModelRaw || '').trim();
+    if (!billingModel) {
+        alert('Please select a billing model.');
+        document.getElementById('addSchoolBillingModel')?.focus();
+        return;
+    }
+    const billingConfig = getAddSchoolBillingConfigFromForm(billingModel);
+    if (!billingConfig) {
         return;
     }
 
@@ -5631,6 +6456,8 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw) {
         { primary: primaryColorRaw, secondary: secondaryColorRaw },
         schoolName
     );
+    schoolBillingModels[k] = billingModel;
+    schoolBillingConfigs[k] = { ...billingConfig };
 
     customSchoolsList.push(schoolName);
     customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -5669,6 +6496,21 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
         emailInput.reportValidity();
         return;
     }
+    const emailLc = email.toLowerCase();
+    const studentEmailTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+    });
+    if (studentEmailTaken) {
+        showAppMessage('This email is already used by a student account.');
+        return;
+    }
+    const teacherEmailTaken = teachersList.some((name) => {
+        return String(teacherEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+    });
+    if (teacherEmailTaken) {
+        showAppMessage('This teacher email is already in use.');
+        return;
+    }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
     const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
@@ -5699,7 +6541,7 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
     closeAddStudentModal();
 }
 
-function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
+async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const first = String(firstName || '').trim();
     const last = String(lastName || '').trim();
     const schoolName = String(schoolNameRaw || '').trim();
@@ -5718,12 +6560,40 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const password = String(passwordEl?.value || '').trim();
     const city = String(document.getElementById('addStudentCity')?.value || '').trim();
     const country = String(document.getElementById('addStudentCountry')?.value || '').trim();
-    if (password && password.length < 8) {
-        alert('Password must have at least 8 characters.');
+    if (!email) {
+        alert('Student email is required for account login.');
+        emailEl?.focus();
         return;
     }
-    if (email && emailEl && typeof emailEl.checkValidity === 'function' && !emailEl.checkValidity()) {
+    if (!password) {
+        alert('Student password is required for account login.');
+        passwordEl?.focus();
+        return;
+    }
+    if (password.length < 8) {
+        alert('Password must have at least 8 characters.');
+        passwordEl?.focus();
+        return;
+    }
+    if (emailEl && typeof emailEl.checkValidity === 'function' && !emailEl.checkValidity()) {
         if (typeof emailEl.reportValidity === 'function') emailEl.reportValidity();
+        return;
+    }
+    const emailLc = email.toLowerCase();
+    const studentEmailTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+    });
+    if (studentEmailTaken) {
+        alert('This student email is already in use.');
+        emailEl?.focus();
+        return;
+    }
+    const teacherEmailTaken = teachersList.some((name) => {
+        return String(teacherEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+    });
+    if (teacherEmailTaken) {
+        alert('This email is already used by a teacher account.');
+        emailEl?.focus();
         return;
     }
 
@@ -5748,7 +6618,8 @@ function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
     const addTeacherSelect = document.getElementById('addStudentTeacher');
     saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
-    saveStudentAccountExtras(fullName, { email, password, city, country });
+    const passwordHash = await hashStudentPassword(password);
+    saveStudentAccountExtras(fullName, { email, password: passwordHash, city, country });
     const schoolKey = schoolName.trim().toLowerCase();
     if (schoolKey) {
         const primaryEl = document.getElementById('addSchoolPrimaryColor');
@@ -5907,15 +6778,15 @@ function updateAddStudentPassportFieldVisibility() {
     const schoolReadonlyText = document.getElementById('addStudentSchoolReadonly');
     const schoolFieldLabel = document.querySelector('.add-student-school-field-label');
     const addSchoolExternalWrap = document.getElementById('addSchoolExternalWrap');
+    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
     const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
     const dialog = document.querySelector('.add-student-dialog');
-    const title = document.getElementById('addStudentModalTitle');
     const submitBtn = document.getElementById('addStudentFormSubmit');
-    if (!dialog || !title || !schoolInput || !schoolSelect) return;
+    if (!dialog || !schoolInput || !schoolSelect) return;
 
     const isTeacherMode = addStudentModalMode === 'teacher';
     const isStudentEntryMode = addStudentModalMode === 'student-entry';
@@ -6062,7 +6933,15 @@ function updateAddStudentPassportFieldVisibility() {
             addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
         }
         if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
+        if (addSchoolBillingModel) {
+            addSchoolBillingModel.value = '';
+            addSchoolBillingModel.required = false;
+        }
         closeAddSchoolColorPopup();
+        closeAddSchoolBillingDropdown();
+    }
+    if (isAddSchoolMode && addSchoolBillingModel) {
+        addSchoolBillingModel.required = true;
     }
 
     if (passportLinkWrap && passportLinkInput) {
@@ -6073,7 +6952,6 @@ function updateAddStudentPassportFieldVisibility() {
     }
     dialog.classList.remove('add-student-dialog--expanded');
 
-    title.textContent = isTeacherMode ? 'Add Teacher Profile' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add Student' : 'Add School');
     if (submitBtn) {
         submitBtn.textContent = isTeacherMode ? 'Add' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
     }
@@ -6081,6 +6959,7 @@ function updateAddStudentPassportFieldVisibility() {
         updateAddStudentPhonePlaceholder();
     }
     renderAddSchoolThemeSquares();
+    updateAddSchoolBillingExplainer();
 }
 
 function openAddStudentModal(mode = 'student') {
@@ -6101,6 +6980,7 @@ function openAddStudentModal(mode = 'student') {
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
+    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
     const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
     if (!modal || !schoolInput || !passportLinkInput) {
@@ -6149,9 +7029,11 @@ function openAddStudentModal(mode = 'student') {
         addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
     }
     if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
+    if (addSchoolBillingModel) addSchoolBillingModel.value = '';
     if (addSchoolPrimaryColor) addSchoolPrimaryColor.value = '#5c6bc0';
     if (addSchoolSecondaryColor) addSchoolSecondaryColor.value = '#1e88e5';
     renderAddSchoolThemeSquares();
+    updateAddSchoolBillingExplainer();
     closeAddSchoolColorPopup();
     updateAddStudentPhonePlaceholder();
     updateAddStudentPassportFieldVisibility();
@@ -6763,6 +7645,7 @@ function setupGoogleMeetModal() {
         }
         saveRoster();
         refreshGoogleMeetStudentPanel();
+        refreshClassReportAfterMeetLinkChange();
         showGoogleMeetContextMessage(raw ? 'Meet link saved.' : 'Meet link cleared.', sharedSchoolSave);
     });
     sharedSchoolInput?.addEventListener('keydown', (e) => {
@@ -6820,6 +7703,7 @@ function setupGoogleMeetModal() {
             studentGoogleMeetLinksByName[student] = normalizeGoogleMeetUrl(raw);
         }
         saveRoster();
+        refreshClassReportAfterMeetLinkChange();
         if (raw) {
             animateGoogleMeetSaveButtonOk();
         }
@@ -6856,6 +7740,7 @@ function closeAddStudentModal() {
         return;
     }
     closeAddSchoolColorPopup();
+    closeAddSchoolBillingDropdown();
     closeModalWithAnimation(modal);
 }
 
@@ -6891,12 +7776,30 @@ function setupAddStudentModal() {
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
+    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
+    const addSchoolBillingDropdown = document.getElementById('addSchoolBillingDropdown');
+    const addSchoolBillingToggle = document.getElementById('addSchoolBillingToggle');
+    const addSchoolBillingMenu = document.getElementById('addSchoolBillingMenu');
     const addSchoolExternalOffsite = document.getElementById('addSchoolExternalOffsite');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
     const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
+    const addSchoolPrimaryColorCheckbox = document.getElementById('addSchoolPrimaryColorCheckbox');
+    const addSchoolSecondaryColorCheckbox = document.getElementById('addSchoolSecondaryColorCheckbox');
     const addSchoolPrimarySquare = document.querySelector('.add-school-theme-square--primary');
     const addSchoolSecondarySquare = document.querySelector('.add-school-theme-square--secondary');
     const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
+    const closeAddSchoolBillingDropdown = () => {
+        if (!addSchoolBillingDropdown || !addSchoolBillingToggle || !addSchoolBillingMenu) return;
+        addSchoolBillingDropdown.classList.remove('is-open');
+        addSchoolBillingToggle.setAttribute('aria-expanded', 'false');
+        addSchoolBillingMenu.setAttribute('aria-hidden', 'true');
+    };
+    const openAddSchoolBillingDropdown = () => {
+        if (!addSchoolBillingDropdown || !addSchoolBillingToggle || !addSchoolBillingMenu) return;
+        addSchoolBillingDropdown.classList.add('is-open');
+        addSchoolBillingToggle.setAttribute('aria-expanded', 'true');
+        addSchoolBillingMenu.setAttribute('aria-hidden', 'false');
+    };
     addSchoolExternalCheckbox?.addEventListener('change', () => {
         const on = !!addSchoolExternalCheckbox.checked;
         if (addSchoolExternalPanel) {
@@ -6923,6 +7826,60 @@ function setupAddStudentModal() {
         }
         window.open(parsed.url, '_blank', 'noopener,noreferrer');
     });
+    addSchoolBillingToggle?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!addSchoolBillingDropdown) return;
+        if (addSchoolBillingDropdown.classList.contains('is-open')) {
+            closeAddSchoolBillingDropdown();
+        } else {
+            openAddSchoolBillingDropdown();
+        }
+    });
+    addSchoolBillingMenu?.querySelectorAll('.add-school-billing-option').forEach((option) => {
+        option.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const value = String(option.getAttribute('data-billing-model') || '').trim();
+            if (addSchoolBillingModel) {
+                addSchoolBillingModel.value = value;
+            }
+            updateAddSchoolBillingExplainer();
+            closeAddSchoolBillingDropdown();
+            addSchoolBillingToggle?.focus();
+        });
+        option.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                option.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeAddSchoolBillingDropdown();
+                addSchoolBillingToggle?.focus();
+            }
+        });
+    });
+    addSchoolBillingToggle?.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeAddSchoolBillingDropdown();
+            return;
+        }
+        if (e.key === 'ArrowDown' && !addSchoolBillingDropdown?.classList.contains('is-open')) {
+            e.preventDefault();
+            openAddSchoolBillingDropdown();
+        }
+    });
+    addSchoolPrimaryColorCheckbox?.addEventListener('change', () => {
+        addSchoolPrimaryColorCheckbox.checked = true;
+        if (addSchoolPrimarySquare) {
+            openAddSchoolColorPopup('primary', addSchoolPrimarySquare);
+        }
+    });
+    addSchoolSecondaryColorCheckbox?.addEventListener('change', () => {
+        addSchoolSecondaryColorCheckbox.checked = true;
+        if (addSchoolSecondarySquare) {
+            openAddSchoolColorPopup('secondary', addSchoolSecondarySquare);
+        }
+    });
     addSchoolPrimarySquare?.addEventListener('click', (e) => {
         e.stopPropagation();
         openAddSchoolColorPopup('primary', addSchoolPrimarySquare);
@@ -6935,9 +7892,10 @@ function setupAddStudentModal() {
     document.addEventListener('click', () => {
         if (!modal.classList.contains('is-open')) return;
         closeAddSchoolColorPopup();
+        closeAddSchoolBillingDropdown();
     });
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const first = document.getElementById('addStudentFirst')?.value || '';
         const last = document.getElementById('addStudentLast')?.value || '';
@@ -6948,19 +7906,20 @@ function setupAddStudentModal() {
             return;
         }
         if (addStudentModalMode === 'student-entry') {
-            addStudentToSchoolFromForm(first, last, addStudentTargetSchool);
+            await addStudentToSchoolFromForm(first, last, addStudentTargetSchool);
             return;
         }
         if (addStudentModalMode === 'student-global') {
             const schoolName = document.getElementById('addStudentSchoolSelect')?.value || '';
-            addStudentToSchoolFromForm(first, last, schoolName);
+            await addStudentToSchoolFromForm(first, last, schoolName);
             return;
         }
         const school = document.getElementById('addStudentSchool').value;
         addSchoolFromForm(
             school,
             addSchoolPrimaryColor?.value || '#5c6bc0',
-            addSchoolSecondaryColor?.value || '#1e88e5'
+            addSchoolSecondaryColor?.value || '#1e88e5',
+            addSchoolBillingModel?.value || ''
         );
     });
 }
@@ -8123,22 +9082,64 @@ function exportSchedulePDF() {
 }
 
 // Event listeners
-function setupSidebarExpandableStickyBehavior() {
-    const teacherList = document.getElementById('teacherList');
-    if (!teacherList || teacherList.dataset.expandableStickyBound === '1') return;
-    teacherList.dataset.expandableStickyBound = '1';
-    teacherList.addEventListener(
-        'click',
-        (e) => {
-            const btn = e.target && e.target.closest && e.target.closest('.sidebar-add-btn--expandable');
-            if (!btn || !teacherList.contains(btn)) return;
-            document.querySelectorAll('.sidebar-add-btn--expandable-sticky').forEach((b) => {
-                b.classList.remove('sidebar-add-btn--expandable-sticky');
-            });
-            btn.classList.add('sidebar-add-btn--expandable-sticky');
-        },
-        true
-    );
+function setupAdminControlPanel() {
+    const panel = document.getElementById('adminControlPanel');
+    if (!panel || panel.dataset.bound === '1') return;
+    panel.dataset.bound = '1';
+    panel.addEventListener('click', async (e) => {
+        if (!hasEffectiveAdminSession()) {
+            panel.hidden = true;
+            panel.innerHTML = '';
+            return;
+        }
+        const saveBtn = e.target.closest('[data-admin-save]');
+        if (saveBtn) {
+            if (!hasEffectiveAdminSession()) {
+                showAppMessage('Only the admin can manage accounts here.');
+                return;
+            }
+            const role = String(saveBtn.getAttribute('data-admin-role') || '').trim();
+            const name = String(saveBtn.getAttribute('data-admin-name') || '').trim();
+            const key = String(saveBtn.getAttribute('data-admin-save') || '').trim();
+            const emailInput = panel.querySelector(`[data-admin-input-email="${escapeHtmlAttr(key)}"]`);
+            const passwordInput = panel.querySelector(`[data-admin-input-password="${escapeHtmlAttr(key)}"]`);
+            const nextEmail = String(emailInput?.value || '').trim();
+            const nextPassword = String(passwordInput?.value || '').trim();
+            const saved = await saveAccountCredentialsFromAdmin(role, name, nextEmail, nextPassword);
+            if (saved) {
+                renderAdminOverviewPanel();
+                renderSidebar();
+            }
+            return;
+        }
+        const deleteBtn = e.target.closest('[data-admin-delete]');
+        const editBtn = e.target.closest('[data-admin-edit]');
+        if (editBtn) {
+            if (!hasEffectiveAdminSession()) {
+                showAppMessage('Only the admin can manage accounts here.');
+                return;
+            }
+            const name = String(editBtn.getAttribute('data-admin-name') || '').trim();
+            const rosterKind = String(editBtn.getAttribute('data-admin-roster-kind') || '').trim();
+            if (!name || !rosterKind) return;
+            openEditStudentModal(name, rosterKind);
+            return;
+        }
+        if (deleteBtn) {
+            if (!hasEffectiveAdminSession()) {
+                showAppMessage('Only the admin can manage accounts here.');
+                return;
+            }
+            const role = String(deleteBtn.getAttribute('data-admin-role') || '').trim();
+            const name = String(deleteBtn.getAttribute('data-admin-name') || '').trim();
+            if (!role || !name) return;
+            const ok = window.confirm(`Delete this ${role.toLowerCase()} account?\n\n${name}`);
+            if (!ok) return;
+            removeAccountFromAdmin(role, name);
+            renderAdminOverviewPanel();
+            return;
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -8155,7 +9156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshCalendarDisplay();
         updateSummary();
     }
-    setupSidebarExpandableStickyBehavior();
+    setupAdminControlPanel();
     setupAddStudentModal();
     setupGoogleMeetModal();
     setupEditStudentModal();
