@@ -109,6 +109,8 @@ let googleMeetContextMessageTimer = null;
 let googleMeetContextMessageHideTimer = null;
 let googleMeetUseSharedSchoolLink = false;
 let googleMeetSharedLinkModeBySchoolKey = {};
+let calendarTodayRefreshTimer = null;
+let currentTimeIndicatorTimer = null;
 const MODAL_CLOSE_ANIMATION_MS = 220;
 const modalCloseTimers = new WeakMap();
 
@@ -8096,6 +8098,11 @@ function initCalendar() {
     applyCalendarStatePaletteCssVars();
     refreshContextMenuTheme();
 
+    const dayHeaders = document.querySelectorAll('.calendar-grid .day-header');
+    dayHeaders.forEach((header, idx) => {
+        header.dataset.day = DAYS[idx] || '';
+    });
+
     // Generate time slots for each hour
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
         const timeLabel = document.createElement('div');
@@ -8215,12 +8222,118 @@ function initCalendar() {
             positionSchoolSubmenu();
             positionIndependentStudentsSubmenu();
             updateStudentListScrollIndicators();
+            updateCurrentTimeIndicator();
         });
     }
+    refreshTodayCalendarHighlight();
+    scheduleNextTodayCalendarHighlightRefresh();
+    initCurrentTimeIndicator();
+}
+
+function refreshTodayCalendarHighlight() {
+    const dayHeaders = document.querySelectorAll('.calendar-grid .day-header');
+    dayHeaders.forEach((header) => header.classList.remove('today'));
+    document.querySelectorAll('.time-slot.today-column').forEach((slot) => {
+        slot.classList.remove('today-column');
+    });
+    const todayIndex = new Date().getDay();
+    const todayName = DAYS[todayIndex];
+    if (!todayName) return;
+    const todayHeader = document.querySelector(`.calendar-grid .day-header[data-day="${todayName}"]`);
+    if (todayHeader) {
+        todayHeader.classList.add('today');
+    }
+    document.querySelectorAll(`.time-slot[data-day="${todayName}"]`).forEach((slot) => {
+        slot.classList.add('today-column');
+    });
+}
+
+function scheduleNextTodayCalendarHighlightRefresh() {
+    if (calendarTodayRefreshTimer) {
+        clearTimeout(calendarTodayRefreshTimer);
+        calendarTodayRefreshTimer = null;
+    }
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const delayMs = Math.max(1000, nextMidnight.getTime() - now.getTime() + 1000);
+    calendarTodayRefreshTimer = window.setTimeout(() => {
+        refreshTodayCalendarHighlight();
+        scheduleNextTodayCalendarHighlightRefresh();
+    }, delayMs);
+}
+
+function ensureCurrentTimeIndicatorElement() {
+    const timeSlotsContainer = document.getElementById('timeSlots');
+    if (!timeSlotsContainer) return null;
+    let indicator = document.getElementById('currentTimeIndicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'currentTimeIndicator';
+        indicator.className = 'current-time-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+        const dot = document.createElement('span');
+        dot.className = 'current-time-indicator-dot';
+        indicator.appendChild(dot);
+        timeSlotsContainer.appendChild(indicator);
+    }
+    return indicator;
+}
+
+function updateCurrentTimeIndicator() {
+    const indicator = ensureCurrentTimeIndicatorElement();
+    const timeSlotsContainer = document.getElementById('timeSlots');
+    if (!indicator || !timeSlotsContainer) return;
+    const firstDay = DAYS[0];
+    const lastDay = DAYS[DAYS.length - 1];
+    const firstSlot = timeSlotsContainer.querySelector(`.time-slot[data-day="${firstDay}"][data-hour="${START_HOUR}"]`);
+    const lastSlot = timeSlotsContainer.querySelector(`.time-slot[data-day="${lastDay}"][data-hour="${END_HOUR - 1}"]`);
+    if (!firstSlot || !lastSlot) {
+        indicator.hidden = true;
+        return;
+    }
+
+    const now = new Date();
+    const minutesFromMidnight = (now.getHours() * 60) + now.getMinutes() + (now.getSeconds() / 60);
+    const startMinutes = START_HOUR * 60;
+    const endMinutes = END_HOUR * 60;
+    const totalMinutes = endMinutes - startMinutes;
+    if (totalMinutes <= 0) {
+        indicator.hidden = true;
+        return;
+    }
+
+    const inRange = minutesFromMidnight >= startMinutes && minutesFromMidnight < endMinutes;
+    indicator.hidden = !inRange;
+    if (!inRange) return;
+
+    const progress = (minutesFromMidnight - startMinutes) / totalMinutes;
+    const startY = firstSlot.offsetTop;
+    const endY = lastSlot.offsetTop + lastSlot.offsetHeight;
+    const top = startY + ((endY - startY) * progress);
+    const left = firstSlot.offsetLeft;
+    const rightEdge = lastSlot.offsetLeft + lastSlot.offsetWidth;
+    const width = Math.max(0, rightEdge - left);
+
+    indicator.style.top = `${top}px`;
+    indicator.style.left = `${left}px`;
+    indicator.style.width = `${width}px`;
+}
+
+function initCurrentTimeIndicator() {
+    ensureCurrentTimeIndicatorElement();
+    updateCurrentTimeIndicator();
+    if (currentTimeIndicatorTimer) {
+        clearInterval(currentTimeIndicatorTimer);
+        currentTimeIndicatorTimer = null;
+    }
+    currentTimeIndicatorTimer = window.setInterval(updateCurrentTimeIndicator, 30000);
 }
 
 // Refresh calendar display based on current slotStates
 function refreshCalendarDisplay() {
+    refreshTodayCalendarHighlight();
+    updateCurrentTimeIndicator();
     DAYS.forEach(day => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
