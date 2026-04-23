@@ -8314,8 +8314,8 @@ function updateCurrentTimeIndicator() {
     const startY = firstSlot.offsetTop;
     const endY = lastSlot.offsetTop + lastSlot.offsetHeight;
     const top = startY + ((endY - startY) * progress);
-    const left = 0;
-    const width = Math.max(0, timeSlotsContainer.clientWidth);
+    const left = firstSlot.offsetLeft;
+    const width = Math.max(0, timeSlotsContainer.clientWidth - left);
 
     indicator.style.top = `${top}px`;
     indicator.style.left = `${left}px`;
