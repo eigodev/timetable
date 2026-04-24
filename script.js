@@ -1480,7 +1480,7 @@ function getAvailableSchoolNames() {
 }
 
 function refreshAddStudentSchoolSelect(selectedSchool = '') {
-    const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    const schoolSelect = document.getElementById('addStudentGroupSelect');
     if (!schoolSelect) return;
     const selected = String(selectedSchool || '').trim();
     const options = getAvailableSchoolNames();
@@ -1503,7 +1503,7 @@ function refreshAddStudentSchoolSelect(selectedSchool = '') {
 }
 
 function refreshAddStudentTeacherSelect(selectedTeacher = '') {
-    const sel = document.getElementById('addStudentTeacher');
+    const sel = document.getElementById('addStudentMentor');
     if (!sel || sel.tagName !== 'SELECT') return;
     const want = String(selectedTeacher || sel.value || '').trim();
     const prevLower = want.toLowerCase();
@@ -4052,7 +4052,9 @@ function renderSidebar() {
     addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher';
     addTeacherBtn.setAttribute('aria-label', 'Add teacher profile');
     addTeacherBtn.innerHTML = SIDEBAR_ADD_TEACHER_SVG;
-    addTeacherBtn.addEventListener('click', () => openAddStudentModal('teacher'));
+    addTeacherBtn.addEventListener('click', () => {
+        window.openAddTeacherPopup?.();
+    });
     bindSidebarCursorTooltip(addTeacherBtn, 'Add your Profile');
     const loginTeacherBtn = document.createElement('button');
     loginTeacherBtn.type = 'button';
@@ -4098,7 +4100,9 @@ function renderSidebar() {
     addStudentEntryBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--student-entry';
     addStudentEntryBtn.setAttribute('aria-label', 'Add student');
     addStudentEntryBtn.innerHTML = ADD_STUDENT_SVG;
-    addStudentEntryBtn.addEventListener('click', () => openAddStudentModal('student-global'));
+    addStudentEntryBtn.addEventListener('click', () => {
+        window.openAddStudentPopup?.();
+    });
     bindSidebarCursorTooltip(addStudentEntryBtn, 'Add a student');
     const googleMeetBtn = document.createElement('button');
     googleMeetBtn.type = 'button';
@@ -4114,7 +4118,9 @@ function renderSidebar() {
     addStudentBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--school';
     addStudentBtn.setAttribute('aria-label', 'Add school');
     addStudentBtn.innerHTML = SIDEBAR_ADD_SCHOOL_SVG;
-    addStudentBtn.addEventListener('click', () => openAddStudentModal('student'));
+    addStudentBtn.addEventListener('click', () => {
+        window.openAddSchoolPopup?.();
+    });
     bindSidebarCursorTooltip(addStudentBtn, 'Add a school');
     if (loggedInStudentFullName) {
         addTeacherBtn.hidden = true;
@@ -4124,7 +4130,6 @@ function renderSidebar() {
     }
     const studentsHeaderActions = document.createElement('div');
     studentsHeaderActions.className = 'sidebar-section-actions';
-    studentsHeaderActions.appendChild(googleMeetBtn);
     studentsHeaderActions.appendChild(addStudentEntryBtn);
     studentsHeaderActions.appendChild(addStudentBtn);
     studentsHeader.appendChild(studentsHeaderLabel);
@@ -4164,6 +4169,7 @@ function renderSidebar() {
     });
     const classReportHeaderActions = document.createElement('div');
     classReportHeaderActions.className = 'sidebar-section-actions';
+    classReportHeaderActions.appendChild(googleMeetBtn);
     classReportHeaderActions.appendChild(classReportPromptBtn);
     classReportHeaderActions.appendChild(classReportDownloadBtn);
     bindSidebarCursorTooltip(classReportDownloadBtn, 'Download class report (PDF)');
@@ -6618,7 +6624,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const addPhoneInput = document.getElementById('addStudentPhone');
     const addPhoneCountrySelect = document.getElementById('addStudentPhoneCountry');
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
-    const addTeacherSelect = document.getElementById('addStudentTeacher');
+    const addTeacherSelect = document.getElementById('addStudentMentor');
     saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
     const passwordHash = await hashStudentPassword(password);
     saveStudentAccountExtras(fullName, { email, password: passwordHash, city, country });
@@ -6648,21 +6654,25 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
 }
 
 function populateAddStudentPhoneCountrySelect() {
-    const countrySelect = document.getElementById('addStudentPhoneCountry');
-    if (!countrySelect) return;
-    if (countrySelect.options.length > 0) return;
+    const selects = [
+        document.getElementById('addStudentPhoneCountry'),
+        document.getElementById('addTeacherPhoneCountry')
+    ].filter(Boolean);
+    if (selects.length === 0) return;
 
-    PHONE_COUNTRY_OPTIONS.forEach((country) => {
-        const option = document.createElement('option');
-        option.value = country.iso;
-        option.textContent = country.flag;
-        option.dataset.dialCode = country.dialCode;
-        option.dataset.sample = country.sample;
-        option.dataset.flagUrl = getPhoneCountryFlagImageSrc(country.iso);
-        countrySelect.appendChild(option);
+    selects.forEach((countrySelect) => {
+        if (countrySelect.options.length > 0) return;
+        PHONE_COUNTRY_OPTIONS.forEach((country) => {
+            const option = document.createElement('option');
+            option.value = country.iso;
+            option.textContent = country.flag;
+            option.dataset.dialCode = country.dialCode;
+            option.dataset.sample = country.sample;
+            option.dataset.flagUrl = getPhoneCountryFlagImageSrc(country.iso);
+            countrySelect.appendChild(option);
+        });
+        countrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
     });
-
-    countrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
 }
 
 function updateAddStudentPhonePlaceholder() {
@@ -6730,6 +6740,33 @@ function handleAddStudentPhoneCountryChanged() {
     );
 }
 
+function updateAddTeacherPhonePlaceholder() {
+    const countrySelect = document.getElementById('addTeacherPhoneCountry');
+    const phoneInput = document.getElementById('addTeacherPhone');
+    const flagImg = document.getElementById('addTeacherPhoneCountryFlag');
+    if (!countrySelect || !phoneInput) return;
+
+    const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
+        || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
+        || PHONE_COUNTRY_OPTIONS[0];
+    if (!selected) return;
+    phoneInput.placeholder = selected.sample;
+    if (flagImg) {
+        const flagUrl = getPhoneCountryFlagImageSrc(selected.iso);
+        flagImg.src = flagUrl;
+        flagImg.alt = `${selected.name} flag`;
+        flagImg.onerror = null;
+    }
+}
+
+function handleAddTeacherPhoneCountryChanged() {
+    updateAddTeacherPhonePlaceholder();
+    syncPhoneInputWithCountrySelector(
+        document.getElementById('addTeacherPhone'),
+        document.getElementById('addTeacherPhoneCountry')
+    );
+}
+
 function handleEditStudentPhoneCountryChanged() {
     updateEditStudentPhonePlaceholder();
     syncPhoneInputWithCountrySelector(
@@ -6744,41 +6781,52 @@ function bindStudentPhoneLocalFieldBlur(phoneInput) {
         const countrySelect =
             phoneInput.id === 'addStudentPhone'
                 ? document.getElementById('addStudentPhoneCountry')
-                : document.getElementById('editStudentPhoneCountry');
+                : (phoneInput.id === 'addTeacherPhone'
+                    ? document.getElementById('addTeacherPhoneCountry')
+                    : document.getElementById('editStudentPhoneCountry'));
         syncPhoneInputWithCountrySelector(phoneInput, countrySelect);
     });
 }
 
 function updateAddStudentPassportFieldVisibility() {
-    const nameRow = document.getElementById('addTeacherNameRow');
+    const teacherNameRow = document.getElementById('addTeacherNameRow');
+    const studentNameRow = document.getElementById('addStudentNameRow');
+    const studentHeaderRow = document.getElementById('addStudentHeaderRow');
     const studentFields = document.getElementById('addStudentFields');
     const schoolFields = document.getElementById('addSchoolFields');
-    const firstInput = document.getElementById('addStudentFirst');
-    const lastInput = document.getElementById('addStudentLast');
-    const phoneInput = document.getElementById('addStudentPhone');
-    const schoolWrap = document.getElementById('addStudentSchoolWrap');
+    const teacherFields = document.getElementById('addTeacherFields');
+    const teacherFirstInput = document.getElementById('addTeacherFirst');
+    const teacherLastInput = document.getElementById('addTeacherLast');
+    const teacherPhoneInput = document.getElementById('addTeacherPhone');
+    const studentFirstInput = document.getElementById('addStudentFirst');
+    const studentLastInput = document.getElementById('addStudentLast');
+    const studentPhoneInput = document.getElementById('addStudentPhone');
+    const schoolWrap = document.getElementById('addStudentGroupWrap');
     const cityInput = document.getElementById('addStudentCity');
     const countryInput = document.getElementById('addStudentCountry');
-    const contactRow = document.getElementById('addModalContactRow');
-    const contactCityWrap = document.getElementById('addModalContactCityWrap');
-    const contactCountryWrap = document.getElementById('addModalContactCountryWrap');
+    const teacherContactRow = document.getElementById('addTeacherContactRow');
+    const studentContactRow = document.getElementById('addStudentContactRow');
+    const teacherBasicInfoSection = document.getElementById('addTeacherBasicInfoSection');
+    const contactCityWrap = document.getElementById('addStudentContactCityWrap');
+    const contactCountryWrap = document.getElementById('addStudentContactCountryWrap');
     const accountWrap = document.getElementById('addStudentAccountWrap');
     const studentEmailInput = document.getElementById('addStudentEmail');
     const studentPasswordInput = document.getElementById('addStudentPassword');
-    const schoolInput = document.getElementById('addStudentSchool');
-    const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    const schoolInput = document.getElementById('addSchoolNameInput');
+    const schoolSelect = document.getElementById('addStudentGroupSelect');
     const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
+    const teacherPhoneCountrySelect = document.getElementById('addTeacherPhoneCountry');
     const teacherEmailWrap = document.getElementById('addTeacherEmailWrap');
     const teacherEmailInput = document.getElementById('addTeacherEmail');
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
     const passportLinkWrap = document.getElementById('addStudentPassportLinkWrap');
     const passportLinkInput = document.getElementById('addStudentPassportLink');
-    const teacherWrap = document.getElementById('addStudentTeacherWrap');
-    const teacherSelect = document.getElementById('addStudentTeacher');
-    const rowTeacherTheme = document.getElementById('addStudentTeacherRow');
+    const teacherWrap = document.getElementById('addStudentMentorWrap');
+    const teacherSelect = document.getElementById('addStudentMentor');
+    const rowTeacherTheme = document.getElementById('addStudentMentorRow');
     const schoolReadonlyWrap = document.getElementById('addStudentSchoolReadonlyWrap');
     const schoolReadonlyText = document.getElementById('addStudentSchoolReadonly');
-    const schoolFieldLabel = document.querySelector('.add-student-school-field-label');
+    const schoolFieldLabel = document.querySelector('.add-student-group-field-label');
     const addSchoolExternalWrap = document.getElementById('addSchoolExternalWrap');
     const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
@@ -6798,9 +6846,25 @@ function updateAddStudentPassportFieldVisibility() {
     const useNameFields = isTeacherMode || isStudentEntryMode;
     const useNameFieldsAny = useNameFields || isStudentGlobalMode;
 
-    if (contactRow) {
-        contactRow.classList.toggle('is-hidden', !useNameFieldsAny);
-        contactRow.setAttribute('aria-hidden', useNameFieldsAny ? 'false' : 'true');
+    if (teacherContactRow) {
+        teacherContactRow.classList.toggle('is-hidden', !isTeacherMode);
+        teacherContactRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+    }
+    if (studentContactRow) {
+        studentContactRow.classList.toggle('is-hidden', !showStudentFields);
+        studentContactRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (studentHeaderRow) {
+        studentHeaderRow.classList.toggle('is-hidden', !showStudentFields);
+        studentHeaderRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (teacherBasicInfoSection) {
+        teacherBasicInfoSection.classList.toggle('is-hidden', !isTeacherMode);
+        teacherBasicInfoSection.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+    }
+    if (teacherFields) {
+        teacherFields.classList.toggle('is-hidden', !isTeacherMode);
+        teacherFields.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
     }
     if (contactCityWrap) {
         contactCityWrap.classList.toggle('is-hidden', !showStudentFields);
@@ -6810,7 +6874,6 @@ function updateAddStudentPassportFieldVisibility() {
         contactCountryWrap.classList.toggle('is-hidden', !showStudentFields);
         contactCountryWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
     }
-
     if (accountWrap) {
         accountWrap.classList.toggle('is-hidden', !showStudentFields);
         accountWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
@@ -6847,15 +6910,30 @@ function updateAddStudentPassportFieldVisibility() {
         rowTeacherTheme.classList.toggle('is-hidden', isTeacherMode);
         rowTeacherTheme.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
     }
-    if (nameRow && firstInput && lastInput) {
-        nameRow.classList.toggle('is-hidden', !useNameFieldsAny);
-        nameRow.setAttribute('aria-hidden', useNameFieldsAny ? 'false' : 'true');
-        firstInput.required = useNameFieldsAny;
-        lastInput.required = useNameFieldsAny;
-        if (!useNameFieldsAny) {
-            firstInput.value = '';
-            lastInput.value = '';
-            if (phoneInput) phoneInput.value = '';
+    if (teacherNameRow && teacherFirstInput && teacherLastInput) {
+        teacherNameRow.classList.toggle('is-hidden', !isTeacherMode);
+        teacherNameRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+        teacherFirstInput.required = isTeacherMode;
+        teacherLastInput.required = isTeacherMode;
+        if (!isTeacherMode) {
+            teacherFirstInput.value = '';
+            teacherLastInput.value = '';
+            if (teacherPhoneInput) teacherPhoneInput.value = '';
+            if (teacherPhoneCountrySelect) {
+                teacherPhoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+                updateAddTeacherPhonePlaceholder();
+            }
+        }
+    }
+    if (studentNameRow && studentFirstInput && studentLastInput) {
+        studentNameRow.classList.toggle('is-hidden', !showStudentFields);
+        studentNameRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+        studentFirstInput.required = showStudentFields;
+        studentLastInput.required = showStudentFields;
+        if (!showStudentFields) {
+            studentFirstInput.value = '';
+            studentLastInput.value = '';
+            if (studentPhoneInput) studentPhoneInput.value = '';
             if (phoneCountrySelect) {
                 phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
                 updateAddStudentPhonePlaceholder();
@@ -6966,12 +7044,16 @@ function updateAddStudentPassportFieldVisibility() {
 
 function openAddStudentModal(mode = 'student') {
     const modal = document.getElementById('addStudentModal');
-    const firstInput = document.getElementById('addStudentFirst');
-    const lastInput = document.getElementById('addStudentLast');
-    const phoneInput = document.getElementById('addStudentPhone');
+    const teacherFirstInput = document.getElementById('addTeacherFirst');
+    const teacherLastInput = document.getElementById('addTeacherLast');
+    const teacherPhoneInput = document.getElementById('addTeacherPhone');
+    const studentFirstInput = document.getElementById('addStudentFirst');
+    const studentLastInput = document.getElementById('addStudentLast');
+    const studentPhoneInput = document.getElementById('addStudentPhone');
     const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
-    const schoolInput = document.getElementById('addStudentSchool');
-    const schoolSelect = document.getElementById('addStudentSchoolSelect');
+    const teacherPhoneCountrySelect = document.getElementById('addTeacherPhoneCountry');
+    const schoolInput = document.getElementById('addSchoolNameInput');
+    const schoolSelect = document.getElementById('addStudentGroupSelect');
     const cityInput = document.getElementById('addStudentCity');
     const countryInput = document.getElementById('addStudentCountry');
     const studentPasswordInput = document.getElementById('addStudentPassword');
@@ -6995,14 +7077,18 @@ function openAddStudentModal(mode = 'student') {
             ? 'teacher'
             : (mode === 'student-entry' ? 'student-entry' : (mode === 'student-global' ? 'student-global' : 'student'));
     addStudentTargetSchool = addStudentModalMode === 'student-entry' ? preservedEntrySchool : '';
-    if (addStudentModalMode === 'teacher' && (!firstInput || !lastInput)) {
+    if (addStudentModalMode === 'teacher' && (!teacherFirstInput || !teacherLastInput)) {
         return;
     }
-    if (firstInput) firstInput.value = '';
-    if (lastInput) lastInput.value = '';
-    if (phoneInput) phoneInput.value = '';
+    if (teacherFirstInput) teacherFirstInput.value = '';
+    if (teacherLastInput) teacherLastInput.value = '';
+    if (studentFirstInput) studentFirstInput.value = '';
+    if (studentLastInput) studentLastInput.value = '';
+    if (studentPhoneInput) studentPhoneInput.value = '';
+    if (teacherPhoneInput) teacherPhoneInput.value = '';
     if (phoneCountrySelect) phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
-    const addTeacherSelect = document.getElementById('addStudentTeacher');
+    if (teacherPhoneCountrySelect) teacherPhoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+    const addTeacherSelect = document.getElementById('addStudentMentor');
     if (addTeacherSelect) {
         refreshAddStudentTeacherSelect('');
     }
@@ -7038,11 +7124,14 @@ function openAddStudentModal(mode = 'student') {
     updateAddSchoolBillingExplainer();
     closeAddSchoolColorPopup();
     updateAddStudentPhonePlaceholder();
+    updateAddTeacherPhonePlaceholder();
     updateAddStudentPassportFieldVisibility();
 
     openModalWithAnimation(modal);
-    if ((addStudentModalMode === 'teacher' || addStudentModalMode === 'student-entry' || addStudentModalMode === 'student-global') && firstInput) {
-        firstInput.focus();
+    if (addStudentModalMode === 'teacher' && teacherFirstInput) {
+        teacherFirstInput.focus();
+    } else if ((addStudentModalMode === 'student-entry' || addStudentModalMode === 'student-global') && studentFirstInput) {
+        studentFirstInput.focus();
     } else {
         if (addStudentModalMode === 'student-global') {
             schoolSelect?.focus();
@@ -7051,6 +7140,10 @@ function openAddStudentModal(mode = 'student') {
         }
     }
 }
+
+window.requestAddPopupMode = (mode) => {
+    openAddStudentModal(mode);
+};
 
 function openAddStudentModalForSchool(schoolTitle) {
     const school = String(schoolTitle || '').trim();
@@ -7751,8 +7844,9 @@ function setupAddStudentModal() {
     const form = document.getElementById('addStudentForm');
     const cancelBtn = document.getElementById('addStudentCancel');
     const backdrop = document.getElementById('addStudentModalBackdrop');
-    const schoolInput = document.getElementById('addStudentSchool');
+    const schoolInput = document.getElementById('addSchoolNameInput');
     const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
+    const teacherPhoneCountrySelect = document.getElementById('addTeacherPhoneCountry');
 
     if (!modal || !form) {
         return;
@@ -7760,7 +7854,9 @@ function setupAddStudentModal() {
 
     populateAddStudentPhoneCountrySelect();
     updateAddStudentPhonePlaceholder();
+    updateAddTeacherPhonePlaceholder();
     bindStudentPhoneLocalFieldBlur(document.getElementById('addStudentPhone'));
+    bindStudentPhoneLocalFieldBlur(document.getElementById('addTeacherPhone'));
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
@@ -7770,7 +7866,8 @@ function setupAddStudentModal() {
     }
     schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
     phoneCountrySelect?.addEventListener('change', handleAddStudentPhoneCountryChanged);
-    const schoolSelectEl = document.getElementById('addStudentSchoolSelect');
+    teacherPhoneCountrySelect?.addEventListener('change', handleAddTeacherPhoneCountryChanged);
+    const schoolSelectEl = document.getElementById('addStudentGroupSelect');
     schoolSelectEl?.addEventListener('change', () => {
         if (addStudentModalMode !== 'student-global') return;
         syncAddStudentModalThemeFromSchoolTitle(schoolSelectEl.value);
@@ -7899,24 +7996,26 @@ function setupAddStudentModal() {
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const first = document.getElementById('addStudentFirst')?.value || '';
-        const last = document.getElementById('addStudentLast')?.value || '';
         if (addStudentModalMode === 'teacher') {
+            const first = document.getElementById('addTeacherFirst')?.value || '';
+            const last = document.getElementById('addTeacherLast')?.value || '';
             const email = document.getElementById('addTeacherEmail')?.value || '';
             const password = document.getElementById('addTeacherPassword')?.value || '';
             addTeacherFromForm(first, last, email, password);
             return;
         }
+        const first = document.getElementById('addStudentFirst')?.value || '';
+        const last = document.getElementById('addStudentLast')?.value || '';
         if (addStudentModalMode === 'student-entry') {
             await addStudentToSchoolFromForm(first, last, addStudentTargetSchool);
             return;
         }
         if (addStudentModalMode === 'student-global') {
-            const schoolName = document.getElementById('addStudentSchoolSelect')?.value || '';
+            const schoolName = document.getElementById('addStudentGroupSelect')?.value || '';
             await addStudentToSchoolFromForm(first, last, schoolName);
             return;
         }
-        const school = document.getElementById('addStudentSchool').value;
+        const school = document.getElementById('addSchoolNameInput').value;
         addSchoolFromForm(
             school,
             addSchoolPrimaryColor?.value || '#5c6bc0',
