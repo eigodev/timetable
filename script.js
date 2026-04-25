@@ -402,6 +402,7 @@ async function loadRosterFromCloud() {
         });
         if (!response.ok) return null;
         const data = await response.json();
+        rosterLastUpdateTimestamp = data?.lastUpdated || rosterLastUpdateTimestamp;
         if (!data?.success || !data?.roster || typeof data.roster !== 'object') return null;
         try {
             localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(data.roster));
@@ -1248,10 +1249,10 @@ function setProfileAvatarDataUrl(profileKey, dataUrl) {
     }
 }
 
-async function initRoster() {
-    const cloudRoster = await loadRosterFromCloud();
+async function initRoster(preloadedRoster = null) {
+    const cloudRoster = preloadedRoster || await loadRosterFromCloud();
     const saved = cloudRoster || loadRosterFromStorage();
-    if (!cloudRoster && saved) {
+    if (!preloadedRoster && !cloudRoster && saved) {
         queueSaveRosterToCloud(saved);
     }
     if (!saved) {
@@ -3508,6 +3509,7 @@ let statusUpdateTimer = null;
 let rosterSaveTimer = null;
 let isSavingRoster = false;
 let pendingRosterPayload = null;
+let rosterLastUpdateTimestamp = null;
 
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object') return;
@@ -3517,13 +3519,19 @@ async function saveRosterToCloud(rosterPayload) {
     }
     isSavingRoster = true;
     try {
-        await fetch('/api/roster', {
+        const response = await fetch('/api/roster', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ roster: rosterPayload }),
         });
+        if (response.ok) {
+            const data = await response.json();
+            if (data?.lastUpdated) {
+                rosterLastUpdateTimestamp = data.lastUpdated;
+            }
+        }
     } catch (error) {
         console.error('Error saving roster to cloud:', error);
     } finally {
@@ -3543,6 +3551,42 @@ function queueSaveRosterToCloud(rosterPayload) {
     rosterSaveTimer = setTimeout(() => {
         saveRosterToCloud(rosterPayload);
     }, 350);
+}
+
+async function pollRosterUpdates() {
+    if (isSavingRoster) return;
+    try {
+        const response = await fetch('/api/roster?t=' + Date.now(), {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            cache: 'no-cache',
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!data?.success) return;
+        const remoteTimestamp = data?.lastUpdated || null;
+        if (!remoteTimestamp || remoteTimestamp === rosterLastUpdateTimestamp) return;
+        rosterLastUpdateTimestamp = remoteTimestamp;
+        if (!data?.roster || typeof data.roster !== 'object') return;
+
+        let localRosterRaw = '';
+        try {
+            localRosterRaw = String(localStorage.getItem(ROSTER_STORAGE_KEY) || '');
+        } catch (error) {
+            console.error('Error reading local roster cache:', error);
+        }
+        const remoteRosterRaw = JSON.stringify(data.roster);
+        if (localRosterRaw === remoteRosterRaw) return;
+
+        await initRoster(data.roster);
+        syncSpeakOnWeeklyToAllTeacherSchedules();
+        renderSidebar();
+        resyncSelectionAfterSidebarRender();
+    } catch (error) {
+        console.error('Roster polling error:', error);
+    }
 }
 
 // Update sync status indicator
@@ -3702,6 +3746,7 @@ function startPolling() {
             // Silent error - don't show error for polling failures
             console.error('Polling error:', error);
         }
+        await pollRosterUpdates();
     }, POLL_INTERVAL);
 }
 
