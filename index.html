@@ -165,38 +165,111 @@
             <form id="editStudentForm" class="edit-student-form">
                 <input type="hidden" id="editStudentOriginalName" name="originalName">
                 <input type="hidden" id="editStudentOriginalCategory" name="originalCategory">
-                <div class="edit-student-name-row">
-                    <label class="edit-student-label">
-                        <span>First name</span>
-                        <input type="text" id="editStudentFirst" name="firstName" autocomplete="given-name" required maxlength="80">
-                    </label>
-                    <label class="edit-student-label">
-                        <span>Last name</span>
-                        <input type="text" id="editStudentLast" name="lastName" autocomplete="family-name" required maxlength="80">
-                    </label>
-                </div>
-                <label class="edit-student-label">
-                    <span>Phone number</span>
-                    <div class="edit-student-phone-row">
-                        <div class="edit-student-phone-country-wrap">
-                            <img id="editStudentPhoneCountryFlag" class="edit-student-phone-country-flag" alt="" aria-hidden="true">
-                            <select id="editStudentPhoneCountry" name="phoneCountry" aria-label="Country"></select>
-                        </div>
-                        <input type="tel" id="editStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="(__) _____-____">
+                <div class="add-student-heading-block add-student-heading add-student-redesign-heading">
+                    <div class="add-student-redesign-heading-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="8" r="4"></circle>
+                            <path d="M4 20c2.4-3.6 5-5.5 8-5.5s5.6 1.9 8 5.5"></path>
+                        </svg>
                     </div>
-                </label>
-                <label class="edit-student-label">
-                    <span>School's Name</span>
-                    <select id="editStudentSchool" name="school" required></select>
-                </label>
-                <label class="edit-student-label" for="editStudentTeacher">
-                    <span>Teacher</span>
-                    <select id="editStudentTeacher" name="teacher" aria-label="Teacher"></select>
-                </label>
+                    <div class="add-student-redesign-heading-copy">
+                        <h1 id="editStudentModalTitle" class="add-student-title">Edit Student</h1>
+                        <h4 class="add-student-subtitle">Update the student's details and account information.</h4>
+                    </div>
+                </div>
+                <div class="add-student-redesign-fields-card">
+                    <div class="add-student-name-row add-student-form-row add-student-form-row--names">
+                        <label class="add-student-label">
+                            <span>First Name *</span>
+                            <input type="text" id="editStudentFirst" name="firstName" autocomplete="given-name" required maxlength="80" placeholder="Enter first name">
+                        </label>
+                        <label class="add-student-label">
+                            <span>Last Name *</span>
+                            <input type="text" id="editStudentLast" name="lastName" autocomplete="family-name" required maxlength="80" placeholder="Enter last name">
+                        </label>
+                    </div>
+                    <div class="add-student-modal-contact-row">
+                        <label class="add-student-label add-student-contact-city-wrap">
+                            <span>City</span>
+                            <input type="text" id="editStudentCity" name="city" autocomplete="address-level2" maxlength="120" placeholder="Enter city">
+                        </label>
+                        <label class="add-student-label add-student-contact-country-wrap">
+                            <span>Country</span>
+                            <input type="text" id="editStudentCountry" name="country" readonly autocomplete="off" maxlength="120" aria-label="Country (from phone country code)">
+                        </label>
+                        <label class="add-student-label add-student-contact-phone-wrap">
+                            <span>Phone number</span>
+                            <div class="add-student-phone-row add-student-redesign-phone-row">
+                                <div class="add-student-phone-country-wrap" id="editStudentContactDialCodeWrap">
+                                    <img id="editStudentPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
+                                    <select id="editStudentPhoneCountry" name="phoneCountry" aria-label="Country code"></select>
+                                </div>
+                                <input type="tel" id="editStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="(__) ____-____">
+                            </div>
+                        </label>
+                    </div>
+                    <div class="add-student-placement-row">
+                        <div class="add-student-group-wrap-cell">
+                            <label class="add-student-label add-student-group-field-label">
+                                <span>School's Name</span>
+                                <select id="editStudentSchool" name="school" required></select>
+                            </label>
+                        </div>
+                        <div class="add-student-mentor-wrap">
+                            <label class="add-student-label" for="editStudentTeacher">
+                                <span>Teacher</span>
+                                <select id="editStudentTeacher" name="teacher" aria-label="Teacher"></select>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <section class="add-student-redesign-miro-card">
+                    <div class="add-student-redesign-miro-header">
+                        <img src="icon/miro.jpeg" class="add-student-redesign-miro-logo" alt="" aria-hidden="true">
+                        <div>
+                            <h5 class="add-student-redesign-miro-title">Miro Boards (Optional)</h5>
+                            <p class="add-student-redesign-miro-subtitle">Update the links to the student's Miro boards.</p>
+                        </div>
+                    </div>
+                    <div class="add-student-redesign-miro-links-row">
+                        <div class="add-student-redesign-miro-inline">
+                            <label class="add-student-redesign-miro-inline-title" for="editStudentPassportLink">Lessons</label>
+                            <label class="add-student-redesign-miro-input-wrap add-student-label add-student-passport-link-wrap is-visible" id="editStudentPassportLinkWrap" aria-hidden="false">
+                                <input type="url" id="editStudentPassportLink" name="editPassportLink" autocomplete="url" placeholder="https://miro.com/app/board/...">
+                            </label>
+                        </div>
+                        <div class="add-student-redesign-miro-inline">
+                            <label class="add-student-redesign-miro-inline-title" for="editStudentWorkbookBoardLink">Workbook</label>
+                            <label class="add-student-redesign-miro-input-wrap add-student-label">
+                                <input type="url" id="editStudentWorkbookBoardLink" name="editStudentWorkbookBoardLink" autocomplete="url" placeholder="https://miro.com/app/board/...">
+                            </label>
+                        </div>
+                    </div>
+                </section>
+                <div class="add-student-account-wrap">
+                    <div class="email-and-password">
+                        <label class="add-student-label" for="editStudentEmail">
+                            <span>Email</span>
+                            <input type="email" id="editStudentEmail" name="studentEmail" autocomplete="email" maxlength="120" placeholder="student@example.com">
+                        </label>
+                        <label class="add-student-label" for="editStudentPassword">
+                            <span>Password</span>
+                            <div class="password-input-wrap password-input-wrap--student-generate">
+                                <input type="text" id="editStudentPassword" name="studentPassword" readonly autocomplete="off" spellcheck="false" minlength="8" maxlength="120" placeholder="@xxxNxNN" title="Use the button to generate a password" aria-label="Generated password (read-only)">
+                                <button type="button" id="editStudentPasswordGenerate" class="btn-add-student-password-generate" aria-label="Generate password" title="Random @CCCNCNN password (8 characters)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="btn-add-student-password-generate-svg" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M2.25 6a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V6Zm3.97.97a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 0 1-1.06-1.06l1.72-1.72-1.72-1.72a.75.75 0 0 1 0-1.06Zm4.28 4.28a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </label>
+                    </div>
+                    <p class="add-student-password-hint">Click on the dice button to generate a random password.</p>
+                </div>
                 <div class="edit-student-actions">
                     <button type="button" class="btn-edit-student-delete" id="editStudentDelete">Delete student</button>
                     <button type="button" class="btn-edit-student-cancel" id="editStudentCancel">Cancel</button>
-                    <button type="submit" class="btn-edit-student-submit">Save</button>
+                    <button type="submit" class="btn-edit-student-submit">Save student</button>
                 </div>
             </form>
         </div>

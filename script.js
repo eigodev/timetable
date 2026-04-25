@@ -392,6 +392,29 @@ function loadRosterFromStorage() {
     }
 }
 
+async function loadRosterFromCloud() {
+    try {
+        const response = await fetch('/api/roster', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (!data?.success || !data?.roster || typeof data.roster !== 'object') return null;
+        try {
+            localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(data.roster));
+        } catch (error) {
+            console.error('Error caching cloud roster to localStorage:', error);
+        }
+        return data.roster;
+    } catch (error) {
+        console.error('Error loading roster from cloud:', error);
+        return null;
+    }
+}
+
 function getThemeByRosterKind(kind) {
     const k = String(kind || '').trim().toLowerCase();
     if (k === 'passport') return { primary: '#d32f2f', secondary: '#e57373' };
@@ -1225,8 +1248,12 @@ function setProfileAvatarDataUrl(profileKey, dataUrl) {
     }
 }
 
-function initRoster() {
-    const saved = loadRosterFromStorage();
+async function initRoster() {
+    const cloudRoster = await loadRosterFromCloud();
+    const saved = cloudRoster || loadRosterFromStorage();
+    if (!cloudRoster && saved) {
+        queueSaveRosterToCloud(saved);
+    }
     if (!saved) {
         teachersList = [];
         privateStudentsList = [];
@@ -1510,7 +1537,9 @@ function refreshAddStudentTeacherSelect(selectedTeacher = '') {
     sel.innerHTML = '';
     const ph = document.createElement('option');
     ph.value = '';
-    ph.textContent = '—';
+    ph.textContent = 'Select a teacher';
+    ph.disabled = true;
+    ph.hidden = true;
     sel.appendChild(ph);
     teachersList.forEach((raw) => {
         const n = String(raw || '').trim();
@@ -1529,7 +1558,9 @@ function refreshAddStudentTeacherSelect(selectedTeacher = '') {
     }
     const match = teachersList.find((t) => String(t || '').trim().toLowerCase() === prevLower)
         || (stored && stored.toLowerCase() === prevLower ? stored : null);
-    sel.value = match ? String(match) : '';
+    const hasMatch = !!match;
+    sel.value = hasMatch ? String(match) : '';
+    ph.selected = !hasMatch;
 }
 
 function refreshEditStudentTeacherSelect(selectedTeacher = '') {
@@ -1540,7 +1571,9 @@ function refreshEditStudentTeacherSelect(selectedTeacher = '') {
     sel.innerHTML = '';
     const ph = document.createElement('option');
     ph.value = '';
-    ph.textContent = '—';
+    ph.textContent = 'Select a teacher';
+    ph.disabled = true;
+    ph.hidden = true;
     sel.appendChild(ph);
     teachersList.forEach((raw) => {
         const n = String(raw || '').trim();
@@ -1559,7 +1592,9 @@ function refreshEditStudentTeacherSelect(selectedTeacher = '') {
     }
     const match = teachersList.find((t) => String(t || '').trim().toLowerCase() === prevLower)
         || (storedWant && storedWant.toLowerCase() === prevLower ? storedWant : null);
-    sel.value = match ? String(match) : '';
+    const hasMatch = !!match;
+    sel.value = hasMatch ? String(match) : '';
+    ph.selected = !hasMatch;
 }
 
 function syncAddStudentModalThemeFromSchoolTitle(schoolTitleRaw) {
@@ -3345,36 +3380,38 @@ function setupStudentClassReportPanel() {
 
 function saveRoster() {
     normalizeCustomSchoolsList();
+    const rosterPayload = {
+        teachers: teachersList,
+        private: privateStudentsList,
+        speakon: speakonStudentsList,
+        passport: passportStudentsList,
+        studentSchools: studentSchoolByName,
+        teacherEmails: teacherEmailsByName,
+        teacherPasswords: teacherPasswordsByName,
+        customSchools: customSchoolsList,
+        schoolExternalLinks,
+        schoolThemeColors,
+        schoolBillingModels,
+        schoolBillingConfigs,
+        calendarToolbarExternalLink,
+        passportLinks: passportFollowupLinks,
+        passportHeaderPageLink,
+        speakonWeeklyClass: speakonStudentWeeklyClass,
+        studentPhones: studentPhonesByName,
+        studentTeachers: studentTeacherByName,
+        studentEmails: studentEmailsByName,
+        studentPasswords: studentPasswordsByName,
+        studentCities: studentCityByName,
+        studentCountries: studentCountryByName,
+        studentGoogleMeetLinks: studentGoogleMeetLinksByName,
+        googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey
+    };
     try {
-        localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify({
-            teachers: teachersList,
-            private: privateStudentsList,
-            speakon: speakonStudentsList,
-            passport: passportStudentsList,
-            studentSchools: studentSchoolByName,
-            teacherEmails: teacherEmailsByName,
-            teacherPasswords: teacherPasswordsByName,
-            customSchools: customSchoolsList,
-            schoolExternalLinks,
-            schoolThemeColors,
-            schoolBillingModels,
-            schoolBillingConfigs,
-            calendarToolbarExternalLink,
-            passportLinks: passportFollowupLinks,
-            passportHeaderPageLink,
-            speakonWeeklyClass: speakonStudentWeeklyClass,
-            studentPhones: studentPhonesByName,
-            studentTeachers: studentTeacherByName,
-            studentEmails: studentEmailsByName,
-            studentPasswords: studentPasswordsByName,
-            studentCities: studentCityByName,
-            studentCountries: studentCountryByName,
-            studentGoogleMeetLinks: studentGoogleMeetLinksByName,
-            googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey
-        }));
+        localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(rosterPayload));
     } catch (error) {
         console.error('Error saving roster to localStorage:', error);
     }
+    queueSaveRosterToCloud(rosterPayload);
 }
 
 // Store schedules for all teachers: { teacherName: { 'day-hour': state } }
@@ -3466,6 +3503,47 @@ let pollTimer = null;
 
 // Track if status update is pending
 let statusUpdateTimer = null;
+
+// Roster cloud sync
+let rosterSaveTimer = null;
+let isSavingRoster = false;
+let pendingRosterPayload = null;
+
+async function saveRosterToCloud(rosterPayload) {
+    if (!rosterPayload || typeof rosterPayload !== 'object') return;
+    if (isSavingRoster) {
+        pendingRosterPayload = rosterPayload;
+        return;
+    }
+    isSavingRoster = true;
+    try {
+        await fetch('/api/roster', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ roster: rosterPayload }),
+        });
+    } catch (error) {
+        console.error('Error saving roster to cloud:', error);
+    } finally {
+        isSavingRoster = false;
+        if (pendingRosterPayload) {
+            const nextPayload = pendingRosterPayload;
+            pendingRosterPayload = null;
+            saveRosterToCloud(nextPayload);
+        }
+    }
+}
+
+function queueSaveRosterToCloud(rosterPayload) {
+    if (rosterSaveTimer) {
+        clearTimeout(rosterSaveTimer);
+    }
+    rosterSaveTimer = setTimeout(() => {
+        saveRosterToCloud(rosterPayload);
+    }, 350);
+}
 
 // Update sync status indicator
 function updateSyncStatus(status, message) {
@@ -5694,7 +5772,7 @@ function setupTeacherLoginModal() {
 // Initialize teachers sidebar
 async function initTeachers() {
     await loadAllSchedules();
-    initRoster();
+    await initRoster();
     await ensureAdminAccountReady();
     syncSpeakOnWeeklyToAllTeacherSchedules();
     const restoredTeacher = await tryRestoreSessionFromSavedCredentials();
@@ -6134,6 +6212,11 @@ function openEditStudentModal(studentName, rosterKey) {
     const phoneInput = document.getElementById('editStudentPhone');
     const phoneCountrySelect = document.getElementById('editStudentPhoneCountry');
     const schoolSelect = document.getElementById('editStudentSchool');
+    const cityInput = document.getElementById('editStudentCity');
+    const countryInput = document.getElementById('editStudentCountry');
+    const emailInput = document.getElementById('editStudentEmail');
+    const passwordInput = document.getElementById('editStudentPassword');
+    const passportLinkInput = document.getElementById('editStudentPassportLink');
     const originalNameInput = document.getElementById('editStudentOriginalName');
     const originalCategoryInput = document.getElementById('editStudentOriginalCategory');
     if (!modal || !firstInput || !lastInput || !phoneInput || !phoneCountrySelect || !schoolSelect || !originalNameInput || !originalCategoryInput) {
@@ -6148,6 +6231,11 @@ function openEditStudentModal(studentName, rosterKey) {
     phoneInput.value = phone.number;
     phoneCountrySelect.value = phone.countryIso;
     updateEditStudentPhonePlaceholder();
+    if (cityInput) cityInput.value = String(studentCityByName[studentName] || '');
+    if (countryInput) countryInput.value = String(studentCountryByName[studentName] || '');
+    if (emailInput) emailInput.value = String(studentEmailsByName[studentName] || '');
+    if (passwordInput) passwordInput.value = '';
+    if (passportLinkInput) passportLinkInput.value = String(passportFollowupLinks[studentName] || '');
     refreshEditStudentSchoolSelect(currentSchool);
     originalNameInput.value = studentName;
     originalCategoryInput.value = rosterKey;
@@ -6170,7 +6258,7 @@ function refreshClassReportAfterMeetLinkChange() {
     }
 }
 
-function upsertStudentFromEditForm(action = 'save') {
+async function upsertStudentFromEditForm(action = 'save') {
     const originalName = document.getElementById('editStudentOriginalName')?.value || '';
     const originalKind = document.getElementById('editStudentOriginalCategory')?.value || '';
     const first = document.getElementById('editStudentFirst')?.value || '';
@@ -6178,6 +6266,11 @@ function upsertStudentFromEditForm(action = 'save') {
     const phoneNumber = document.getElementById('editStudentPhone')?.value || '';
     const phoneCountryIso = document.getElementById('editStudentPhoneCountry')?.value || DEFAULT_PHONE_COUNTRY_ISO;
     const schoolName = document.getElementById('editStudentSchool')?.value || '';
+    const city = String(document.getElementById('editStudentCity')?.value || '').trim();
+    const country = String(document.getElementById('editStudentCountry')?.value || '').trim();
+    const email = String(document.getElementById('editStudentEmail')?.value || '').trim();
+    const nextPasswordRaw = String(document.getElementById('editStudentPassword')?.value || '').trim();
+    const passportLink = String(document.getElementById('editStudentPassportLink')?.value || '').trim();
     const nextSchool = String(schoolName || '').trim();
     const nextKind = rosterKindFromSchoolName(nextSchool);
 
@@ -6199,6 +6292,24 @@ function upsertStudentFromEditForm(action = 'save') {
     if (!nextSchool) {
         alert("Please select the school's name.");
         return;
+    }
+    if (email) {
+        const emailLc = email.toLowerCase();
+        const duplicateStudentEmail = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+            const sameAsOriginal = name.trim().toLowerCase() === originalName.trim().toLowerCase();
+            return !sameAsOriginal && String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+        });
+        if (duplicateStudentEmail) {
+            alert('This student email is already in use.');
+            document.getElementById('editStudentEmail')?.focus();
+            return;
+        }
+        const duplicateTeacherEmail = teachersList.some((name) => String(teacherEmailsByName[name] || '').trim().toLowerCase() === emailLc);
+        if (duplicateTeacherEmail) {
+            alert('This email is already used by a teacher account.');
+            document.getElementById('editStudentEmail')?.focus();
+            return;
+        }
     }
 
     const oldList = originalKind === 'private'
@@ -6273,6 +6384,27 @@ function upsertStudentFromEditForm(action = 'save') {
     }
     const teacherVal = document.getElementById('editStudentTeacher')?.value || '';
     saveStudentTeacherInfo(fullName, teacherVal);
+    const existingPasswordHash =
+        studentPasswordsByName[fullName]
+        || studentPasswordsByName[originalName]
+        || '';
+    let nextPasswordHash = existingPasswordHash;
+    if (nextPasswordRaw) {
+        nextPasswordHash = await hashStudentPassword(nextPasswordRaw);
+    }
+    saveStudentAccountExtras(fullName, { email, password: nextPasswordHash, city, country });
+    if (originalName !== fullName) {
+        delete studentEmailsByName[originalName];
+        delete studentPasswordsByName[originalName];
+        delete studentCityByName[originalName];
+        delete studentCountryByName[originalName];
+    }
+    if (nextKind === 'passport' && passportLink) {
+        passportFollowupLinks[fullName] = passportLink;
+    } else {
+        delete passportFollowupLinks[fullName];
+    }
+
     if (originalName !== fullName) {
         delete studentTeacherByName[originalName];
     }
@@ -6387,6 +6519,8 @@ function setupEditStudentModal() {
     const deleteBtn = document.getElementById('editStudentDelete');
     const backdrop = document.getElementById('editStudentModalBackdrop');
     const phoneCountrySelect = document.getElementById('editStudentPhoneCountry');
+    const passwordInput = document.getElementById('editStudentPassword');
+    const passwordGenerateBtn = document.getElementById('editStudentPasswordGenerate');
     if (!modal || !form) {
         return;
     }
@@ -6401,13 +6535,22 @@ function setupEditStudentModal() {
         backdrop.addEventListener('click', () => closeEditStudentModal());
     }
     if (deleteBtn) {
-        deleteBtn.addEventListener('click', () => upsertStudentFromEditForm('delete'));
+        deleteBtn.addEventListener('click', async () => {
+            await upsertStudentFromEditForm('delete');
+        });
     }
     phoneCountrySelect?.addEventListener('change', handleEditStudentPhoneCountryChanged);
+    if (passwordGenerateBtn && passwordInput && passwordGenerateBtn.dataset.bound !== '1') {
+        passwordGenerateBtn.dataset.bound = '1';
+        passwordGenerateBtn.addEventListener('click', () => {
+            passwordInput.value = generateAddStudentPlatePassword();
+            passwordInput.focus();
+        });
+    }
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        upsertStudentFromEditForm('save');
+        await upsertStudentFromEditForm('save');
     });
 }
 
@@ -6717,6 +6860,7 @@ function updateEditStudentPhonePlaceholder() {
     const countrySelect = document.getElementById('editStudentPhoneCountry');
     const phoneInput = document.getElementById('editStudentPhone');
     const flagImg = document.getElementById('editStudentPhoneCountryFlag');
+    const countryInput = document.getElementById('editStudentCountry');
     if (!countrySelect || !phoneInput) return;
 
     const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
@@ -6729,6 +6873,9 @@ function updateEditStudentPhonePlaceholder() {
         flagImg.src = flagUrl;
         flagImg.alt = `${selected.name} flag`;
         flagImg.onerror = null;
+    }
+    if (countryInput) {
+        countryInput.value = selected.name;
     }
 }
 
@@ -7025,10 +7172,13 @@ function updateAddStudentPassportFieldVisibility() {
     }
 
     if (passportLinkWrap && passportLinkInput) {
-        passportLinkWrap.classList.remove('is-visible');
-        passportLinkWrap.setAttribute('aria-hidden', 'true');
+        const showPassportLink = showStudentFields;
+        passportLinkWrap.classList.toggle('is-visible', showPassportLink);
+        passportLinkWrap.setAttribute('aria-hidden', showPassportLink ? 'false' : 'true');
         passportLinkInput.required = false;
-        passportLinkInput.value = '';
+        if (!showPassportLink) {
+            passportLinkInput.value = '';
+        }
     }
     dialog.classList.remove('add-student-dialog--expanded');
 

@@ -30,6 +30,12 @@ body {
     
     height: 100%;
     width: 100%;
+
+    /* Shared calendar surface measurements (used to lock Add Student size). */
+    --calendar-surface-radius: 20px;
+    --calendar-surface-padding: 20px;
+    --calendar-surface-height: calc(100vh - 40px);
+    --calendar-surface-width: calc(100vw - 330px);
 }
 
 /* Sidebar Styles */
@@ -1877,10 +1883,10 @@ input.student-reposition-modal-day {
 
 #addStudentPassword,
 #addStudentPassword[readonly] {
-    width: 100px;
+    width: 150px;
     min-width: 100px;
-    max-width: 100px;
-    flex: 0 0 100px;
+    max-width: 200px;
+    text-align: center;
     box-sizing: border-box;
 }
 
@@ -2411,14 +2417,21 @@ input.student-reposition-modal-day {
 }
 
 .edit-student-dialog {
-    position: relative;
+    position: fixed;
+    left: 21%;
     z-index: 1;
-    width: 100%;
-    max-width: 380px;
-    padding: 22px 22px 18px;
+    box-sizing: content-box;
+    width: 770.125px;
+    height: 551px;
+    max-width: 770.125px;
+    max-height: 551px;
+    margin: 0;
+    border: 0;
+    padding: 20px;
     background: white;
-    border-radius: 16px;
+    border-radius: 20px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
+    overflow: auto;
 }
 
 .edit-student-title {
@@ -2430,7 +2443,7 @@ input.student-reposition-modal-day {
 .edit-student-form {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 3px;
 }
 
 .edit-student-name-row {
@@ -2639,15 +2652,22 @@ input.student-reposition-modal-day {
 }
 
 .add-student-dialog {
-    position: relative;
+    position: fixed;
+    left: 21%;
     z-index: 1;
-    width: 100%;
-    max-width: 550px;
+    box-sizing: content-box;
+    width: 770.125px;
+    height: 551px;
+    max-width: 770.125px;
+    max-height: 551px;
+    margin: 0;
+    border: 0;
     padding: 20px;
     background: white;
     border-radius: 20px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     transition: max-width 0.35s ease;
+    overflow: visible;
 }
 
 .add-student-dialog.add-student-dialog--expanded {
@@ -2663,7 +2683,7 @@ input.student-reposition-modal-day {
 .add-student-form {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 3px;
 }
 
 .add-student-name-row {
@@ -3337,19 +3357,7 @@ input.student-reposition-modal-day {
     margin-top: 0;
 }
 
-#addStudentTeacher,
-#editStudentTeacher {
-    width: 100%;
-    margin-top: 2px;
-    padding: 6px 8px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    background: #fff;
-    box-sizing: border-box;
-}
-
-#addStudentMentor {
+#addStudentTeacher {
     width: 100%;
     margin-top: 2px;
     padding: 6px 8px;
@@ -3628,7 +3636,7 @@ input.student-reposition-modal-day {
 
 .add-student-placement-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 5px;
     align-items: flex-start;
     width: 100%;
@@ -3640,7 +3648,7 @@ input.student-reposition-modal-day {
 }
 
 .add-student-placement-row .add-student-group-wrap-cell {
-    flex: 1 1 200px;
+    flex: 1 1 65%;
     min-width: 0;
 }
 
@@ -3651,7 +3659,13 @@ input.student-reposition-modal-day {
 }
 
 .add-student-placement-row #addStudentMentorRow {
-    flex: 1 1 200px;
+    flex: 1 1 35%;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.add-student-placement-row .add-student-mentor-wrap {
+    flex: 1 1 35%;
     min-width: 0;
     margin-top: 0;
 }
@@ -3690,10 +3704,19 @@ input.student-reposition-modal-day {
     display: none;
 }
 
-.add-student-group-wrap-cell #addStudentGroupSelect {
+.add-student-group-wrap-cell #addStudentGroupSelect,
+.add-student-mentor-wrap #addStudentMentor {
     width: 100%;
     margin-top: 2px;
     box-sizing: border-box;
+}
+
+#addStudentMentor:invalid {
+    color: #afafaf;
+}
+
+#addStudentMentor option {
+    color: #333;
 }
 
 #addStudentCountry {
@@ -3749,6 +3772,202 @@ input.student-reposition-modal-day {
     font-weight: 500;
     color: #5c6479;
     line-height: 1.35;
+}
+
+.add-student-redesign-heading {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 6px 2px 2px;
+}
+
+.add-student-redesign-heading-icon {
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid #d5dced;
+    background: #f6f8fc;
+    color: #4d67a8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.add-student-redesign-heading-icon svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+}
+
+.add-student-redesign-heading-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.add-student-redesign-fields-card {
+    border: 1px solid #e3e7ef;
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.add-student-redesign-phone-row #addStudentContactDialCodeWrap {
+    flex: 0 0 30px;
+    min-width: 35px;
+    height: 30px;
+    border-radius: 40%;
+    border: 1px solid #d8ddeb;
+}
+
+.add-student-redesign-miro-card {
+    border: 1px solid #e3e7ef;
+    border-radius: 10px;
+    background: #f9fbff;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.add-student-redesign-miro-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.add-student-redesign-miro-logo {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex: 0 0 30px;
+    border: 1px solid #d9e1fb;
+    background: #eef2ff;
+}
+
+.add-student-redesign-miro-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #2f3f66;
+}
+
+.add-student-redesign-miro-subtitle {
+    margin: 2px 0 0;
+    font-size: 0.78rem;
+    color: #6f7a93;
+}
+
+.add-student-redesign-miro-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: #5d74c7;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 30px;
+}
+
+.add-student-redesign-miro-icon--miro {
+    background: #eef2ff;
+    color: #3f5bbb;
+    border: 1px solid #d9e1fb;
+}
+
+.add-student-redesign-miro-icon--green {
+    background: #41b66e;
+}
+
+.add-student-redesign-miro-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.add-student-redesign-miro-links-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.add-student-redesign-miro-links-row .add-student-redesign-miro-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    border: 1px solid #e1e7f3;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px;
+}
+
+.add-student-redesign-miro-inline {
+    border: 1px solid #e1e7f3;
+    border-radius: 10px;
+    background: #fff;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.add-student-redesign-miro-inline-title {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #2f3f66;
+}
+
+.add-student-redesign-miro-row-title {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #2f3f66;
+}
+
+.add-student-redesign-miro-row-subtitle {
+    margin: 1px 0 0;
+    font-size: 0.75rem;
+    color: #6f7a93;
+}
+
+.add-student-redesign-miro-input-wrap {
+    flex: 1 1 auto;
+    margin: 0;
+}
+
+.add-student-redesign-miro-input-wrap input {
+    width: 100%;
+}
+
+@media (max-width: 760px) {
+    .add-student-redesign-miro-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .add-student-redesign-miro-links-row {
+        grid-template-columns: 1fr;
+    }
+
+    .add-student-redesign-miro-inline {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .add-student-redesign-miro-inline-title {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
 }
 
 .add-school-external-wrap.is-hidden {
@@ -5200,10 +5419,10 @@ input.student-reposition-modal-day {
 .main-content .calendar-wrapper {
     height: 100%;
     width: 150%;
-    padding: 20px;
+    padding: var(--calendar-surface-padding, 20px);
     
     background: #fff;
-    border-radius: 20px;
+    border-radius: var(--calendar-surface-radius, 20px);
 }
 
 .main-content .summary-panel {
