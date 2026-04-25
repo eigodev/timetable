@@ -252,6 +252,10 @@
                             <span>Email</span>
                             <input type="email" id="editStudentEmail" name="studentEmail" autocomplete="email" maxlength="120" placeholder="student@example.com">
                         </label>
+                        <label class="add-student-label" for="editStudentUsername">
+                            <span>Username</span>
+                            <input type="text" id="editStudentUsername" name="studentUsername" readonly autocomplete="username" maxlength="120" placeholder="firstnamelastname_">
+                        </label>
                         <label class="add-student-label" for="editStudentPassword">
                             <span>Password</span>
                             <div class="password-input-wrap password-input-wrap--student-generate">
@@ -372,8 +376,8 @@
             <h3 id="teacherLoginModalTitle" class="teacher-login-title">Log in</h3>
             <form id="teacherLoginForm" class="teacher-login-form">
                 <label class="teacher-login-label" for="teacherLoginEmail">
-                    <span>Admin username or account email</span>
-                    <input type="text" id="teacherLoginEmail" autocomplete="username" required maxlength="120" placeholder="@Admin or you@example.com">
+                    <span>Admin username, teacher email, or student username</span>
+                    <input type="text" id="teacherLoginEmail" autocomplete="username" required maxlength="120" placeholder="@Admin, teacher@email.com, or studentname_">
                 </label>
                 <label class="teacher-login-label" for="teacherLoginPassword">
                     <span>Password</span>

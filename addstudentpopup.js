@@ -105,6 +105,10 @@
                             <span>Email</span>
                             <input type="email" id="addStudentEmail" name="studentEmail" autocomplete="email" maxlength="120" placeholder="student@example.com">
                         </label>
+                        <label class="add-student-label" for="addStudentUsername">
+                            <span>Username</span>
+                            <input type="text" id="addStudentUsername" name="studentUsername" readonly autocomplete="username" maxlength="120" placeholder="firstnamelastname_">
+                        </label>
                         <label class="add-student-label" for="addStudentPassword">
                             <span>Password</span>
                             <div class="password-input-wrap password-input-wrap--student-generate">

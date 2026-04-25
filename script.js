@@ -63,6 +63,7 @@ let studentPhonesByName = {};
 let studentTeacherByName = {};
 /** Optional account / location fields for roster students (persisted with roster). */
 let studentEmailsByName = {};
+let studentUsernamesByName = {};
 let studentPasswordsByName = {};
 let studentCityByName = {};
 let studentCountryByName = {};
@@ -92,7 +93,7 @@ let speakonStudentWeeklyClass = {};
 let isTeacherLoggedIn = false;
 let loggedInTeacherName = '';
 let isAdminLoggedIn = false;
-/** When set, the signed-in user is this student (email + password login); may only view their own schedule. */
+/** When set, the signed-in user is this student (username + password login); may only view their own schedule. */
 let loggedInStudentFullName = '';
 let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
@@ -994,6 +995,34 @@ function findStudentNameByLoginEmail(emailRaw) {
     );
 }
 
+function buildDefaultStudentUsername(firstRaw, lastRaw) {
+    const first = String(firstRaw || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const last = String(lastRaw || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const combined = `${first}${last}`;
+    if (!combined) return '';
+    return `${combined}_`;
+}
+
+function buildDefaultStudentUsernameFromFullName(studentFullName) {
+    const parsed = splitName(studentFullName);
+    return buildDefaultStudentUsername(parsed.first, parsed.last);
+}
+
+function findStudentNameByLoginUsername(usernameRaw) {
+    const username = String(usernameRaw || '').trim().toLowerCase();
+    if (!username) return '';
+    return (
+        [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].find((name) => {
+            return String(studentUsernamesByName[name] || '').trim().toLowerCase() === username;
+        }) || ''
+    );
+}
+
+function syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput) {
+    if (!firstInput || !lastInput || !usernameInput) return;
+    usernameInput.value = buildDefaultStudentUsername(firstInput.value, lastInput.value);
+}
+
 function isStudentPasswordHashed(storedPasswordRaw) {
     return String(storedPasswordRaw || '').startsWith(STUDENT_PASSWORD_HASH_PREFIX);
 }
@@ -1079,16 +1108,16 @@ async function verifyAdminLogin(usernameRaw, passwordRaw) {
 }
 
 /**
- * Student login: account email + account password.
+ * Student login: account username + account password.
  * @returns {Promise<{ ok: true, studentName: string } | { ok: false, error: string }>}
  */
-async function verifyStudentLogin(emailRaw, passwordRaw) {
-    const email = String(emailRaw || '').trim();
+async function verifyStudentLogin(usernameRaw, passwordRaw) {
+    const username = String(usernameRaw || '').trim();
     const password = String(passwordRaw || '');
-    if (!email) {
-        return { ok: false, error: 'Student email is required to log in.' };
+    if (!username) {
+        return { ok: false, error: 'Student username is required to log in.' };
     }
-    const studentName = findStudentNameByLoginEmail(email);
+    const studentName = findStudentNameByLoginUsername(username);
     if (!studentName) {
         return { ok: false, error: 'Teacher/Student account not found.' };
     }
@@ -1266,6 +1295,7 @@ async function initRoster(preloadedRoster = null) {
         studentPhonesByName = {};
         studentTeacherByName = {};
         studentEmailsByName = {};
+        studentUsernamesByName = {};
         studentPasswordsByName = {};
         studentCityByName = {};
         studentCountryByName = {};
@@ -1339,6 +1369,16 @@ async function initRoster(preloadedRoster = null) {
     [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
         const e = String(studentEmailsRaw[name] || '').trim();
         if (e) studentEmailsByName[name] = e;
+    });
+    const studentUsernamesRaw =
+        saved.studentUsernames && typeof saved.studentUsernames === 'object' && !Array.isArray(saved.studentUsernames)
+            ? { ...saved.studentUsernames }
+            : {};
+    studentUsernamesByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const fallbackUsername = buildDefaultStudentUsernameFromFullName(name);
+        const u = String(studentUsernamesRaw[name] || fallbackUsername).trim();
+        if (u) studentUsernamesByName[name] = u;
     });
     const studentPasswordsRaw =
         saved.studentPasswords && typeof saved.studentPasswords === 'object' && !Array.isArray(saved.studentPasswords)
@@ -3401,6 +3441,7 @@ function saveRoster() {
         studentPhones: studentPhonesByName,
         studentTeachers: studentTeacherByName,
         studentEmails: studentEmailsByName,
+        studentUsernames: studentUsernamesByName,
         studentPasswords: studentPasswordsByName,
         studentCities: studentCityByName,
         studentCountries: studentCountryByName,
@@ -5227,6 +5268,7 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
         delete studentTeacherByName[name];
         delete studentGoogleMeetLinksByName[name];
         delete studentEmailsByName[name];
+        delete studentUsernamesByName[name];
         delete studentPasswordsByName[name];
         delete studentCityByName[name];
         delete studentCountryByName[name];
@@ -5694,7 +5736,7 @@ function setupTeacherLoginModal() {
         const password = String(passwordInput.value || '').trim();
 
         if (!rawLogin) {
-            setError('Enter your admin username or your teacher/student account email.');
+            setError('Enter your admin username, teacher email, or student username.');
             emailInput.focus();
             return;
         }
@@ -5809,7 +5851,7 @@ function setupTeacherLoginModal() {
             return;
         }
 
-        setError(v.error || 'Email not found. Make sure you created your teacher or student account with this email.');
+        setError(v.error || 'Account not found. Use teacher email or student username.');
         emailInput.focus();
     });
 }
@@ -5986,6 +6028,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentTeacherByName[removedName];
     delete studentGoogleMeetLinksByName[removedName];
     delete studentEmailsByName[removedName];
+    delete studentUsernamesByName[removedName];
     delete studentPasswordsByName[removedName];
     delete studentCityByName[removedName];
     delete studentCountryByName[removedName];
@@ -6126,11 +6169,14 @@ function saveStudentAccountExtras(studentName, extras) {
     const name = String(studentName || '').trim();
     if (!name) return;
     const email = String(extras?.email || '').trim();
+    const username = String(extras?.username || '').trim();
     const password = String(extras?.password || '').trim();
     const city = String(extras?.city || '').trim();
     const country = String(extras?.country || '').trim();
     if (email) studentEmailsByName[name] = email;
     else delete studentEmailsByName[name];
+    if (username) studentUsernamesByName[name] = username;
+    else delete studentUsernamesByName[name];
     if (password) studentPasswordsByName[name] = password;
     else delete studentPasswordsByName[name];
     if (city) studentCityByName[name] = city;
@@ -6260,6 +6306,7 @@ function openEditStudentModal(studentName, rosterKey) {
     const cityInput = document.getElementById('editStudentCity');
     const countryInput = document.getElementById('editStudentCountry');
     const emailInput = document.getElementById('editStudentEmail');
+    const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
     const passportLinkInput = document.getElementById('editStudentPassportLink');
     const originalNameInput = document.getElementById('editStudentOriginalName');
@@ -6279,6 +6326,7 @@ function openEditStudentModal(studentName, rosterKey) {
     if (cityInput) cityInput.value = String(studentCityByName[studentName] || '');
     if (countryInput) countryInput.value = String(studentCountryByName[studentName] || '');
     if (emailInput) emailInput.value = String(studentEmailsByName[studentName] || '');
+    if (usernameInput) usernameInput.value = String(studentUsernamesByName[studentName] || buildDefaultStudentUsernameFromFullName(studentName));
     if (passwordInput) passwordInput.value = '';
     if (passportLinkInput) passportLinkInput.value = String(passportFollowupLinks[studentName] || '');
     refreshEditStudentSchoolSelect(currentSchool);
@@ -6314,6 +6362,7 @@ async function upsertStudentFromEditForm(action = 'save') {
     const city = String(document.getElementById('editStudentCity')?.value || '').trim();
     const country = String(document.getElementById('editStudentCountry')?.value || '').trim();
     const email = String(document.getElementById('editStudentEmail')?.value || '').trim();
+    const username = String(document.getElementById('editStudentUsername')?.value || '').trim();
     const nextPasswordRaw = String(document.getElementById('editStudentPassword')?.value || '').trim();
     const passportLink = String(document.getElementById('editStudentPassportLink')?.value || '').trim();
     const nextSchool = String(schoolName || '').trim();
@@ -6338,6 +6387,11 @@ async function upsertStudentFromEditForm(action = 'save') {
         alert("Please select the school's name.");
         return;
     }
+    if (!username) {
+        alert('Student username is required for account login.');
+        document.getElementById('editStudentUsername')?.focus();
+        return;
+    }
     if (email) {
         const emailLc = email.toLowerCase();
         const duplicateStudentEmail = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
@@ -6355,6 +6409,21 @@ async function upsertStudentFromEditForm(action = 'save') {
             document.getElementById('editStudentEmail')?.focus();
             return;
         }
+    }
+    const usernameLc = username.toLowerCase();
+    const duplicateStudentUsername = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        const sameAsOriginal = name.trim().toLowerCase() === originalName.trim().toLowerCase();
+        return !sameAsOriginal && String(studentUsernamesByName[name] || '').trim().toLowerCase() === usernameLc;
+    });
+    if (duplicateStudentUsername) {
+        alert('This student username is already in use.');
+        document.getElementById('editStudentUsername')?.focus();
+        return;
+    }
+    if (usernameLc === String(adminAccount.username || '').trim().toLowerCase()) {
+        alert('This username is already used by the admin account.');
+        document.getElementById('editStudentUsername')?.focus();
+        return;
     }
 
     const oldList = originalKind === 'private'
@@ -6405,6 +6474,10 @@ async function upsertStudentFromEditForm(action = 'save') {
             studentEmailsByName[fullName] = studentEmailsByName[originalName];
             delete studentEmailsByName[originalName];
         }
+        if (Object.prototype.hasOwnProperty.call(studentUsernamesByName, originalName)) {
+            studentUsernamesByName[fullName] = studentUsernamesByName[originalName];
+            delete studentUsernamesByName[originalName];
+        }
         if (Object.prototype.hasOwnProperty.call(studentPasswordsByName, originalName)) {
             studentPasswordsByName[fullName] = studentPasswordsByName[originalName];
             delete studentPasswordsByName[originalName];
@@ -6437,9 +6510,10 @@ async function upsertStudentFromEditForm(action = 'save') {
     if (nextPasswordRaw) {
         nextPasswordHash = await hashStudentPassword(nextPasswordRaw);
     }
-    saveStudentAccountExtras(fullName, { email, password: nextPasswordHash, city, country });
+    saveStudentAccountExtras(fullName, { email, username, password: nextPasswordHash, city, country });
     if (originalName !== fullName) {
         delete studentEmailsByName[originalName];
+        delete studentUsernamesByName[originalName];
         delete studentPasswordsByName[originalName];
         delete studentCityByName[originalName];
         delete studentCountryByName[originalName];
@@ -6564,6 +6638,9 @@ function setupEditStudentModal() {
     const deleteBtn = document.getElementById('editStudentDelete');
     const backdrop = document.getElementById('editStudentModalBackdrop');
     const phoneCountrySelect = document.getElementById('editStudentPhoneCountry');
+    const firstInput = document.getElementById('editStudentFirst');
+    const lastInput = document.getElementById('editStudentLast');
+    const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
     const passwordGenerateBtn = document.getElementById('editStudentPasswordGenerate');
     if (!modal || !form) {
@@ -6585,6 +6662,10 @@ function setupEditStudentModal() {
         });
     }
     phoneCountrySelect?.addEventListener('change', handleEditStudentPhoneCountryChanged);
+    const syncEditStudentUsername = () =>
+        syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput);
+    firstInput?.addEventListener('input', syncEditStudentUsername);
+    lastInput?.addEventListener('input', syncEditStudentUsername);
     if (passwordGenerateBtn && passwordInput && passwordGenerateBtn.dataset.bound !== '1') {
         passwordGenerateBtn.dataset.bound = '1';
         passwordGenerateBtn.addEventListener('click', () => {
@@ -6751,14 +6832,21 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     }
 
     const emailEl = document.getElementById('addStudentEmail');
+    const usernameEl = document.getElementById('addStudentUsername');
     const passwordEl = document.getElementById('addStudentPassword');
     const email = String(emailEl?.value || '').trim();
+    const username = String(usernameEl?.value || '').trim();
     const password = String(passwordEl?.value || '').trim();
     const city = String(document.getElementById('addStudentCity')?.value || '').trim();
     const country = String(document.getElementById('addStudentCountry')?.value || '').trim();
     if (!email) {
         alert('Student email is required for account login.');
         emailEl?.focus();
+        return;
+    }
+    if (!username) {
+        alert('Student username is required for account login.');
+        usernameEl?.focus();
         return;
     }
     if (!password) {
@@ -6792,6 +6880,20 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
         emailEl?.focus();
         return;
     }
+    const usernameLc = username.toLowerCase();
+    const studentUsernameTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        return String(studentUsernamesByName[name] || '').trim().toLowerCase() === usernameLc;
+    });
+    if (studentUsernameTaken) {
+        alert('This student username is already in use.');
+        usernameEl?.focus();
+        return;
+    }
+    if (usernameLc === String(adminAccount.username || '').trim().toLowerCase()) {
+        alert('This username is already used by the admin account.');
+        usernameEl?.focus();
+        return;
+    }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
     const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
@@ -6815,7 +6917,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const addTeacherSelect = document.getElementById('addStudentMentor');
     saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
     const passwordHash = await hashStudentPassword(password);
-    saveStudentAccountExtras(fullName, { email, password: passwordHash, city, country });
+    saveStudentAccountExtras(fullName, { email, username, password: passwordHash, city, country });
     const schoolKey = schoolName.trim().toLowerCase();
     if (schoolKey) {
         const primaryEl = document.getElementById('addSchoolPrimaryColor');
@@ -7003,6 +7105,7 @@ function updateAddStudentPassportFieldVisibility() {
     const contactCountryWrap = document.getElementById('addStudentContactCountryWrap');
     const accountWrap = document.getElementById('addStudentAccountWrap');
     const studentEmailInput = document.getElementById('addStudentEmail');
+    const studentUsernameInput = document.getElementById('addStudentUsername');
     const studentPasswordInput = document.getElementById('addStudentPassword');
     const schoolInput = document.getElementById('addSchoolNameInput');
     const schoolSelect = document.getElementById('addStudentGroupSelect');
@@ -7072,6 +7175,7 @@ function updateAddStudentPassportFieldVisibility() {
     }
     if (!showStudentFields) {
         if (studentEmailInput) studentEmailInput.value = '';
+        if (studentUsernameInput) studentUsernameInput.value = buildDefaultStudentUsername('', '');
         if (studentPasswordInput) {
             studentPasswordInput.value = '';
         }
@@ -7291,7 +7395,9 @@ function openAddStudentModal(mode = 'student') {
     if (cityInput) cityInput.value = '';
     if (countryInput) countryInput.value = '';
     const studentEmailInput = document.getElementById('addStudentEmail');
+    const studentUsernameInput = document.getElementById('addStudentUsername');
     if (studentEmailInput) studentEmailInput.value = '';
+    if (studentUsernameInput) studentUsernameInput.value = buildDefaultStudentUsername('', '');
     if (studentPasswordInput) {
         studentPasswordInput.value = '';
     }
@@ -7320,6 +7426,7 @@ function openAddStudentModal(mode = 'student') {
     closeAddSchoolColorPopup();
     updateAddStudentPhonePlaceholder();
     updateAddTeacherPhonePlaceholder();
+    syncStudentUsernameFromNameFields(studentFirstInput, studentLastInput, studentUsernameInput);
     updateAddStudentPassportFieldVisibility();
 
     openModalWithAnimation(modal);
@@ -8040,6 +8147,9 @@ function setupAddStudentModal() {
     const cancelBtn = document.getElementById('addStudentCancel');
     const backdrop = document.getElementById('addStudentModalBackdrop');
     const schoolInput = document.getElementById('addSchoolNameInput');
+    const studentFirstInput = document.getElementById('addStudentFirst');
+    const studentLastInput = document.getElementById('addStudentLast');
+    const studentUsernameInput = document.getElementById('addStudentUsername');
     const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
     const teacherPhoneCountrySelect = document.getElementById('addTeacherPhoneCountry');
 
@@ -8060,6 +8170,10 @@ function setupAddStudentModal() {
         backdrop.addEventListener('click', () => closeAddStudentModal());
     }
     schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
+    const syncAddStudentUsername = () =>
+        syncStudentUsernameFromNameFields(studentFirstInput, studentLastInput, studentUsernameInput);
+    studentFirstInput?.addEventListener('input', syncAddStudentUsername);
+    studentLastInput?.addEventListener('input', syncAddStudentUsername);
     phoneCountrySelect?.addEventListener('change', handleAddStudentPhoneCountryChanged);
     teacherPhoneCountrySelect?.addEventListener('change', handleAddTeacherPhoneCountryChanged);
     const schoolSelectEl = document.getElementById('addStudentGroupSelect');
@@ -8255,7 +8369,10 @@ function computeSlotStatesForProfile(name) {
  */
 function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
     const stu = stripTeacherAvailabilityFromStudentScheduleCopy(computeSlotStatesForProfile(studentName));
+    const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
     const tut = computeSlotStatesForProfile(tutorKey);
+    const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);
+    const studentKey = String(studentName || '').trim().toLowerCase();
     const merged = {};
     DAYS.forEach((day) => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
@@ -8266,6 +8383,12 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
             const tLow = t != null ? String(t).trim().toLowerCase() : '';
             if (sLow && sLow !== 'available') {
                 merged[key] = s;
+            } else if (
+                tLow === 'unavailable' &&
+                String(tutorUnavailableMeta[key] || '').trim().toLowerCase() === studentKey
+            ) {
+                // Student should see tutor-assigned reposition slots in yellow.
+                merged[key] = 'unavailable';
             } else if (tLow === 'available') {
                 merged[key] = 'available';
             } else if (s) {

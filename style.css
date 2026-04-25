@@ -3431,6 +3431,11 @@ input.student-reposition-modal-day {
     min-width: 0;
 }
 
+.add-student-account-wrap .email-and-password > .add-student-label:nth-child(2) {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 .add-student-account-wrap .email-and-password > .add-student-label:last-of-type {
     flex: 0 0 auto;
     min-width: 0;
