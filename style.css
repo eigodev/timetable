@@ -4529,14 +4529,19 @@ input.student-reposition-modal-day {
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     border-radius: 4px;
-    transition: background 0.15s ease;
+    background-color: transparent;
+    box-shadow: inset 0 0 0 0 transparent;
+    transition:
+        background-color 0.4s ease-in-out,
+        box-shadow 0.4s ease-in-out;
 }
 
 .class-report-student-item-content {
     display: flex;
     align-items: center;
-    justify-content: space-evenly;
-    
+    justify-content: flex-start;
+    gap: 5px;
+
     height: 100%;
     width: 100%;
 }
@@ -4550,15 +4555,6 @@ input.student-reposition-modal-day {
 .class-report-student-name {
     min-width: 0;
     flex: 0 1 auto;
-}
-
-.class-report-student-name.class-report-student-name--calendar-focus {
-    border-radius: 4px;
-    padding: 2px 4px;
-    margin: -2px -4px;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.85);
-    background-color: rgba(59, 130, 246, 0.16);
-    transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .class-report-student-meet-btn {
@@ -4642,7 +4638,9 @@ input.student-reposition-modal-day {
 }
 
 .class-report-student-item:hover {
-    background: #f5f5f5;
+    /* Light row hover (vars from .class-report-group). */
+    background-color: var(--school-primary-hover, rgba(63, 81, 181, 0.15));
+    background-color: color-mix(in srgb, var(--school-primary, #334461) 12%, #ffffff);
 }
 
 .class-report-student-item:focus {
@@ -4655,20 +4653,27 @@ input.student-reposition-modal-day {
 }
 
 .class-report-student-item--active {
-    background: #e8eaf6;
+    background-color: #e8eaf6;
     font-weight: 600;
 }
 
 .class-report-group--school .class-report-student-item--active {
-    background: var(--school-secondary-soft, #e8eaf6);
+    background-color: var(--school-secondary-soft, #e8eaf6);
 }
 
 .class-report-group--speakon .class-report-student-item--active {
-    background: #fce4ec;
+    background-color: #fce4ec;
 }
 
 .class-report-group--passport .class-report-student-item--active {
-    background: #ffebee;
+    background-color: #ffebee;
+}
+
+/* Calendar chip → Class Report: clearer tint + left accent; fades in/out via base transition. */
+.class-report-group .class-report-student-item.class-report-student-item--calendar-focus {
+    background-color: var(--school-secondary-soft, rgba(63, 81, 181, 0.22));
+    background-color: color-mix(in srgb, var(--school-primary, #334461) 22%, #ffffff);
+    box-shadow: inset 4px 0 0 0 var(--school-primary, #334461);
 }
 
 .sidebar.is-logged-in .class-report-student-item:last-child {
@@ -6162,7 +6167,10 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    
+    /* Per-cell container queries so student-name font scales with column width. */
+    container-type: inline-size;
+    container-name: timeslot;
+
     border: 1px solid transparent;
     background: white;
     cursor: pointer;
@@ -6201,11 +6209,12 @@ header h1 {
 }
 
 .time-slot.time-slot--with-student-names {
-    font-size: 0.6rem;
-    line-height: 1;
+    /* Font size lives on .time-slot-student-names so state-* rules on the cell do not change name size. */
+    line-height: 1.15;
     word-break: break-word;
     text-align: center;
-    padding: 0px 0px 0px 0px;
+    padding: 2px 3px;
+    box-sizing: border-box;
 }
 
 .time-slot-student-names {
@@ -6213,25 +6222,35 @@ header h1 {
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 0;
+    gap: 0 1px;
+    width: 100%;
     max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     font-family: 'Gluten', cursive;
+    /* Single responsive scale for all name chips (column width + viewport bounds). */
+    font-size: clamp(0.48rem, 0.26rem + 7.5cqi, 0.7rem);
+    line-height: 1.18;
     animation: slot-student-names-fade-in 1s ease both;
 }
 
 .time-slot-student-chip {
-    display: inline;
+    display: inline-block;
     max-width: 100%;
+    min-width: 0;
     margin: 0;
     padding: 0;
     border: none;
     background: transparent;
     color: inherit;
-    font: inherit;
     font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-style: inherit;
     line-height: inherit;
     cursor: pointer;
     text-align: center;
+    vertical-align: middle;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6261,6 +6280,12 @@ header h1 {
 @media (prefers-reduced-motion: reduce) {
     .time-slot-student-names {
         animation: none !important;
+    }
+}
+
+@supports not (font-size: 1cqi) {
+    .time-slot-student-names {
+        font-size: clamp(0.5rem, 0.34rem + 0.75vw, 0.68rem);
     }
 }
 
@@ -6929,9 +6954,13 @@ header h1 {
     background: #ffce47;
     border-color: #69500f;
     box-shadow: 0 2px 8px rgba(150, 80, 15, 0.4);
-    
-    font-size: 0.65rem;
+
     color: #69500f;
+}
+
+/* Unavailable/rescheduled cells without in-cell names keep a readable default; names use .time-slot-student-names only. */
+.time-slot.state-unavailable:not(.time-slot--with-student-names) {
+    font-size: 0.65rem;
 }
 
 .time-slot.state-school {
@@ -8492,6 +8521,20 @@ header h1 {
     .time-slot {
         padding: 5px;
         min-height: 0;
+    }
+
+    .time-slot.time-slot--with-student-names {
+        padding: 1px 2px;
+    }
+
+    .time-slot-student-names {
+        font-size: clamp(0.46rem, 0.22rem + 6.2cqi, 0.62rem);
+    }
+
+    @supports not (font-size: 1cqi) {
+        .time-slot-student-names {
+            font-size: clamp(0.48rem, 0.32rem + 0.65vw, 0.62rem);
+        }
     }
     
     .time-slot.selected::after {

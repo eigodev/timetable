@@ -25,12 +25,12 @@
                 <div class="add-student-redesign-fields-card">
                     <div class="add-student-name-row add-student-form-row add-student-form-row--names is-hidden" id="addStudentNameRow" aria-hidden="true">
                         <label class="add-student-label">
-                            <span>First Name *</span>
-                            <input type="text" id="addStudentFirst" name="firstName" autocomplete="given-name" maxlength="80" placeholder="Enter first name">
+                            <span>Given name(s) *</span>
+                            <input type="text" id="addStudentFirst" name="firstName" autocomplete="off" maxlength="80" placeholder="e.g. Ana Julia or Carolina Mayumi" title="All given names; use spaces inside this field only">
                         </label>
                         <label class="add-student-label">
-                            <span>Last Name *</span>
-                            <input type="text" id="addStudentLast" name="lastName" autocomplete="family-name" maxlength="80" placeholder="Enter last name">
+                            <span>Family name *</span>
+                            <input type="text" id="addStudentLast" name="lastName" autocomplete="off" maxlength="80" placeholder="e.g. Silva or Nakadomari">
                         </label>
                     </div>
 

@@ -2228,7 +2228,9 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
             chip.type = 'button';
             chip.className = 'time-slot-student-chip';
             chip.dataset.studentId = buildGoogleMeetStudentId(name);
-            chip.textContent = name;
+            const chipLabel = formatStudentDisplayNameForCalendarChip(name);
+            chip.textContent = chipLabel;
+            chip.title = name;
             chip.setAttribute('aria-label', `Show ${name} in student list`);
             wrap.appendChild(chip);
         });
@@ -2261,7 +2263,7 @@ function expandClassReportGroupIfCollapsed(groupEl) {
     return true;
 }
 
-/** Teacher calendar: scroll Class Report list to the student and highlight their name. */
+/** Teacher calendar: scroll Class Report list to the student and highlight the row (same look as row hover). */
 function scrollSidebarStudentIntoViewFromCalendarChip(studentId) {
     const id = String(studentId || '').trim();
     if (!id || !currentTeacher || !isActiveTeacherName(currentTeacher)) return;
@@ -2273,7 +2275,6 @@ function scrollSidebarStudentIntoViewFromCalendarChip(studentId) {
     const reportGroup = reportItem.closest('.class-report-group');
     const hadToExpand = expandClassReportGroupIfCollapsed(reportGroup);
 
-    const nameEl = reportItem.querySelector('.class-report-student-name');
     const prefersReduce =
         typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const runScrollAndHighlight = () => {
@@ -2281,9 +2282,9 @@ function scrollSidebarStudentIntoViewFromCalendarChip(studentId) {
             behavior: prefersReduce ? 'auto' : 'smooth',
             block: 'center'
         });
-        nameEl?.classList.add('class-report-student-name--calendar-focus');
+        reportItem.classList.add('class-report-student-item--calendar-focus');
         window.setTimeout(() => {
-            nameEl?.classList.remove('class-report-student-name--calendar-focus');
+            reportItem.classList.remove('class-report-student-item--calendar-focus');
         }, 1200);
     };
 
@@ -6369,6 +6370,11 @@ function setupAdminSidebarNavDelegation() {
     });
 }
 
+/**
+ * Split a stored display name into given name(s) + family name.
+ * The last whitespace-separated token is always the family name so compound
+ * given names work ("Carolina Mayumi Nakadomari" → first "Carolina Mayumi", last "Nakadomari").
+ */
 function splitName(fullName) {
     const cleaned = String(fullName || '').trim().replace(/\s+/g, ' ');
     if (!cleaned) return { first: '', last: '' };
@@ -6377,9 +6383,22 @@ function splitName(fullName) {
         return { first: parts[0], last: '' };
     }
     return {
-        first: parts[0],
-        last: parts.slice(1).join(' ')
+        first: parts.slice(0, -1).join(' '),
+        last: parts[parts.length - 1]
     };
+}
+
+/** Short label for calendar chips: "Carolina Nakadomari" → "Carolina N.."; single names unchanged. */
+function formatStudentDisplayNameForCalendarChip(fullName) {
+    const cleaned = String(fullName || '').trim().replace(/\s+/g, ' ');
+    if (!cleaned) return '';
+    const parts = cleaned.split(' ');
+    if (parts.length < 2) return cleaned;
+    const last = parts[parts.length - 1];
+    const initial = String(last).charAt(0);
+    if (!initial) return cleaned;
+    const given = parts.slice(0, -1).join(' ');
+    return `${given} ${initial}..`;
 }
 
 function getStudentPhoneInfo(studentName) {
@@ -6655,7 +6674,7 @@ async function upsertStudentFromEditForm(action = 'save') {
 
     const fullName = `${String(first).trim()} ${String(last).trim()}`.replace(/\s+/g, ' ').trim();
     if (!fullName) {
-        alert('Please enter first and last name.');
+        alert('Please enter given name(s) and family name.');
         return;
     }
     if (!nextSchool) {
@@ -7032,7 +7051,7 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
     const email = String(emailRaw || '').trim();
     const password = String(passwordRaw || '');
     if (!first || !last) {
-        showAppMessage('Please enter both first and last name.');
+        showAppMessage('Please enter given name(s) and family name.');
         return;
     }
     if (!email) {
@@ -7098,7 +7117,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const last = String(lastName || '').trim();
     const schoolName = String(schoolNameRaw || '').trim();
     if (!first || !last) {
-        alert('Please enter both first and last name.');
+        alert('Please enter given name(s) and family name.');
         return;
     }
     if (!schoolName) {
