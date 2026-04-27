@@ -1773,13 +1773,13 @@ body {
 .teacher-login-dialog,
 .app-message-dialog {
     position: relative;
-    z-index: 1;
+    z-index: 2110;
 
     display: flex;
     flex-direction: column;
     gap: 5px;
 
-    padding: 20px 40px;
+    padding: 20px;
     background: white;
     border-radius: 10px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -1885,23 +1885,11 @@ input.student-reposition-modal-day {
     gap: 6px;
 }
 
-.password-input-wrap.password-input-wrap--student-generate input {
-    padding-right: 10px;
-}
-
-#addStudentPassword,
-#addStudentPassword[readonly] {
-    width: 150px;
-    min-width: 100px;
-    max-width: 200px;
-    text-align: center;
-    box-sizing: border-box;
-}
-
 #addStudentPassword[readonly] {
     cursor: default;
     background: #f5f6f8;
     color: #333;
+    text-align: center;
 }
 
 .btn-add-student-password-generate {
@@ -2671,6 +2659,7 @@ input.student-reposition-modal-day {
     margin: 0;
     border: 0;
     padding: 20px;
+    padding-bottom: 76px;
     background: white;
     border-radius: 20px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -3040,84 +3029,12 @@ input.student-reposition-modal-day {
     margin-top: 1px;
 }
 
-.add-school-billing-dropdown {
-    position: relative;
-}
-
-.add-school-billing-toggle {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-
-    width: 100%;
-    min-height: 35px;
-    padding: 7.5px 12px;
-    
-    border: none;
-    border-radius: 10px;
-    background: #e8edf2;
-    font-size: 0.75rem;
-    font-family: inherit;
-    text-align: left;
-    color: #334461;
-
-    cursor: pointer;
-}
-
-#addSchoolBillingSelectedLabel {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-}
-
-#addSchoolBillingSelectedLabel.is-placeholder {
-    display: block;
-    line-height: 1.35;
-}
-
-.add-school-billing-toggle:focus-visible {
-    outline: none;
-    border-color: #334461;
-    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
-}
-
-.add-school-billing-chevron {
-    width: 8px;
-    height: 8px;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
-    transform: rotate(45deg);
-    margin-top: 10px;
-    transition: transform 0.2s ease;
-}
-
-.add-school-billing-dropdown.is-open .add-school-billing-chevron {
-    transform: rotate(-135deg);
-    margin-top: 13px;
-}
-
-.add-school-billing-menu {
-    max-height: 0;
-    opacity: 0;
-    transform: translateY(-3px);
-    pointer-events: none;
-    margin-top: 4px;
+.add-school-billing-options {
+    margin-top: 6px;
     border: 1px solid #d7ddf7;
     border-radius: 10px;
     background: #fff;
     overflow: hidden;
-    transition: max-height 0.22s ease, opacity 0.2s ease, transform 0.2s ease;
-}
-
-.add-school-billing-dropdown.is-open .add-school-billing-menu {
-    max-height: 220px;
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
 }
 
 .add-school-billing-option {
@@ -3154,28 +3071,6 @@ input.student-reposition-modal-day {
     height: 20px;
     flex-shrink: 0;
     display: block;
-}
-
-.add-school-billing-selected-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #334461;
-    line-height: 1.3;
-}
-
-.add-school-billing-selected-title .add-school-billing-option-icon {
-    width: 16px;
-    height: 16px;
-}
-
-.add-school-billing-selected-desc {
-    font-size: 0.68rem;
-    color: #667085;
-    line-height: 1.35;
-    padding-left: 21px;
 }
 
 .add-school-billing-option-desc {
@@ -3223,6 +3118,18 @@ input.student-reposition-modal-day {
 
 .add-school-billing-fields .add-school-label {
     margin-top: 0;
+}
+
+.add-school-billing-fields--package {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+@media (max-width: 760px) {
+    .add-school-billing-fields--package {
+        grid-template-columns: 1fr;
+    }
 }
 
 .add-student-form-section {
@@ -4253,6 +4160,9 @@ input.student-reposition-modal-day {
 }
 
 .add-student-actions {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
     display: flex;
     justify-content: flex-end;
     gap: 10px;
@@ -4625,8 +4535,9 @@ input.student-reposition-modal-day {
 .class-report-student-item-content {
     display: flex;
     align-items: center;
+    justify-content: space-evenly;
+    
     height: 100%;
-    gap: 5px;
     width: 100%;
 }
 
@@ -4638,7 +4549,16 @@ input.student-reposition-modal-day {
 
 .class-report-student-name {
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+}
+
+.class-report-student-name.class-report-student-name--calendar-focus {
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.85);
+    background-color: rgba(59, 130, 246, 0.16);
+    transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .class-report-student-meet-btn {
@@ -6288,14 +6208,43 @@ header h1 {
     padding: 0px 0px 0px 0px;
 }
 
-.time-slot-student-names-text {
-    display: block;
+.time-slot-student-names {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
     max-width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
     font-family: 'Gluten', cursive;
     animation: slot-student-names-fade-in 1s ease both;
+}
+
+.time-slot-student-chip {
+    display: inline;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-family: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 2px;
+}
+
+.time-slot-student-chip:hover {
+    text-decoration: underline;
+}
+
+.time-slot-student-chip:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.9);
+    outline-offset: 1px;
 }
 
 @keyframes slot-student-names-fade-in {
@@ -6310,7 +6259,7 @@ header h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .time-slot-student-names-text {
+    .time-slot-student-names {
         animation: none !important;
     }
 }
@@ -8082,6 +8031,122 @@ header h1 {
 
 .google-meet-popup .meet-links-add-link-btn:hover {
     filter: brightness(1.05);
+}
+
+.meet-links-add-dialog {
+    position: fixed;
+    z-index: 2005;
+    width: min(320px, calc(100vw - 16px));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid #dde3f1;
+    background: #ffffff;
+    box-shadow: 0 14px 28px rgba(10, 26, 51, 0.2);
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.meet-links-add-dialog[hidden] {
+    display: none;
+}
+
+.meet-links-add-dialog.meet-links-add-dialog--enter {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.meet-links-add-dialog.meet-links-add-dialog--leave {
+    opacity: 0;
+    transform: translateY(5px) scale(0.99);
+}
+
+.meet-links-add-dialog-title {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #1b2a45;
+}
+
+.meet-links-add-dialog-field input {
+    width: 100%;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid #d5dcee;
+    background: #fbfcff;
+    color: #22324d;
+    font-size: 0.82rem;
+    padding: 0 10px;
+    outline: none;
+}
+
+.meet-links-add-dialog-field input:focus {
+    border-color: #334461;
+    box-shadow: 0 0 0 3px rgba(51, 68, 97, 0.14);
+}
+
+.meet-links-add-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.meet-links-add-dialog-btn {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.meet-links-add-dialog-btn--cancel {
+    background: #f5f7fb;
+    border-color: #d9dfed;
+    color: #31435f;
+}
+
+.meet-links-add-dialog-btn--save {
+    background: linear-gradient(135deg, #334461, #071630);
+    color: #fff;
+}
+
+.meet-links-add-dialog-btn--save:hover,
+.meet-links-add-dialog-btn--cancel:hover {
+    filter: brightness(1.02);
+}
+
+#calendarLinkSaveBtn,
+#googleMeetStudentLinkPopoverSave,
+#schoolSettingsSave,
+#classTopicModalSave,
+.meet-links-add-dialog-btn--save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+#calendarLinkSaveBtn svg,
+#googleMeetStudentLinkPopoverSave svg,
+#schoolSettingsSave svg,
+#classTopicModalSave svg,
+.meet-links-add-dialog-btn--save svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .meet-links-add-dialog {
+        transition: none;
+        transform: none;
+    }
 }
 
 .google-meet-popup .meet-links-status {

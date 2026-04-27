@@ -105,6 +105,11 @@ let googleMeetSelectedStudentNames = new Set();
 /** @type {Record<string, string>} student display name → Meet URL */
 let studentGoogleMeetLinksByName = {};
 let googleMeetLinkPopoverStudent = '';
+/** @type {Record<string, string>} synthetic student id -> student name */
+let googleMeetLinksStudentNameById = {};
+let googleMeetLinksAddDialogStudentId = '';
+let googleMeetLinksAddDialogAnchor = null;
+let googleMeetLinksAddDialogHideTimer = null;
 let googleMeetToggleSwapTimer = null;
 let googleMeetContextMessageTimer = null;
 let googleMeetContextMessageHideTimer = null;
@@ -235,6 +240,13 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const meetLinksAddDialog = document.getElementById('googleMeetLinksAddDialog');
+            if (meetLinksAddDialog && !meetLinksAddDialog.hidden) {
+                e.preventDefault();
+                closeGoogleMeetAddLinkDialog();
+                return;
+            }
+
             const googleMeetLinksLayer = document.getElementById('googleMeetLinksLayer');
             if (googleMeetLinksLayer && !googleMeetLinksLayer.hidden) {
                 e.preventDefault();
@@ -358,6 +370,19 @@ function setupGlobalPointerDownToDismissOverlays() {
             if (meetStudentLinkPop && !meetStudentLinkPop.hidden) {
                 if (!meetStudentLinkPop.contains(target)) {
                     closeGoogleMeetStudentLinkPopover();
+                }
+                return;
+            }
+
+            const appMessageModal = document.getElementById('appMessageModal');
+            if (appMessageModal?.classList.contains('is-open')) {
+                return;
+            }
+
+            const meetLinksAddDialog = document.getElementById('googleMeetLinksAddDialog');
+            if (meetLinksAddDialog && !meetLinksAddDialog.hidden) {
+                if (!meetLinksAddDialog.contains(target)) {
+                    closeGoogleMeetAddLinkDialog();
                 }
                 return;
             }
@@ -664,50 +689,42 @@ function renderAddSchoolThemeSquares() {
 }
 
 function getSchoolBillingModelExplainer(modelRaw) {
-    const model = String(modelRaw || '').trim();
-    if (model === 'per-class') return "You’re paid for each class you teach.";
+    const model = normalizeSchoolBillingModel(modelRaw);
+    if (model === 'perClass') return "You’re paid for each class you teach.";
     if (model === 'monthly') return 'You receive a fixed monthly fee per student.';
-    if (model === 'package-per-student') return 'Each student has a set number of classes per month.';
+    if (model === 'package') return 'Each student has a set number of classes per month.';
     return '';
 }
 
 function getSchoolBillingModelLabel(modelRaw) {
-    const model = String(modelRaw || '').trim();
-    if (model === 'per-class') return 'Per class';
+    const model = normalizeSchoolBillingModel(modelRaw);
+    if (model === 'perClass') return 'Per class';
     if (model === 'monthly') return 'Monthly';
-    if (model === 'package-per-student') return 'Package (Classes per Student)';
+    if (model === 'package') return 'Package (Classes per Student)';
     return 'Select billing model';
+}
+
+function normalizeSchoolBillingModel(modelRaw) {
+    const model = String(modelRaw || '').trim();
+    if (model === 'per-class') return 'perClass';
+    if (model === 'package-per-student') return 'package';
+    return model;
 }
 
 function updateAddSchoolBillingExplainer() {
     const input = document.getElementById('addSchoolBillingModel');
-    const selectedLabel = document.getElementById('addSchoolBillingSelectedLabel');
-    const dropdown = document.getElementById('addSchoolBillingDropdown');
-    if (!input || !selectedLabel || !dropdown) return;
-    const value = String(input.value || '').trim();
-    let selectedOption = null;
-    dropdown.querySelectorAll('.add-school-billing-option').forEach((option) => {
-        const optionValue = String(option.getAttribute('data-billing-model') || '').trim();
-        option.classList.toggle('is-selected', !!value && optionValue === value);
-        option.setAttribute('aria-selected', optionValue === value ? 'true' : 'false');
-        if (optionValue === value) {
-            selectedOption = option;
-        }
-    });
-    if (!value || !selectedOption) {
-        selectedLabel.textContent = 'Select billing model';
-        selectedLabel.classList.add('is-placeholder');
-        updateAddSchoolBillingFieldsVisibility('');
-        return;
+    const optionsWrap = document.getElementById('addSchoolBillingOptions');
+    if (!input || !optionsWrap) return;
+    const value = normalizeSchoolBillingModel(input.value);
+    if (input.value !== value) {
+        input.value = value;
     }
-    const titleEl =
-        selectedOption.querySelector('.add-school-billing-option-title') ||
-        selectedOption.querySelector('.billing-option-title');
-    const descEl = selectedOption.querySelector('.add-school-billing-option-desc');
-    const titleHtml = titleEl ? titleEl.innerHTML : getSchoolBillingModelLabel(value);
-    const descText = descEl ? String(descEl.textContent || '').trim() : getSchoolBillingModelExplainer(value);
-    selectedLabel.innerHTML = `<span class="add-school-billing-selected-title">${titleHtml}</span><span class="add-school-billing-selected-desc">${descText}</span>`;
-    selectedLabel.classList.remove('is-placeholder');
+    optionsWrap.querySelectorAll('.add-school-billing-option').forEach((option) => {
+        const optionValue = String(option.getAttribute('data-billing-model') || '').trim();
+        const isSelected = !!value && optionValue === value;
+        option.classList.toggle('is-selected', isSelected);
+        option.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    });
     updateAddSchoolBillingFieldsVisibility(value);
 }
 
@@ -747,8 +764,8 @@ function parseBillingInteger(inputEl) {
 }
 
 function getAddSchoolBillingConfigFromForm(modelRaw) {
-    const model = String(modelRaw || '').trim();
-    if (model === 'per-class') {
+    const model = normalizeSchoolBillingModel(modelRaw);
+    if (model === 'perClass') {
         const field = document.getElementById('addSchoolPricePerClass');
         const parsed = parseBillingAmount(field);
         if (!parsed.ok) {
@@ -768,7 +785,7 @@ function getAddSchoolBillingConfigFromForm(modelRaw) {
         }
         return { monthlyFeePerStudent: parsed.value };
     }
-    if (model === 'package-per-student') {
+    if (model === 'package') {
         const priceField = document.getElementById('addSchoolPackagePricePerClass');
         const classesField = document.getElementById('addSchoolClassesPerMonth');
         const parsedPrice = parseBillingAmount(priceField);
@@ -789,16 +806,6 @@ function getAddSchoolBillingConfigFromForm(modelRaw) {
         };
     }
     return null;
-}
-
-function closeAddSchoolBillingDropdown() {
-    const dropdown = document.getElementById('addSchoolBillingDropdown');
-    const toggle = document.getElementById('addSchoolBillingToggle');
-    const menu = document.getElementById('addSchoolBillingMenu');
-    if (!dropdown || !toggle || !menu) return;
-    dropdown.classList.remove('is-open');
-    toggle.setAttribute('aria-expanded', 'false');
-    menu.setAttribute('aria-hidden', 'true');
 }
 
 function closeAddSchoolColorPopup() {
@@ -2211,13 +2218,82 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
     const label = names.join(', ');
     slotEl.textContent = '';
     if (label) {
-        const textEl = document.createElement('span');
-        textEl.className = 'time-slot-student-names-text';
-        textEl.textContent = label;
-        slotEl.appendChild(textEl);
+        const wrap = document.createElement('span');
+        wrap.className = 'time-slot-student-names';
+        names.forEach((name, index) => {
+            if (index > 0) {
+                wrap.appendChild(document.createTextNode(', '));
+            }
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'time-slot-student-chip';
+            chip.dataset.studentId = buildGoogleMeetStudentId(name);
+            chip.textContent = name;
+            chip.setAttribute('aria-label', `Show ${name} in student list`);
+            wrap.appendChild(chip);
+        });
+        slotEl.appendChild(wrap);
     }
     slotEl.title = label;
     slotEl.classList.toggle('time-slot--with-student-names', names.length > 0);
+}
+
+/** Expand a collapsed Class Report school group (keeps `classReportCollapsedBySchool` in sync). */
+function expandClassReportGroupIfCollapsed(groupEl) {
+    if (!groupEl || !groupEl.classList.contains('collapsed')) return false;
+    const key = String(groupEl.dataset.classReportSchoolKey || '').trim();
+    if (key) {
+        classReportCollapsedBySchool[key] = false;
+    }
+    const body = groupEl.querySelector('.class-report-group-body');
+    const title = groupEl.querySelector('.class-report-group-title');
+    title?.setAttribute('aria-expanded', 'true');
+    groupEl.classList.remove('collapsed');
+    if (body) {
+        const prevTransition = body.style.transition;
+        body.style.transition = 'none';
+        body.style.maxHeight = '';
+        body.style.opacity = '1';
+        body.style.transform = 'translateY(0)';
+        void body.offsetHeight;
+        body.style.transition = prevTransition;
+    }
+    return true;
+}
+
+/** Teacher calendar: scroll Class Report list to the student and highlight their name. */
+function scrollSidebarStudentIntoViewFromCalendarChip(studentId) {
+    const id = String(studentId || '').trim();
+    if (!id || !currentTeacher || !isActiveTeacherName(currentTeacher)) return;
+
+    const esc = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const reportItem = document.querySelector(`.class-report-student-item[data-student-id="${esc}"]`);
+    if (!reportItem) return;
+
+    const reportGroup = reportItem.closest('.class-report-group');
+    const hadToExpand = expandClassReportGroupIfCollapsed(reportGroup);
+
+    const nameEl = reportItem.querySelector('.class-report-student-name');
+    const prefersReduce =
+        typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const runScrollAndHighlight = () => {
+        reportItem.scrollIntoView({
+            behavior: prefersReduce ? 'auto' : 'smooth',
+            block: 'center'
+        });
+        nameEl?.classList.add('class-report-student-name--calendar-focus');
+        window.setTimeout(() => {
+            nameEl?.classList.remove('class-report-student-name--calendar-focus');
+        }, 1200);
+    };
+
+    if (hadToExpand) {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(runScrollAndHighlight);
+        });
+    } else {
+        runScrollAndHighlight();
+    }
 }
 
 function getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state) {
@@ -4792,6 +4868,10 @@ function renderSidebar() {
             const teacherItem = document.createElement('div');
             teacherItem.className = 'teacher-item';
             teacherItem.classList.add(category.itemClass);
+            if (isSchoolSection) {
+                teacherItem.classList.add('sidebar-student-row');
+                teacherItem.dataset.studentId = buildGoogleMeetStudentId(name);
+            }
             if (category.schoolTheme) {
                 teacherItem.classList.add('teacher-item--school-theme');
                 applySchoolThemeCssVars(teacherItem, category.title);
@@ -4866,6 +4946,7 @@ function populateClassReportStudentLists(container) {
         const group = document.createElement('div');
         group.className = 'class-report-group';
         group.classList.add('class-report-group--school');
+        group.dataset.classReportSchoolKey = groupKey;
         applySchoolThemeCssVars(group, heading);
 
         const title = document.createElement('div');
@@ -4895,6 +4976,7 @@ function populateClassReportStudentLists(container) {
                 const li = document.createElement('li');
                 li.className = 'class-report-student-item';
                 li.dataset.studentName = name;
+                li.dataset.studentId = buildGoogleMeetStudentId(name);
                 li.setAttribute('role', 'button');
                 li.tabIndex = 0;
                 const itemContent = document.createElement('div');
@@ -6889,10 +6971,10 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, bi
         alert('That school is already listed.');
         return;
     }
-    const billingModel = String(billingModelRaw || '').trim();
+    const billingModel = normalizeSchoolBillingModel(billingModelRaw);
     if (!billingModel) {
         alert('Please select a billing model.');
-        document.getElementById('addSchoolBillingModel')?.focus();
+        document.querySelector('#addSchoolBillingOptions .add-school-billing-option')?.focus();
         return;
     }
     const billingConfig = getAddSchoolBillingConfigFromForm(billingModel);
@@ -7507,7 +7589,7 @@ function updateAddStudentPassportFieldVisibility() {
             addSchoolBillingModel.required = false;
         }
         closeAddSchoolColorPopup();
-        closeAddSchoolBillingDropdown();
+        updateAddSchoolBillingExplainer();
     }
     if (isAddSchoolMode && addSchoolBillingModel) {
         addSchoolBillingModel.required = true;
@@ -8191,6 +8273,7 @@ function closeGoogleMeetLinksLayer() {
     if (googleMeetLinksLayerHideTimer) {
         window.clearTimeout(googleMeetLinksLayerHideTimer);
     }
+    closeGoogleMeetAddLinkDialog();
     googleMeetLinksLayerHideTimer = window.setTimeout(() => {
         layer.hidden = true;
         layer.setAttribute('aria-hidden', 'true');
@@ -8249,12 +8332,139 @@ function getGoogleMeetLinkForStudent(studentName) {
     return '';
 }
 
+function removeGoogleMeetLinkForStudent(studentName) {
+    const target = String(studentName || '').trim().toLowerCase();
+    if (!target) return;
+    delete studentGoogleMeetLinksByName[studentName];
+    for (const key of Object.keys(studentGoogleMeetLinksByName)) {
+        if (String(key || '').trim().toLowerCase() === target) {
+            delete studentGoogleMeetLinksByName[key];
+        }
+    }
+}
+
 function getGoogleMeetLinkStateForStudent(studentName) {
     const rawLink = getGoogleMeetLinkForStudent(studentName);
     const hasLink = !!rawLink;
     const isValidLink = hasLink && isPlausibleGoogleMeetUrl(rawLink);
     const state = isValidLink ? 'saved' : (hasLink ? 'invalid' : 'missing');
     return { state, rawLink, hasLink, isValidLink };
+}
+
+function buildGoogleMeetStudentId(studentName) {
+    return `student-${encodeURIComponent(String(studentName || '').trim().toLowerCase())}`;
+}
+
+function getGoogleMeetStudentNameFromId(studentId) {
+    const id = String(studentId || '').trim();
+    if (!id) return '';
+    return String(googleMeetLinksStudentNameById[id] || '').trim();
+}
+
+function closeGoogleMeetAddLinkDialog() {
+    const dialog = document.getElementById('googleMeetLinksAddDialog');
+    if (googleMeetLinksAddDialogHideTimer) {
+        clearTimeout(googleMeetLinksAddDialogHideTimer);
+        googleMeetLinksAddDialogHideTimer = null;
+    }
+    if (dialog && !dialog.hidden) {
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            dialog.classList.remove('meet-links-add-dialog--enter', 'meet-links-add-dialog--leave');
+            dialog.hidden = true;
+            dialog.setAttribute('aria-hidden', 'true');
+        } else {
+            dialog.classList.remove('meet-links-add-dialog--enter');
+            dialog.classList.add('meet-links-add-dialog--leave');
+            googleMeetLinksAddDialogHideTimer = window.setTimeout(() => {
+                dialog.classList.remove('meet-links-add-dialog--leave');
+                dialog.hidden = true;
+                dialog.setAttribute('aria-hidden', 'true');
+                googleMeetLinksAddDialogHideTimer = null;
+            }, 170);
+        }
+    }
+    googleMeetLinksAddDialogStudentId = '';
+    googleMeetLinksAddDialogAnchor = null;
+}
+
+function ensureGoogleMeetAddLinkDialog() {
+    let dialog = document.getElementById('googleMeetLinksAddDialog');
+    const layer = document.getElementById('googleMeetLinksLayer');
+    const host = layer || document.body;
+    if (dialog) {
+        if (dialog.parentElement !== host) {
+            host.appendChild(dialog);
+        }
+        return dialog;
+    }
+    dialog = document.createElement('div');
+    dialog.id = 'googleMeetLinksAddDialog';
+    dialog.className = 'meet-links-add-dialog';
+    dialog.hidden = true;
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'false');
+    dialog.setAttribute('aria-hidden', 'true');
+    dialog.innerHTML = `
+        <p class="meet-links-add-dialog-title">Paste Google Meet link</p>
+        <label class="meet-links-add-dialog-field">
+            <input type="url" class="meet-links-add-dialog-input" placeholder="https://meet.google.com/..." autocomplete="off" />
+        </label>
+        <div class="meet-links-add-dialog-actions">
+            <button type="button" class="meet-links-add-dialog-btn meet-links-add-dialog-btn--cancel">Cancel</button>
+            <button type="button" class="meet-links-add-dialog-btn meet-links-add-dialog-btn--save"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM565-275q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"/></svg><span>Save</span></button>
+        </div>
+    `;
+    dialog.addEventListener('click', (e) => e.stopPropagation());
+    host.appendChild(dialog);
+    return dialog;
+}
+
+function positionGoogleMeetAddLinkDialog(dialog, x, y) {
+    if (!dialog) return;
+    const viewportPad = 8;
+    const offset = 8;
+    dialog.style.position = 'fixed';
+    dialog.style.left = `${Math.round(x + offset)}px`;
+    dialog.style.top = `${Math.round(y + offset)}px`;
+    const width = dialog.offsetWidth || 280;
+    const height = dialog.offsetHeight || 152;
+    const maxLeft = Math.max(viewportPad, window.innerWidth - width - viewportPad);
+    const maxTop = Math.max(viewportPad, window.innerHeight - height - viewportPad);
+    const left = Math.min(Math.max(viewportPad, x + offset), maxLeft);
+    const top = Math.min(Math.max(viewportPad, y + offset), maxTop);
+    dialog.style.left = `${Math.round(left)}px`;
+    dialog.style.top = `${Math.round(top)}px`;
+}
+
+function openGoogleMeetAddLinkDialog(event, studentId, anchorButton, initialLink = '') {
+    const dialog = ensureGoogleMeetAddLinkDialog();
+    const input = dialog.querySelector('.meet-links-add-dialog-input');
+    if (!input) return;
+    closeGoogleMeetAddLinkDialog();
+    googleMeetLinksAddDialogStudentId = String(studentId || '').trim();
+    googleMeetLinksAddDialogAnchor = anchorButton || null;
+    const studentName = getGoogleMeetStudentNameFromId(googleMeetLinksAddDialogStudentId);
+    if (!studentName) return;
+    input.value = String(initialLink || '').trim();
+    input.setAttribute('aria-label', `Google Meet link for ${studentName}`);
+    if (googleMeetLinksAddDialogHideTimer) {
+        clearTimeout(googleMeetLinksAddDialogHideTimer);
+        googleMeetLinksAddDialogHideTimer = null;
+    }
+    dialog.classList.remove('meet-links-add-dialog--leave', 'meet-links-add-dialog--enter');
+    dialog.hidden = false;
+    dialog.setAttribute('aria-hidden', 'false');
+    positionGoogleMeetAddLinkDialog(dialog, event.clientX, event.clientY);
+    requestAnimationFrame(() => {
+        positionGoogleMeetAddLinkDialog(dialog, event.clientX, event.clientY);
+        if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            dialog.classList.add('meet-links-add-dialog--enter');
+        }
+        input.focus();
+        if (input.value && typeof input.select === 'function') {
+            input.select();
+        }
+    });
 }
 
 function getVisibleMeetLinksRowCheckboxes() {
@@ -8306,8 +8516,11 @@ function renderGoogleMeetLinksStudentsRows() {
         syncMeetLinksSelectAllCheckbox();
         return;
     }
+    googleMeetLinksStudentNameById = {};
     filteredNames.forEach((studentName) => {
         const { state, rawLink, hasLink, isValidLink } = getGoogleMeetLinkStateForStudent(studentName);
+        const studentId = buildGoogleMeetStudentId(studentName);
+        googleMeetLinksStudentNameById[studentId] = studentName;
         const rowStateClass = state === 'saved' ? 'meet-links-row--saved' : (state === 'invalid' ? 'meet-links-row--invalid' : 'meet-links-row--missing');
         const statusClass = state === 'saved' ? 'meet-links-status--saved' : (state === 'invalid' ? 'meet-links-status--invalid' : 'meet-links-status--missing');
         const statusLabel = state === 'saved' ? 'Saved' : (state === 'invalid' ? 'Invalid' : 'Missing');
@@ -8332,7 +8545,7 @@ function renderGoogleMeetLinksStudentsRows() {
             `
             : (hasLink
                 ? `<span class="meet-links-url">${rawLink}</span>`
-                : `<button type="button" class="meet-links-add-link-btn">Add link</button>`);
+                : `<button type="button" class="meet-links-add-link-btn" data-student-id="${studentId}">Add link</button>`);
         row.innerHTML = `
             <div class="meet-links-cell meet-links-cell--check">
                 <label class="meet-links-checkbox-label">
@@ -8351,12 +8564,17 @@ function renderGoogleMeetLinksStudentsRows() {
                 <span class="meet-links-status ${statusClass}"><span class="meet-links-status-dot"></span>${statusLabel}</span>
             </div>
             <div class="meet-links-cell meet-links-cell--actions">
-                <button type="button" class="meet-links-icon-btn meet-links-icon-btn--edit" aria-label="Edit link">
+                <button type="button" class="meet-links-icon-btn meet-links-icon-btn--edit" aria-label="Edit link" data-student-id="${studentId}">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-                <button type="button" class="meet-links-icon-btn meet-links-icon-btn--more" aria-label="More options">⋯</button>
+                <button type="button" class="meet-links-icon-btn meet-links-icon-btn--delete" aria-label="Delete link" data-student-id="${studentId}">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                        <path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304ZM5.846 11.773a.75.75 0 0 1 0 1.06l-1.757 1.758a3.75 3.75 0 0 0 5.303 5.304l3.129-3.13a.75.75 0 1 1 1.06 1.061l-3.128 3.13a5.25 5.25 0 1 1-7.425-7.426l1.757-1.757a.75.75 0 0 1 1.061 0Zm2.401.26a.75.75 0 0 1 .957.458c.18.512.474.992.885 1.403.31.311.661.555 1.035.733a.75.75 0 0 1-.647 1.354 5.244 5.244 0 0 1-1.449-1.026 5.232 5.232 0 0 1-1.24-1.965.75.75 0 0 1 .46-.957Z" clip-rule="evenodd" />
+                    </svg>
+                </button>
             </div>
         `;
+        row.dataset.studentId = studentId;
         const nameEl = row.querySelector('.meet-links-student-name');
         if (nameEl) nameEl.textContent = studentName;
         const rowCheckbox = row.querySelector('.meet-links-checkbox');
@@ -8373,6 +8591,7 @@ function closeGoogleMeetModal() {
     }
     hideGoogleMeetContextMessage(true);
     closeGoogleMeetStudentLinkPopover();
+    closeGoogleMeetAddLinkDialog();
     closeGoogleMeetSchoolAccordion();
     closeGoogleMeetStudentAccordion();
     closeModalWithAnimation(modal);
@@ -8415,6 +8634,117 @@ function setupGoogleMeetModal() {
             meetLinksStatus.value = '';
             renderGoogleMeetLinksStudentsRows();
             meetLinksStatus.focus();
+        });
+        meetLinksLayer.addEventListener('click', (e) => {
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const addLinkBtn = target.closest('.meet-links-add-link-btn');
+            if (addLinkBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const studentId = String(addLinkBtn.getAttribute('data-student-id') || '').trim();
+                if (!studentId) return;
+                openGoogleMeetAddLinkDialog(e, studentId, addLinkBtn);
+                return;
+            }
+            const editBtn = target.closest('.meet-links-icon-btn--edit');
+            if (editBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const studentId = String(
+                    editBtn.getAttribute('data-student-id') ||
+                    editBtn.closest('.meet-links-row')?.getAttribute('data-student-id') ||
+                    ''
+                ).trim();
+                const studentName = getGoogleMeetStudentNameFromId(studentId);
+                if (!studentId || !studentName) return;
+                const existingLink = getGoogleMeetLinkForStudent(studentName);
+                openGoogleMeetAddLinkDialog(e, studentId, editBtn, existingLink);
+                return;
+            }
+            const deleteBtn = target.closest('.meet-links-icon-btn--delete');
+            if (deleteBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const studentId = String(
+                    deleteBtn.getAttribute('data-student-id') ||
+                    deleteBtn.closest('.meet-links-row')?.getAttribute('data-student-id') ||
+                    ''
+                ).trim();
+                const studentName = getGoogleMeetStudentNameFromId(studentId);
+                if (!studentId || !studentName) return;
+                removeGoogleMeetLinkForStudent(studentName);
+                saveRoster();
+                refreshClassReportAfterMeetLinkChange();
+                renderGoogleMeetLinksStudentsRows();
+                updateGoogleMeetLinksPopupStats();
+                showGoogleMeetContextMessage('Meet link removed.', deleteBtn);
+            }
+        });
+        meetLinksLayer.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            const dialog = document.getElementById('googleMeetLinksAddDialog');
+            if (!dialog || dialog.hidden) return;
+            e.preventDefault();
+            closeGoogleMeetAddLinkDialog();
+        });
+        meetLinksLayer.addEventListener('pointerdown', (e) => {
+            const dialog = document.getElementById('googleMeetLinksAddDialog');
+            if (!dialog || dialog.hidden) return;
+            const target = e.target;
+            if (!(target instanceof Node)) return;
+            if (!dialog.contains(target)) {
+                closeGoogleMeetAddLinkDialog();
+            }
+        }, true);
+    }
+    const addDialog = ensureGoogleMeetAddLinkDialog();
+    if (addDialog.dataset.controlsBound !== '1') {
+        addDialog.dataset.controlsBound = '1';
+        const addDialogInput = addDialog.querySelector('.meet-links-add-dialog-input');
+        const addDialogCancel = addDialog.querySelector('.meet-links-add-dialog-btn--cancel');
+        const addDialogSave = addDialog.querySelector('.meet-links-add-dialog-btn--save');
+        addDialogCancel?.addEventListener('click', (e) => {
+            e.preventDefault();
+            closeGoogleMeetAddLinkDialog();
+        });
+        addDialogSave?.addEventListener('click', (e) => {
+            e.preventDefault();
+            const studentId = String(googleMeetLinksAddDialogStudentId || '').trim();
+            const studentName = getGoogleMeetStudentNameFromId(studentId);
+            if (!studentId || !studentName) {
+                closeGoogleMeetAddLinkDialog();
+                return;
+            }
+            const raw = String(addDialogInput?.value || '').trim();
+            if (!raw) {
+                showAppMessage('Enter a Google Meet link before saving.');
+                addDialogInput?.focus();
+                return;
+            }
+            if (!isPlausibleGoogleMeetUrl(raw)) {
+                showAppMessage('Enter a valid Google Meet link (e.g. meet.google.com or meet.app).');
+                addDialogInput?.focus();
+                return;
+            }
+            studentGoogleMeetLinksByName[studentName] = normalizeGoogleMeetUrl(raw);
+            saveRoster();
+            refreshClassReportAfterMeetLinkChange();
+            closeGoogleMeetAddLinkDialog();
+            renderGoogleMeetLinksStudentsRows();
+            updateGoogleMeetLinksPopupStats();
+            showGoogleMeetContextMessage('Meet link saved.', googleMeetLinksAddDialogAnchor);
+        });
+        addDialogInput?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addDialogSave?.click();
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeGoogleMeetAddLinkDialog();
+            }
         });
     }
     cancelBtn?.addEventListener('click', closeGoogleMeetModal);
@@ -8569,7 +8899,11 @@ function closeAddStudentModal() {
         return;
     }
     closeAddSchoolColorPopup();
-    closeAddSchoolBillingDropdown();
+    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
+    if (addSchoolBillingModel) {
+        addSchoolBillingModel.value = '';
+        updateAddSchoolBillingExplainer();
+    }
     closeModalWithAnimation(modal);
 }
 
@@ -8617,9 +8951,7 @@ function setupAddStudentModal() {
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
     const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
-    const addSchoolBillingDropdown = document.getElementById('addSchoolBillingDropdown');
-    const addSchoolBillingToggle = document.getElementById('addSchoolBillingToggle');
-    const addSchoolBillingMenu = document.getElementById('addSchoolBillingMenu');
+    const addSchoolBillingOptions = document.getElementById('addSchoolBillingOptions');
     const addSchoolExternalOffsite = document.getElementById('addSchoolExternalOffsite');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
     const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
@@ -8628,18 +8960,6 @@ function setupAddStudentModal() {
     const addSchoolPrimarySquare = document.querySelector('.add-school-theme-square--primary');
     const addSchoolSecondarySquare = document.querySelector('.add-school-theme-square--secondary');
     const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
-    const closeAddSchoolBillingDropdown = () => {
-        if (!addSchoolBillingDropdown || !addSchoolBillingToggle || !addSchoolBillingMenu) return;
-        addSchoolBillingDropdown.classList.remove('is-open');
-        addSchoolBillingToggle.setAttribute('aria-expanded', 'false');
-        addSchoolBillingMenu.setAttribute('aria-hidden', 'true');
-    };
-    const openAddSchoolBillingDropdown = () => {
-        if (!addSchoolBillingDropdown || !addSchoolBillingToggle || !addSchoolBillingMenu) return;
-        addSchoolBillingDropdown.classList.add('is-open');
-        addSchoolBillingToggle.setAttribute('aria-expanded', 'true');
-        addSchoolBillingMenu.setAttribute('aria-hidden', 'false');
-    };
     addSchoolExternalCheckbox?.addEventListener('change', () => {
         const on = !!addSchoolExternalCheckbox.checked;
         if (addSchoolExternalPanel) {
@@ -8666,16 +8986,7 @@ function setupAddStudentModal() {
         }
         window.open(parsed.url, '_blank', 'noopener,noreferrer');
     });
-    addSchoolBillingToggle?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!addSchoolBillingDropdown) return;
-        if (addSchoolBillingDropdown.classList.contains('is-open')) {
-            closeAddSchoolBillingDropdown();
-        } else {
-            openAddSchoolBillingDropdown();
-        }
-    });
-    addSchoolBillingMenu?.querySelectorAll('.add-school-billing-option').forEach((option) => {
+    addSchoolBillingOptions?.querySelectorAll('.add-school-billing-option').forEach((option) => {
         option.addEventListener('click', (e) => {
             e.stopPropagation();
             const value = String(option.getAttribute('data-billing-model') || '').trim();
@@ -8683,30 +8994,14 @@ function setupAddStudentModal() {
                 addSchoolBillingModel.value = value;
             }
             updateAddSchoolBillingExplainer();
-            closeAddSchoolBillingDropdown();
-            addSchoolBillingToggle?.focus();
+            option.focus();
         });
         option.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 option.click();
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                closeAddSchoolBillingDropdown();
-                addSchoolBillingToggle?.focus();
             }
         });
-    });
-    addSchoolBillingToggle?.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            closeAddSchoolBillingDropdown();
-            return;
-        }
-        if (e.key === 'ArrowDown' && !addSchoolBillingDropdown?.classList.contains('is-open')) {
-            e.preventDefault();
-            openAddSchoolBillingDropdown();
-        }
     });
     addSchoolPrimaryColorCheckbox?.addEventListener('change', () => {
         addSchoolPrimaryColorCheckbox.checked = true;
@@ -8732,7 +9027,6 @@ function setupAddStudentModal() {
     document.addEventListener('click', () => {
         if (!modal.classList.contains('is-open')) return;
         closeAddSchoolColorPopup();
-        closeAddSchoolBillingDropdown();
     });
 
     form.addEventListener('submit', async (e) => {
@@ -8761,7 +9055,7 @@ function setupAddStudentModal() {
             school,
             addSchoolPrimaryColor?.value || '#5c6bc0',
             addSchoolSecondaryColor?.value || '#1e88e5',
-            addSchoolBillingModel?.value || ''
+            normalizeSchoolBillingModel(addSchoolBillingModel?.value || '')
         );
     });
 }
@@ -8967,11 +9261,20 @@ function initCalendar() {
             slot.dataset.day = day;
             slot.dataset.hour = hour;
 
-            // Left click: cycle through states
+            // Left click: student name chip scrolls sidebar; otherwise cycle slot state
             slot.addEventListener('click', (e) => {
-                if (e.button === 0 || !e.button) {
-                    cycleSlotState(day, hour);
+                if (e.button !== 0 && e.button != null) return;
+                const chip = e.target.closest('.time-slot-student-chip');
+                if (chip && slot.contains(chip)) {
+                    const sid = String(chip.dataset.studentId || '').trim();
+                    if (sid) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        scrollSidebarStudentIntoViewFromCalendarChip(sid);
+                    }
+                    return;
                 }
+                cycleSlotState(day, hour);
             });
 
             // Right click: show context menu

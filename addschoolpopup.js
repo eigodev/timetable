@@ -47,28 +47,22 @@
                     <span>Billing Model*</span>
                     <small class="add-school-billing-guideline">Choose how this school is billed.</small>
                     <input type="hidden" id="addSchoolBillingModel" name="schoolBillingModel" value="">
-                    <div id="addSchoolBillingDropdown" class="add-school-billing-dropdown">
-                        <button type="button" id="addSchoolBillingToggle" class="add-school-billing-toggle" aria-expanded="false" aria-controls="addSchoolBillingMenu">
-                            <span id="addSchoolBillingSelectedLabel">Select billing model</span>
-                            <span class="add-school-billing-chevron" aria-hidden="true"></span>
+                    <div id="addSchoolBillingOptions" class="add-school-billing-options" role="radiogroup" aria-label="Billing model options">
+                        <button type="button" class="add-school-billing-option" role="radio" aria-checked="false" data-billing-model="perClass">
+                            <span class="add-school-billing-option-title"><span>Per class</span></span>
+                            <span class="add-school-billing-option-desc">You are paid for each class you teach.</span>
                         </button>
-                        <div id="addSchoolBillingMenu" class="add-school-billing-menu" role="listbox" aria-hidden="true">
-                            <button type="button" class="add-school-billing-option" role="option" data-billing-model="per-class">
-                                <span class="add-school-billing-option-title"><span>Per class</span></span>
-                                <span class="add-school-billing-option-desc">You are paid for each class you teach.</span>
-                            </button>
-                            <button type="button" class="add-school-billing-option" role="option" data-billing-model="monthly">
-                                <span class="add-school-billing-option-title"><span>Monthly</span></span>
-                                <span class="add-school-billing-option-desc">You receive a fixed monthly fee per student.</span>
-                            </button>
-                            <button type="button" class="add-school-billing-option" role="option" data-billing-model="package-per-student">
-                                <span class="add-school-billing-option-title"><span>Package (Classes per Student)</span></span>
-                                <span class="add-school-billing-option-desc">Each student has a set number of classes per month.</span>
-                            </button>
-                        </div>
+                        <button type="button" class="add-school-billing-option" role="radio" aria-checked="false" data-billing-model="monthly">
+                            <span class="add-school-billing-option-title"><span>Monthly</span></span>
+                            <span class="add-school-billing-option-desc">You receive a fixed monthly fee per student.</span>
+                        </button>
+                        <button type="button" class="add-school-billing-option" role="radio" aria-checked="false" data-billing-model="package">
+                            <span class="add-school-billing-option-title"><span>Package (Classes per Student)</span></span>
+                            <span class="add-school-billing-option-desc">Each student has a set number of classes per month.</span>
+                        </button>
                     </div>
                     <div id="addSchoolBillingSettings" class="add-school-billing-settings" aria-live="polite">
-                        <div class="add-school-billing-fields add-school-billing-fields--per-class is-hidden" data-billing-fields="per-class" aria-hidden="true">
+                        <div class="add-school-billing-fields add-school-billing-fields--per-class is-hidden" data-billing-fields="perClass" aria-hidden="true">
                             <label class="add-school-label" for="addSchoolPricePerClass">
                                 <span>Price per class</span>
                                 <input type="number" id="addSchoolPricePerClass" name="schoolPricePerClass" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 30.00">
@@ -80,7 +74,7 @@
                                 <input type="number" id="addSchoolMonthlyFeePerStudent" name="schoolMonthlyFeePerStudent" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 120.00">
                             </label>
                         </div>
-                        <div class="add-school-billing-fields add-school-billing-fields--package is-hidden" data-billing-fields="package-per-student" aria-hidden="true">
+                        <div class="add-school-billing-fields add-school-billing-fields--package is-hidden" data-billing-fields="package" aria-hidden="true">
                             <label class="add-school-label" for="addSchoolPackagePricePerClass">
                                 <span>Price per class</span>
                                 <input type="number" id="addSchoolPackagePricePerClass" name="schoolPackagePricePerClass" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 25.00">
