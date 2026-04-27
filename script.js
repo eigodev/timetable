@@ -975,7 +975,18 @@ function syncPhoneInputWithCountrySelector(phoneInput, countrySelect) {
 }
 
 function getTutorRosterNameForStudent(studentFullName) {
-    const tutor = String(studentTeacherByName[studentFullName] || '').trim();
+    const studentName = String(studentFullName || '').trim();
+    if (!studentName) return '';
+    let tutor = String(studentTeacherByName[studentName] || '').trim();
+    if (!tutor) {
+        const studentKey = studentName.toLowerCase();
+        const mappedKey = Object.keys(studentTeacherByName).find(
+            (key) => String(key || '').trim().toLowerCase() === studentKey
+        );
+        if (mappedKey) {
+            tutor = String(studentTeacherByName[mappedKey] || '').trim();
+        }
+    }
     if (!tutor) return '';
     const found = teachersList.find((t) => String(t || '').trim().toLowerCase() === tutor.toLowerCase());
     // If the assigned label does not exactly match a roster teacher, still allow student login
@@ -995,9 +1006,24 @@ function findStudentNameByLoginEmail(emailRaw) {
     );
 }
 
+function normalizeUsername(value) {
+    const raw = String(value || '');
+    let normalized = raw;
+    try {
+        normalized = raw.normalize('NFD');
+    } catch {
+        // Keep original value in environments without Unicode normalization support.
+        normalized = raw;
+    }
+    return normalized
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+}
+
 function buildDefaultStudentUsername(firstRaw, lastRaw) {
-    const first = String(firstRaw || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    const last = String(lastRaw || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const first = normalizeUsername(firstRaw);
+    const last = normalizeUsername(lastRaw);
     const combined = `${first}${last}`;
     if (!combined) return '';
     return `${combined}_`;
@@ -2070,6 +2096,7 @@ let calendarNameVisibleSchoolKeys = new Set();
 let calendarStudentPopoverHideTimer = null;
 let calendarPromptPopoverOpen = false;
 let calendarPromptSelectedDays = new Set(['Monday']);
+let calendarPromptPopoverHideTimer = null;
 
 function getAllRosterStudentNamesSorted() {
     const names = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
@@ -2174,11 +2201,15 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
 }
 
 function getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state) {
+    const normalized = String(state || '').trim().toLowerCase();
+    if (normalized !== 'unavailable' && normalized !== 'rescheduled') return '';
+    const key = `${day}-${hour}`;
+    if (loggedInStudentFullName) {
+        return String(studentVisibleRescheduledNamesBySlot[key] || '').trim();
+    }
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return '';
-    if (String(state || '').trim().toLowerCase() !== 'unavailable') return '';
     const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
     if (!byTeacher || typeof byTeacher !== 'object') return '';
-    const key = `${day}-${hour}`;
     return String(byTeacher[key] || '').trim();
 }
 
@@ -2262,7 +2293,7 @@ function applyStateVisualToSlot(slot, state) {
         slot.classList.add('state-available');
         return;
     }
-    if (normalized === 'unavailable') {
+    if (normalized === 'unavailable' || normalized === 'rescheduled') {
         slot.classList.add('state-unavailable');
         return;
     }
@@ -2417,21 +2448,56 @@ function ensureCalendarPromptPopover() {
         pop.className = 'calendar-prompt-popover';
         pop.hidden = true;
         pop.innerHTML =
-            '<h4 class="calendar-prompt-popover-title">Weekly Prompt</h4>' +
-            '<p class="calendar-prompt-popover-hint">Choose weekdays, then copy a ready-to-send text with class times only.</p>' +
-            '<ul id="calendarPromptDaysList" class="calendar-prompt-days-list"></ul>' +
-            '<div class="calendar-prompt-popover-actions">' +
-            '  <button type="button" id="calendarPromptCancelBtn" class="calendar-prompt-popover-btn calendar-prompt-popover-btn--cancel">Close</button>' +
-            '  <button type="button" id="calendarPromptCopyBtn" class="calendar-prompt-popover-btn calendar-prompt-popover-btn--copy">Copy text</button>' +
+            '<div class="calendar-prompt-popover-header">' +
+            '  <div class="calendar-prompt-popover-header-icon" aria-hidden="true">💬</div>' +
+            '  <div class="calendar-prompt-popover-header-copy">' +
+            '    <h4 class="calendar-prompt-popover-title">Copy WhatsApp Message</h4>' +
+            '    <p class="calendar-prompt-popover-hint">Select day(s) to generate and copy the class message.</p>' +
+            '  </div>' +
+            '  <button type="button" id="calendarPromptCloseIconBtn" class="calendar-prompt-close-icon-btn" aria-label="Close">×</button>' +
+            '</div>' +
+            '<div class="calendar-prompt-popover-body">' +
+            '  <div class="calendar-prompt-day-block">' +
+            '    <h5 class="calendar-prompt-section-title">1. Choose a day</h5>' +
+            '    <p class="calendar-prompt-section-subtitle">Select one or more weekdays.</p>' +
+            '    <ul id="calendarPromptDaysList" class="calendar-prompt-days-list"></ul>' +
+            '  </div>' +
+            '  <div class="calendar-prompt-lower-row">' +
+            '    <div class="calendar-prompt-lower-row-content">' +
+            '      <div class="calendar-prompt-preview-block">' +
+            '        <div class="calendar-prompt-preview-head">' +
+            '          <h5 class="calendar-prompt-section-title">2. Preview</h5>' +
+            '          <span id="calendarPromptClassCount" class="calendar-prompt-class-count">0 classes</span>' +
+            '        </div>' +
+            '        <p class="calendar-prompt-section-subtitle">This is how the message will look.</p>' +
+            '        <pre id="calendarPromptPreviewText" class="calendar-prompt-preview-text"></pre>' +
+            '      </div>' +
+            '      <div class="calendar-prompt-popover-footer">' +
+            '        <p class="calendar-prompt-section-subtitle">Copy the message and paste it on WhatsApp.</p>' +
+            '        <div class="calendar-prompt-popover-actions">' +
+            '          <button type="button" id="calendarPromptCopyBtn" class="calendar-prompt-popover-btn calendar-prompt-popover-btn--copy">Copy to clipboard</button>' +
+            '        </div>' +
+            '      </div>' +
+            '    </div>' +
+            '  </div>' +
             '</div>';
         document.body.appendChild(pop);
     }
     if (pop.dataset.actionsBound !== '1') {
         pop.dataset.actionsBound = '1';
         const promptCopyBtn = pop.querySelector('#calendarPromptCopyBtn');
-        const promptCloseBtn = pop.querySelector('#calendarPromptCancelBtn');
+        const promptCloseBtn = pop.querySelector('#calendarPromptCloseIconBtn');
+        const promptPreviewBtn = pop.querySelector('#calendarPromptPreviewBtn');
         promptCopyBtn?.addEventListener('click', () => copyWeeklyPromptFromCalendar());
         promptCloseBtn?.addEventListener('click', () => closeCalendarPromptPopover());
+        promptPreviewBtn?.addEventListener('click', () => {
+            const text = buildTeacherWeeklyPromptFromSelectedDays();
+            if (!text) {
+                showAppMessage('No scheduled classes found for selected days.');
+                return;
+            }
+            showAppMessage(text);
+        });
     }
 }
 
@@ -2441,10 +2507,13 @@ function renderCalendarPromptDayOptions() {
     list.innerHTML = '';
     DAYS.forEach((dayName) => {
         const li = document.createElement('li');
-        li.className = 'calendar-prompt-day-item';
         const label = document.createElement('label');
-        label.className = 'calendar-prompt-day-option';
         const input = document.createElement('input');
+        
+        li.className = 'calendar-prompt-day-item';
+        label.className = 'calendar-prompt-day-option';
+        label.classList.toggle('is-selected', input.checked);
+
         input.type = 'checkbox';
         input.checked = calendarPromptSelectedDays.has(dayName);
         input.dataset.day = dayName;
@@ -2453,8 +2522,12 @@ function renderCalendarPromptDayOptions() {
             if (!day) return;
             if (input.checked) calendarPromptSelectedDays.add(day);
             else calendarPromptSelectedDays.delete(day);
+            label.classList.toggle('is-selected', input.checked);
+            updateCalendarPromptPreview();
         });
+
         const text = document.createElement('span');
+        text.className = 'calendar-prompt-day-name';
         text.textContent = dayName;
         label.appendChild(input);
         label.appendChild(text);
@@ -2463,31 +2536,28 @@ function renderCalendarPromptDayOptions() {
     });
 }
 
-function positionCalendarPromptPopover(anchorEl) {
-    const pop = document.getElementById('calendarPromptPopover');
-    if (!pop || !anchorEl) return;
-    const r = anchorEl.getBoundingClientRect();
-    const pad = 8;
-    let left = r.left;
-    let top = r.bottom + pad;
-    const w = pop.offsetWidth || 320;
-    const h = pop.offsetHeight || 260;
-    if (left + w > window.innerWidth - pad) {
-        left = Math.max(pad, window.innerWidth - w - pad);
-    }
-    if (top + h > window.innerHeight - pad) {
-        top = Math.max(pad, r.top - h - pad);
-    }
-    pop.style.left = `${left}px`;
-    pop.style.top = `${top}px`;
-}
-
 function closeCalendarPromptPopover() {
     const pop = document.getElementById('calendarPromptPopover');
     const btn = document.getElementById('classReportWeeklyPromptBtn');
     if (pop) {
-        pop.hidden = true;
         pop.classList.remove('calendar-prompt-popover--enter');
+        pop.classList.add('calendar-prompt-popover--leave');
+        pop.hidden = false;
+        if (calendarPromptPopoverHideTimer) {
+            window.clearTimeout(calendarPromptPopoverHideTimer);
+            calendarPromptPopoverHideTimer = null;
+        }
+        let finished = false;
+        const finishHide = () => {
+            if (finished) return;
+            finished = true;
+            pop.removeEventListener('animationend', finishHide);
+            pop.hidden = true;
+            pop.classList.remove('calendar-prompt-popover--leave');
+            calendarPromptPopoverHideTimer = null;
+        };
+        pop.addEventListener('animationend', finishHide);
+        calendarPromptPopoverHideTimer = window.setTimeout(finishHide, 260);
     }
     if (btn) btn.setAttribute('aria-expanded', 'false');
     calendarPromptPopoverOpen = false;
@@ -2505,13 +2575,16 @@ function getNextDateForWeekday(dayName, now = new Date()) {
 }
 
 function getScheduledTeacherHoursForDay(dayName) {
-    const hours = [];
+    const entries = [];
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
         const state = String(getSlotState(dayName, hour) || '').trim().toLowerCase();
         if (!state || state === 'available') continue;
-        hours.push(hour);
+        entries.push({
+            hour,
+            isReposition: state === 'unavailable' || state === 'rescheduled'
+        });
     }
-    return hours;
+    return entries;
 }
 
 function buildTeacherWeeklyPromptFromSelectedDays() {
@@ -2519,8 +2592,8 @@ function buildTeacherWeeklyPromptFromSelectedDays() {
     if (selectedDays.length === 0) return '';
     const blocks = [];
     selectedDays.forEach((dayName) => {
-        const hours = getScheduledTeacherHoursForDay(dayName);
-        if (hours.length === 0) return;
+        const entries = getScheduledTeacherHoursForDay(dayName);
+        if (entries.length === 0) return;
         const date = getNextDateForWeekday(dayName);
         if (!date) return;
         const month = date.toLocaleString('en-US', { month: 'long' });
@@ -2528,11 +2601,11 @@ function buildTeacherWeeklyPromptFromSelectedDays() {
         const title = `*${month}, ${dayNum}${getOrdinalSuffix(dayNum)} — ${dayName}*`;
         const lines = [title];
         let prevHour = null;
-        hours.forEach((hour) => {
+        entries.forEach(({ hour, isReposition }) => {
             if (prevHour != null && hour - prevHour > 1) {
                 lines.push('');
             }
-            lines.push(`${formatHour(hour)} —`);
+            lines.push(`${formatHour(hour)} —${isReposition ? ' (reposition)' : ''}`);
             prevHour = hour;
         });
         blocks.push(lines.join('\n'));
@@ -2576,6 +2649,33 @@ async function copyWeeklyPromptFromCalendar() {
     }
 }
 
+function updateCalendarPromptPreview() {
+    const previewEl = document.getElementById('calendarPromptPreviewText');
+    const countEl = document.getElementById('calendarPromptClassCount');
+    if (!previewEl || !countEl) return;
+    const selectedDays = DAYS.filter((d) => calendarPromptSelectedDays.has(d));
+    const classCount = selectedDays.reduce((total, dayName) => total + getScheduledTeacherHoursForDay(dayName).length, 0);
+    countEl.textContent = `${classCount} class${classCount === 1 ? '' : 'es'}`;
+    const text = buildTeacherWeeklyPromptFromSelectedDays();
+    previewEl.textContent = text || 'No classes scheduled for selected day(s).';
+    animateCalendarPromptPreviewHeight(previewEl);
+}
+
+function animateCalendarPromptPreviewHeight(previewEl) {
+    if (!previewEl) return;
+    const styles = window.getComputedStyle(previewEl);
+    const minHeight = Number.parseFloat(styles.minHeight) || 120;
+    let maxHeight = Number.parseFloat(styles.maxHeight);
+    if (!Number.isFinite(maxHeight)) maxHeight = 280;
+    const startHeight = Math.max(minHeight, previewEl.getBoundingClientRect().height || minHeight);
+    previewEl.style.height = 'auto';
+    const contentHeight = previewEl.scrollHeight;
+    const targetHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
+    previewEl.style.height = `${Math.round(startHeight)}px`;
+    void previewEl.offsetHeight;
+    previewEl.style.height = `${Math.round(targetHeight)}px`;
+}
+
 function toggleCalendarPromptPopover(anchorEl) {
     ensureCalendarPromptPopover();
     const pop = document.getElementById('calendarPromptPopover');
@@ -2585,9 +2685,15 @@ function toggleCalendarPromptPopover(anchorEl) {
         return;
     }
     renderCalendarPromptDayOptions();
+    updateCalendarPromptPreview();
     closeCalendarStudentNamesPopover();
     closeCalendarLinkPopover();
+    if (calendarPromptPopoverHideTimer) {
+        window.clearTimeout(calendarPromptPopoverHideTimer);
+        calendarPromptPopoverHideTimer = null;
+    }
     pop.hidden = false;
+    pop.classList.remove('calendar-prompt-popover--leave');
     pop.classList.remove('calendar-prompt-popover--enter');
     void pop.offsetWidth;
     pop.classList.add('calendar-prompt-popover--enter');
@@ -3474,6 +3580,7 @@ let currentSlot = null;
 let currentContextMenuMode = 'school';
 const teacherUnavailableStudentNamesByTeacher = {};
 const TEACHER_UNAVAILABLE_STUDENTS_META_KEY = '__unavailableStudentNames';
+let studentVisibleRescheduledNamesBySlot = {};
 
 function getScheduleSlotMapWithoutMeta(schedule) {
     const out = {};
@@ -4621,10 +4728,7 @@ function renderSidebar() {
             nameEl.textContent = name;
             teacherItem.appendChild(nameEl);
 
-            const allowEditRow =
-                category.deletable &&
-                (!loggedInStudentFullName ||
-                    name.trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase());
+            const allowEditRow = category.deletable && !loggedInStudentFullName;
             if (allowEditRow) {
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
@@ -5238,6 +5342,7 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
 }
 
 function removeSchoolFromSidebar(displayTitle) {
+    if (loggedInStudentFullName) return;
     const schoolTitle = String(displayTitle || '').trim();
     const schoolKey = schoolTitle.toLowerCase();
     if (!schoolTitle || !schoolKey) return;
@@ -5351,6 +5456,7 @@ function setupDeleteSchoolModal() {
 }
 
 function openSchoolSettingsModal(schoolTitle) {
+    if (loggedInStudentFullName) return;
     const modal = document.getElementById('schoolSettingsModal');
     const nameEl = document.getElementById('schoolSettingsModalSchoolName');
     const externalCheckbox = document.getElementById('schoolSettingsExternalCheckbox');
@@ -5823,7 +5929,7 @@ function setupTeacherLoginModal() {
             const tutor = getTutorRosterNameForStudent(v.studentName);
             if (!tutor) {
                 setError(
-                    'Your student profile has no teacher assigned in this app. Ask your teacher to choose their name in the Teacher field on your profile.'
+                    'Your student profile has no teacher assigned. Ask your teacher to choose a teacher in your profile.'
                 );
                 emailInput.focus();
                 return;
@@ -6053,6 +6159,7 @@ function setupTeacherListEditDelegation() {
     }
     teacherList.dataset.editDelegation = '1';
     teacherList.addEventListener('click', (e) => {
+        if (loggedInStudentFullName) return;
         const editBtn = e.target.closest('.teacher-item-edit');
         if (!editBtn || !teacherList.contains(editBtn)) {
             return;
@@ -6151,7 +6258,14 @@ function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {
 
 function getStudentTeacherInfo(studentName) {
     const name = String(studentName || '').trim();
-    return name ? String(studentTeacherByName[name] || '').trim() : '';
+    if (!name) return '';
+    const direct = String(studentTeacherByName[name] || '').trim();
+    if (direct) return direct;
+    const keyLc = name.toLowerCase();
+    const mappedKey = Object.keys(studentTeacherByName).find(
+        (key) => String(key || '').trim().toLowerCase() === keyLc
+    );
+    return mappedKey ? String(studentTeacherByName[mappedKey] || '').trim() : '';
 }
 
 function saveStudentTeacherInfo(studentName, teacherRaw) {
@@ -6297,6 +6411,10 @@ function refreshEditStudentSchoolSelect(selectedSchool = '') {
 }
 
 function openEditStudentModal(studentName, rosterKey) {
+    if (loggedInStudentFullName) {
+        showAppMessage('Student sessions cannot edit profiles.');
+        return;
+    }
     const modal = document.getElementById('editStudentModal');
     const firstInput = document.getElementById('editStudentFirst');
     const lastInput = document.getElementById('editStudentLast');
@@ -8372,8 +8490,8 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
     const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
     const tut = computeSlotStatesForProfile(tutorKey);
     const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);
-    const studentKey = String(studentName || '').trim().toLowerCase();
     const merged = {};
+    const visibleRescheduledNames = {};
     DAYS.forEach((day) => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
@@ -8381,14 +8499,13 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
             const t = tut[key];
             const sLow = s != null ? String(s).trim().toLowerCase() : '';
             const tLow = t != null ? String(t).trim().toLowerCase() : '';
-            if (sLow && sLow !== 'available') {
+            const rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
+            if ((tLow === 'unavailable' || tLow === 'rescheduled') && rescheduledStudentName) {
+                // Student view should always display all rescheduled slots globally.
+                merged[key] = 'rescheduled';
+                visibleRescheduledNames[key] = rescheduledStudentName;
+            } else if (sLow && sLow !== 'available') {
                 merged[key] = s;
-            } else if (
-                tLow === 'unavailable' &&
-                String(tutorUnavailableMeta[key] || '').trim().toLowerCase() === studentKey
-            ) {
-                // Student should see tutor-assigned reposition slots in yellow.
-                merged[key] = 'unavailable';
             } else if (tLow === 'available') {
                 merged[key] = 'available';
             } else if (s) {
@@ -8398,6 +8515,7 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
             }
         }
     });
+    studentVisibleRescheduledNamesBySlot = visibleRescheduledNames;
     return merged;
 }
 
@@ -8406,6 +8524,7 @@ function loadTeacherSchedule(teacherName) {
     const rawSchedule = teacherSchedules[teacherName] ? { ...teacherSchedules[teacherName] } : {};
     const raw = getScheduleSlotMapWithoutMeta(rawSchedule);
     const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(rawSchedule);
+    studentVisibleRescheduledNamesBySlot = {};
     if (
         loggedInStudentFullName &&
         String(teacherName || '').trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
