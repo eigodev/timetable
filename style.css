@@ -479,7 +479,7 @@ body {
 }
 
 .google-meet-modal.is-open .google-meet-dialog {
-    animation: modal-popup-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: calendar-prompt-popover-fade-in 220ms ease both;
 }
 
 .google-meet-modal-backdrop {
@@ -489,17 +489,20 @@ body {
 }
 
 .google-meet-dialog {
-    position: relative;
-    width: var(--google-meet-dialog-width, 35%);
-    min-width: min(35%, 340px);
-    max-width: calc(100vw - 24px);
+    position: fixed;
+    top: 3%;
+    left: 21.5%;
+    width: 59%;
+    height: 94%;
     padding: 20px;
+    box-sizing: border-box;
+    overflow: auto;
     
     background: #fff;
     border: 1px solid #d9def6;
     border-radius: 10px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
-    transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: none;
 }
 
 .google-meet-title {
@@ -1081,15 +1084,17 @@ body {
 }
 
 .google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--enter {
-    animation: google-meet-link-popover-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: google-meet-link-popover-in 220ms ease both;
 }
 
 @keyframes google-meet-link-popover-in {
     from {
         opacity: 0;
+        transform: translateY(-4px);
     }
     to {
         opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -1357,22 +1362,22 @@ body {
 @keyframes modal-popup-in {
     from {
         opacity: 0;
-        transform: translateY(10px) scale(0.96);
+        transform: translateY(-4px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 }
 
 @keyframes modal-popup-out {
     from {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
     to {
         opacity: 0;
-        transform: translateY(6px) scale(0.97);
+        transform: translateY(-4px);
     }
 }
 
@@ -1395,7 +1400,7 @@ body {
 .teacher-login-modal.is-open .teacher-login-dialog,
 .app-message-modal.is-open .app-message-dialog,
 .student-reposition-modal.is-open .app-message-dialog {
-    animation: modal-popup-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: modal-popup-in 220ms ease both;
 }
 
 .google-meet-modal.is-closing .google-meet-modal-backdrop,
@@ -1419,7 +1424,11 @@ body {
 .teacher-login-modal.is-closing .teacher-login-dialog,
 .app-message-modal.is-closing .app-message-dialog,
 .student-reposition-modal.is-closing .app-message-dialog {
-    animation: modal-popup-out 0.24s ease-in both;
+    animation: modal-popup-out 220ms ease both;
+}
+
+.google-meet-modal.is-closing .google-meet-dialog {
+    animation: calendar-prompt-popover-fade-out 220ms ease both;
 }
 
 .google-meet-modal.is-closing,
@@ -6384,33 +6393,33 @@ header h1 {
 }
 
 .calendar-student-names-popover--enter {
-    animation: calendar-student-popover-in 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: calendar-student-popover-in 220ms ease both;
 }
 
 .calendar-student-names-popover--leave {
-    animation: calendar-student-popover-out 170ms ease both;
+    animation: calendar-student-popover-out 220ms ease both;
     pointer-events: none;
 }
 
 @keyframes calendar-student-popover-in {
     from {
         opacity: 0;
-        transform: translateY(-6px) scale(0.985);
+        transform: translateY(-4px);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 }
 
 @keyframes calendar-student-popover-out {
     from {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
     to {
         opacity: 0;
-        transform: translateY(-4px) scale(0.99);
+        transform: translateY(-4px);
     }
 }
 
@@ -6593,6 +6602,21 @@ header h1 {
     flex-direction: column;
 }
 
+.calendar-prompt-popover-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1999;
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.calendar-prompt-popover-backdrop--enter {
+    animation: modal-backdrop-in 0.22s ease both;
+}
+
+.calendar-prompt-popover-backdrop--leave {
+    animation: modal-backdrop-out 0.22s ease both;
+}
+
 .calendar-prompt-popover--enter {
     animation: calendar-prompt-popover-fade-in 220ms ease both;
 }
@@ -6681,7 +6705,8 @@ header h1 {
 }
 
 .calendar-prompt-days-list {
-    display: flex;    
+    display: flex;
+    justify-content: space-between;  
     gap: 10px;
     list-style: none;
     margin: 0;
@@ -6694,9 +6719,8 @@ header h1 {
     align-items: center;
     gap: 5px;
 
-    padding: 10px 10px;
-    border: 1px solid #e5e9f5;
-    border-radius: 12px;
+    padding: 10px;
+    border-radius: 10px;
     background: #fff;
 
     font-size: 0.75rem;
@@ -6750,6 +6774,10 @@ header h1 {
         animation: none;
     }
     .calendar-prompt-popover--leave {
+        animation: none;
+    }
+    .calendar-prompt-popover-backdrop--enter,
+    .calendar-prompt-popover-backdrop--leave {
         animation: none;
     }
 }

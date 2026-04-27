@@ -228,6 +228,13 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const calendarPromptPop = document.getElementById('calendarPromptPopover');
+            if (calendarPromptPop && !calendarPromptPop.hidden) {
+                e.preventDefault();
+                closeCalendarPromptPopover();
+                return;
+            }
+
             const studentRepositionModal = document.getElementById('studentRepositionModal');
             if (studentRepositionModal?.classList.contains('is-open')) {
                 e.preventDefault();
@@ -2095,8 +2102,9 @@ let calendarLinkPopoverOpen = false;
 let calendarNameVisibleSchoolKeys = new Set();
 let calendarStudentPopoverHideTimer = null;
 let calendarPromptPopoverOpen = false;
-let calendarPromptSelectedDays = new Set(['Monday']);
+let calendarPromptSelectedDays = new Set();
 let calendarPromptPopoverHideTimer = null;
+let calendarPromptBackdropHideTimer = null;
 
 function getAllRosterStudentNamesSorted() {
     const names = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
@@ -2441,6 +2449,18 @@ function positionCalendarLinkPopover(anchorEl) {
 }
 
 function ensureCalendarPromptPopover() {
+    let backdrop = document.getElementById('calendarPromptPopoverBackdrop');
+    if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.id = 'calendarPromptPopoverBackdrop';
+        backdrop.className = 'calendar-prompt-popover-backdrop';
+        backdrop.hidden = true;
+        document.body.appendChild(backdrop);
+    }
+    if (backdrop.dataset.bound !== '1') {
+        backdrop.dataset.bound = '1';
+        backdrop.addEventListener('click', () => closeCalendarPromptPopover());
+    }
     let pop = document.getElementById('calendarPromptPopover');
     if (!pop) {
         pop = document.createElement('div');
@@ -2538,7 +2558,28 @@ function renderCalendarPromptDayOptions() {
 
 function closeCalendarPromptPopover() {
     const pop = document.getElementById('calendarPromptPopover');
+    const backdrop = document.getElementById('calendarPromptPopoverBackdrop');
     const btn = document.getElementById('classReportWeeklyPromptBtn');
+    if (backdrop) {
+        backdrop.classList.remove('calendar-prompt-popover-backdrop--enter');
+        backdrop.classList.add('calendar-prompt-popover-backdrop--leave');
+        backdrop.hidden = false;
+        if (calendarPromptBackdropHideTimer) {
+            window.clearTimeout(calendarPromptBackdropHideTimer);
+            calendarPromptBackdropHideTimer = null;
+        }
+        let finishedBackdrop = false;
+        const finishBackdropHide = () => {
+            if (finishedBackdrop) return;
+            finishedBackdrop = true;
+            backdrop.removeEventListener('animationend', finishBackdropHide);
+            backdrop.hidden = true;
+            backdrop.classList.remove('calendar-prompt-popover-backdrop--leave');
+            calendarPromptBackdropHideTimer = null;
+        };
+        backdrop.addEventListener('animationend', finishBackdropHide);
+        calendarPromptBackdropHideTimer = window.setTimeout(finishBackdropHide, 240);
+    }
     if (pop) {
         pop.classList.remove('calendar-prompt-popover--enter');
         pop.classList.add('calendar-prompt-popover--leave');
@@ -2679,6 +2720,7 @@ function animateCalendarPromptPreviewHeight(previewEl) {
 function toggleCalendarPromptPopover(anchorEl) {
     ensureCalendarPromptPopover();
     const pop = document.getElementById('calendarPromptPopover');
+    const backdrop = document.getElementById('calendarPromptPopoverBackdrop');
     if (!pop) return;
     if (calendarPromptPopoverOpen) {
         closeCalendarPromptPopover();
@@ -2691,6 +2733,17 @@ function toggleCalendarPromptPopover(anchorEl) {
     if (calendarPromptPopoverHideTimer) {
         window.clearTimeout(calendarPromptPopoverHideTimer);
         calendarPromptPopoverHideTimer = null;
+    }
+    if (calendarPromptBackdropHideTimer) {
+        window.clearTimeout(calendarPromptBackdropHideTimer);
+        calendarPromptBackdropHideTimer = null;
+    }
+    if (backdrop) {
+        backdrop.hidden = false;
+        backdrop.classList.remove('calendar-prompt-popover-backdrop--leave');
+        backdrop.classList.remove('calendar-prompt-popover-backdrop--enter');
+        void backdrop.offsetWidth;
+        backdrop.classList.add('calendar-prompt-popover-backdrop--enter');
     }
     pop.hidden = false;
     pop.classList.remove('calendar-prompt-popover--leave');
