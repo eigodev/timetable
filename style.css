@@ -710,7 +710,7 @@ body {
     background: #334461;
     transform: scale(0);
     transform-origin: center;
-    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
 }
 
 .google-meet-shared-school-checkbox-input:checked + .google-meet-shared-school-checkbox-box {
@@ -1263,7 +1263,7 @@ body {
 }
 
 .google-meet-btn--submit {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     border-color: #334461;
     color: #ffffff;
     font-size: 0.85rem;
@@ -1275,9 +1275,8 @@ body {
 }
 
 .google-meet-btn--submit:hover {
-    background: #32408f;
-    border-color: #32408f;
-    transition: background 0.5s ease;
+    filter: brightness(1.06);
+    transition: filter 0.2s ease;
 }
 
 /* Add student modal */
@@ -1583,12 +1582,12 @@ body {
 }
 
 .btn-class-topic-save {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     color: white;
 }
 
 .btn-class-topic-save:hover {
-    background: #32408f;
+    filter: brightness(1.06);
 }
 
 .class-topic-exercises {
@@ -1979,7 +1978,7 @@ input.student-reposition-modal-day {
     border-radius: 3px;
     transform: translate(-50%, -50%) scale(0);
     transform-origin: center;
-    transition: transform 0.25s ease-in-out;
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
     background: #334461;
 }
 
@@ -2038,13 +2037,13 @@ input.student-reposition-modal-day {
 
 .btn-teacher-login-submit,
 .btn-app-message-ok {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     color: #fff;
 }
 
 .btn-teacher-login-submit:hover,
 .btn-app-message-ok:hover {
-    background: #32408f;
+    filter: brightness(1.06);
 }
 
 .app-message-body {
@@ -2246,7 +2245,7 @@ input.student-reposition-modal-day {
     border-radius: 3px;
     transform: translate(-50%, -50%) scale(0);
     transform-origin: center;
-    transition: transform 0.25s ease-in-out;
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
     background: #334461;
 }
 
@@ -2346,12 +2345,12 @@ input.student-reposition-modal-day {
 }
 
 .btn-school-settings-save {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     color: white;
 }
 
 .btn-school-settings-save:hover {
-    background: #32408f;
+    filter: brightness(1.06);
 }
 
 .delete-school-dialog {
@@ -2417,12 +2416,12 @@ input.student-reposition-modal-day {
 }
 
 .btn-delete-school-confirm {
-    background: #c62828;
+    background: linear-gradient(135deg, #334461, #071630);
     color: #fff;
 }
 
 .btn-delete-school-confirm:hover {
-    background: #b71c1c;
+    filter: brightness(1.06);
 }
 
 .edit-student-dialog {
@@ -2642,12 +2641,12 @@ input.student-reposition-modal-day {
 }
 
 .btn-edit-student-submit {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     color: white;
 }
 
 .btn-edit-student-submit:hover {
-    background: #32408f;
+    filter: brightness(1.06);
 }
 
 .add-student-modal.is-open {
@@ -2986,7 +2985,7 @@ input.student-reposition-modal-day {
     border-radius: 2px;
     transform: translate(-50%, -50%) scale(0);
     transform-origin: center;
-    transition: transform 0.2s ease;
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
     background: #334461;
 }
 
@@ -4036,7 +4035,7 @@ input.student-reposition-modal-day {
     border-radius: inherit;
     transform: scale(0);
     transform-origin: center;
-    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
     background: #334461;
 }
 
@@ -4280,12 +4279,12 @@ input.student-reposition-modal-day {
 }
 
 .btn-add-student-submit {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     color: white;
 }
 
 .btn-add-student-submit:hover {
-    background: #32408f;
+    filter: brightness(1.06);
 }
 
 .teacher-list {
@@ -4941,7 +4940,8 @@ input.student-reposition-modal-day {
 
 .sidebar-class-report-download-btn,
 .sidebar-finances-download-btn,
-.sidebar-class-report-prompt-btn {
+.sidebar-class-report-prompt-btn,
+.sidebar-class-report-meet-side-btn {
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -4965,20 +4965,23 @@ input.student-reposition-modal-day {
 
 .sidebar-class-report-download-btn:hover,
 .sidebar-finances-download-btn:hover,
-.sidebar-class-report-prompt-btn:hover {
+.sidebar-class-report-prompt-btn:hover,
+.sidebar-class-report-meet-side-btn:hover {
     background-color: #d7ddf7;
     color: #334461;
 }
 
 .sidebar-class-report-download-btn:focus,
 .sidebar-finances-download-btn:focus,
-.sidebar-class-report-prompt-btn:focus {
+.sidebar-class-report-prompt-btn:focus,
+.sidebar-class-report-meet-side-btn:focus {
     outline: none;
 }
 
 .sidebar-class-report-download-btn:focus-visible,
 .sidebar-finances-download-btn:focus-visible,
-.sidebar-class-report-prompt-btn:focus-visible {
+.sidebar-class-report-prompt-btn:focus-visible,
+.sidebar-class-report-meet-side-btn:focus-visible {
     outline: 2px solid #fff;
     outline-offset: 2px;
 }
@@ -6486,7 +6489,7 @@ header h1 {
     background: var(--menu-option-color, #334461);
     transform: scale(0);
     transform-origin: center;
-    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
 }
 
 .calendar-school-filter-option input[type="checkbox"]:checked {
@@ -6579,12 +6582,12 @@ header h1 {
 }
 
 .calendar-link-popover-btn--save {
-    background: #334461;
+    background: linear-gradient(135deg, #334461, #071630);
     color: #fff;
 }
 
 .calendar-link-popover-btn--save:hover {
-    background: #32408d;
+    filter: brightness(1.06);
 }
 
 .calendar-prompt-popover {
@@ -6755,7 +6758,7 @@ header h1 {
     background: #334461;
     transform: scale(0);
     transform-origin: center;
-    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
 }
 
 .calendar-prompt-day-option input[type="checkbox"]:checked {
@@ -6928,7 +6931,7 @@ header h1 {
 
 .calendar-prompt-popover-btn--copy {
     border: none;
-    background: linear-gradient(135deg, #4a49dc, #3f52f7);
+    background: linear-gradient(135deg, #334461, #071630);
     color: #fff;
 }
 
@@ -7493,6 +7496,708 @@ header h1 {
     animation-delay: var(--submenu-delay, 0s);
 }
 
+/* —— Google Meet Links dashboard (matches modal / calendar-prompt shell) —— */
+.google-meet-links-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2004;
+    display: none;
+    box-sizing: border-box;
+}
+
+.google-meet-links-layer:not([hidden]) {
+    display: flex;
+}
+
+.google-meet-links-layer-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.google-meet-links-layer-backdrop--enter {
+    animation: modal-backdrop-in 0.22s ease both;
+}
+
+.google-meet-links-layer-backdrop--leave {
+    animation: modal-backdrop-out 0.22s ease both;
+}
+
+.google-meet-popup {
+    position: fixed;
+    top: 3%;
+    left: 21.25%;
+    z-index: 1;
+
+    display: flex;
+    flex-direction: column;
+    
+    height: 94%;
+    width: 77%;
+    padding: 25px;
+
+    background: #fff;
+    border-radius: 20px;
+    box-sizing: border-box;
+    box-shadow: 2.5px 2.5px 5px 0 rgba(30, 40, 55, 0.75);
+    overflow: hidden;
+}
+
+.google-meet-popup--enter {
+    animation: calendar-prompt-popover-fade-in 220ms ease both;
+}
+
+.google-meet-popup--leave {
+    animation: calendar-prompt-popover-fade-out 220ms ease both;
+}
+
+.google-meet-popup .header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px 20px;
+    flex-shrink: 0;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eceff7;
+}
+
+.google-meet-popup .header-title {
+    min-width: 0;
+    flex: 1 1 240px;
+}
+
+.google-meet-popup .headline {
+    font-family: 'fredoka', sans-serif;
+    font-size: 1.55rem;
+    font-weight: 500;
+    color: #171c2d;
+    letter-spacing: -0.02em;
+}
+
+.google-meet-popup .guideline {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: #666f87;
+    font-weight: 400;
+}
+
+.google-meet-popup .header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.google-meet-popup .import-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border: 1px solid #cfd5ec;
+    border-radius: 12px;
+    background: #fff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #334461;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.google-meet-popup .import-link-btn:hover {
+    background: #f3f5fc;
+    border-color: #b8c4eb;
+}
+
+.google-meet-popup .import-link-btn-icon,
+.google-meet-popup .add-link-btn-icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+}
+
+.google-meet-popup .import-link-btn-icon svg,
+.google-meet-popup .add-link-btn-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.google-meet-popup .add-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #334461, #071630);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 1px 1px 2.5px 1px rgba(63, 82, 247, 0.5);
+    transition: filter 0.15s ease, transform 0.12s ease;
+}
+
+.google-meet-popup .add-link-btn:hover {
+    filter: brightness(1.05);
+}
+
+.google-meet-popup .cards {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 20px;
+}
+
+@media (max-width: 960px) {
+    .google-meet-popup .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 520px) {
+    .google-meet-popup .cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+.google-meet-popup .meet-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    width: max-content;
+    padding: 10px;
+
+    border-radius: 15px;
+    border: 1px solid #eceff7;
+    background: #fafbff;
+    box-sizing: border-box;
+}
+
+.google-meet-popup .meet-stat-card .info {
+    display: flex;
+    min-width: 0;
+    gap: 10px;
+}
+
+.google-meet-popup .meet-stat-value {
+    margin: 0 0 2px;
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: #171c2d;
+    line-height: 1.1;
+}
+
+.meet-stat-value-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.google-meet-popup .meet-stat-label {
+    margin: 0 0 2px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #5d6685;
+    text-transform: capitalize;
+}
+
+.google-meet-popup .meet-stat-sub {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #8b93a8;
+}
+
+.google-meet-popup .meet-stat-card-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.google-meet-popup .meet-stat-card-icon svg {
+    width: 22px;
+    height: 22px;
+}
+
+.google-meet-popup .meet-stat-card-icon--total {
+    background: #efedff;
+    color: #5750d6;
+}
+
+.google-meet-popup .meet-stat-card-icon--saved {
+    background: #e8f8ee;
+    color: #1d8a3a;
+}
+
+.google-meet-popup .meet-stat-card-icon--missing {
+    background: #fff4e5;
+    color: #c26a00;
+}
+
+.google-meet-popup .meet-stat-card-icon--invalid {
+    background: #e8f0ff;
+    color: #206dac;
+}
+
+.google-meet-popup .card-download-report {
+    justify-content: center;
+    background: linear-gradient(135deg, #334461, #071630);
+    height: 100%;
+    aspect-ratio: 1/1;
+}
+
+.google-meet-popup .card-download-report svg {
+    width: 25px;
+    height: 25px;
+    color: #ffffff;
+    display: block;
+}
+
+.google-meet-popup .students-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #eceff7;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+}
+
+.google-meet-popup .search-and-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #eceff7;
+    background: #fbfcff;
+}
+
+.google-meet-popup .search-bar {
+    position: relative;
+    flex: 1 1 220px;
+    max-width: 360px;
+}
+
+.google-meet-popup .search-bar-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: #8b93a8;
+    pointer-events: none;
+}
+
+.google-meet-popup .search-bar-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.google-meet-popup .meet-links-search-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px 0 40px;
+    border: 1px solid #cfd5ec;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    color: #1f2937;
+    background: #fff;
+    box-sizing: border-box;
+}
+
+.google-meet-popup .meet-links-search-input::placeholder {
+    color: #9aa3b8;
+}
+
+.google-meet-popup .meet-links-search-input:focus {
+    outline: none;
+    border-color: #3f52f7;
+    box-shadow: 0 0 0 3px rgba(63, 82, 247, 0.15);
+}
+
+.google-meet-popup .status-filter-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 40px;
+    border: 1px solid #cfd5ec;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.google-meet-popup .status-filter-icon {
+    display: flex;
+    color: #5d6685;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+.google-meet-popup .status-filter-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.google-meet-popup .meet-links-status-select {
+    min-width: 120px;
+    padding: 0 0 0 10px;
+    
+    border: none;
+    border-left: 1px solid #33446152;
+    background: transparent;
+    appearance: none;
+    outline: none;
+
+    font-size: 0.86rem;
+    font-family: inherit;
+    font-weight: 600;
+    color: #334461;
+    cursor: pointer;
+}
+
+.google-meet-popup .meet-links-status-select:focus {
+    outline: none;
+}
+
+.google-meet-popup .students-list-header {
+    display: grid;
+    grid-template-columns: 40px minmax(140px, 1.1fr) minmax(180px, 2fr) minmax(100px, 0.9fr) 88px;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #eceff7;
+    background: #f7f8fc;
+}
+
+.google-meet-popup .students-list-header .student-title,
+.google-meet-popup .students-list-header .link-title,
+.google-meet-popup .students-list-header .status-title {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6d768f;
+}
+
+.google-meet-popup .meet-links-header-actions {
+    justify-self: end;
+}
+
+.google-meet-popup .meet-links-actions-placeholder {
+    display: block;
+    width: 72px;
+    height: 1px;
+}
+
+.google-meet-popup .students-list-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.google-meet-popup .meet-links-row {
+    display: grid;
+    grid-template-columns: 40px minmax(140px, 1.1fr) minmax(180px, 2fr) minmax(100px, 0.9fr) 88px;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f2f8;
+    transition: background-color 0.12s ease;
+}
+
+.google-meet-popup .meet-links-row:hover {
+    background: #fafbff;
+}
+
+.google-meet-popup .meet-links-row:last-child {
+    border-bottom: none;
+}
+
+.google-meet-popup .meet-links-checkbox-label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.google-meet-popup .meet-links-checkbox {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.google-meet-popup .meet-links-checkbox-ui {
+    position: relative;
+    overflow: hidden;
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    background: #dfe3f3;
+    box-sizing: border-box;
+    transition: box-shadow 0.2s ease, background-color 0.24s ease;
+}
+
+.google-meet-popup .meet-links-checkbox-ui::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, #334461, #071630);
+    transform: scale(0);
+    transform-origin: center;
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
+}
+
+.google-meet-popup .meet-links-checkbox:checked + .meet-links-checkbox-ui::before {
+    transform: scale(1);
+}
+
+.google-meet-popup .meet-links-checkbox:checked + .meet-links-checkbox-ui {
+    background: #dfe3f3;
+}
+
+.google-meet-popup .meet-links-checkbox:focus-visible + .meet-links-checkbox-ui {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(63, 82, 247, 0.35);
+}
+
+.google-meet-popup .meet-links-cell--student {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.google-meet-popup .meet-links-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #e8ecff, #d4daf8);
+    color: #334461;
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.google-meet-popup .meet-links-student-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #171c2d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.google-meet-popup .meet-links-cell--link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.google-meet-popup .meet-links-link-icon {
+    flex-shrink: 0;
+    display: flex;
+    color: #5d6685;
+    width: 20px;
+    height: 15px;
+}
+
+.google-meet-popup .meet-links-link-icon svg,
+.google-meet-popup .meet-links-link-icon img {
+    width: 100%;
+    height: 100%;
+}
+
+.google-meet-popup .meet-links-url {
+    font-size: 0.8rem;
+    color: #334461;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.google-meet-popup .meet-links-open-external {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #5d6685;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.google-meet-popup .meet-links-open-external:hover {
+    background: #eef0ff;
+    color: #334461;
+}
+
+.google-meet-popup .meet-links-open-external svg {
+    width: 16px;
+    height: 16px;
+}
+
+.google-meet-popup .meet-links-add-link-btn {
+    height: 32px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #334461, #071630);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.google-meet-popup .meet-links-add-link-btn:hover {
+    filter: brightness(1.05);
+}
+
+.google-meet-popup .meet-links-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.google-meet-popup .meet-links-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.google-meet-popup .meet-links-status--saved {
+    color: #1d8a3a;
+}
+
+.google-meet-popup .meet-links-status--saved .meet-links-status-dot {
+    background: #2ecc71;
+}
+
+.google-meet-popup .meet-links-status--missing {
+    color: #c26a00;
+}
+
+.google-meet-popup .meet-links-status--missing .meet-links-status-dot {
+    background: #f5a623;
+}
+
+.google-meet-popup .meet-links-status--invalid {
+    color: #c63b3b;
+}
+
+.google-meet-popup .meet-links-status--invalid .meet-links-status-dot {
+    background: #e45b5b;
+}
+
+.google-meet-popup .meet-links-cell--actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.google-meet-popup .meet-links-icon-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #5d6685;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.google-meet-popup .meet-links-icon-btn:hover {
+    background: #eef0ff;
+    color: #334461;
+}
+
+.google-meet-popup .meet-links-icon-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+
+@media (max-width: 720px) {
+    .google-meet-popup .students-list-header,
+    .google-meet-popup .meet-links-row {
+        grid-template-columns: 36px 1fr;
+        grid-template-rows: auto auto;
+    }
+
+    .google-meet-popup .students-list-header .link-title,
+    .google-meet-popup .students-list-header .status-title,
+    .google-meet-popup .students-list-header .meet-links-header-actions {
+        display: none;
+    }
+
+    .google-meet-popup .meet-links-cell--link,
+    .google-meet-popup .meet-links-cell--status,
+    .google-meet-popup .meet-links-cell--actions {
+        grid-column: 2;
+    }
+
+    .google-meet-popup .meet-links-cell--link {
+        margin-top: -4px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .google-meet-popup .meet-links-checkbox-ui::before,
+    .google-meet-popup .meet-links-checkbox-ui::after,
+    .google-meet-popup .import-link-btn,
+    .google-meet-popup .add-link-btn,
+    .google-meet-popup .meet-links-row {
+        transition: none;
+    }
+    .google-meet-popup--enter,
+    .google-meet-popup--leave,
+    .google-meet-links-layer-backdrop--enter,
+    .google-meet-links-layer-backdrop--leave {
+        animation: none;
+    }
+}
+
 @keyframes context-submenu-in {
     from {
         opacity: 0;
@@ -7587,7 +8292,7 @@ header h1 {
     background: var(--menu-option-color, #334461);
     transform: scale(0);
     transform-origin: center;
-    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
 }
 
 .context-menu-checkbox.is-checked {

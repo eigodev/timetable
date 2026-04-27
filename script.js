@@ -235,6 +235,13 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const googleMeetLinksLayer = document.getElementById('googleMeetLinksLayer');
+            if (googleMeetLinksLayer && !googleMeetLinksLayer.hidden) {
+                e.preventDefault();
+                closeGoogleMeetLinksLayer();
+                return;
+            }
+
             const studentRepositionModal = document.getElementById('studentRepositionModal');
             if (studentRepositionModal?.classList.contains('is-open')) {
                 e.preventDefault();
@@ -365,6 +372,7 @@ function setupGlobalPointerDownToDismissOverlays() {
             }
 
             const modalDismissOrder = [
+                { id: 'googleMeetLinksLayer', close: closeGoogleMeetLinksLayer },
                 { id: 'studentRepositionModal', close: closeStudentRepositionModal },
                 { id: 'appMessageModal', close: closeAppMessageModal },
                 { id: 'teacherLoginModal', close: closeTeacherLoginModal },
@@ -378,7 +386,10 @@ function setupGlobalPointerDownToDismissOverlays() {
 
             for (const item of modalDismissOrder) {
                 const modal = document.getElementById(item.id);
-                if (!modal || !modal.classList.contains('is-open')) continue;
+                if (!modal) continue;
+                const isLayer = item.id === 'googleMeetLinksLayer';
+                if (!isLayer && !modal.classList.contains('is-open')) continue;
+                if (isLayer && modal.hidden) continue;
                 const dialog = modal.querySelector('[role="dialog"]');
                 if (dialog && !dialog.contains(target)) {
                     item.close();
@@ -2105,6 +2116,7 @@ let calendarPromptPopoverOpen = false;
 let calendarPromptSelectedDays = new Set();
 let calendarPromptPopoverHideTimer = null;
 let calendarPromptBackdropHideTimer = null;
+let googleMeetLinksLayerHideTimer = null;
 
 function getAllRosterStudentNamesSorted() {
     const names = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
@@ -2916,6 +2928,8 @@ const SIDEBAR_ADD_SCHOOL_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"/></svg>';
 const SIDEBAR_GOOGLE_MEET_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M22.205 9.41v5.13c.01.382-.087.76-.28 1.09a2.13 2.13 0 0 1-.86.77a2 2 0 0 1-.9.21h-.25a2.07 2.07 0 0 1-1-.43l-2.53-2v.91a4.34 4.34 0 0 1-4.34 4.34h-5.91a4.37 4.37 0 0 1-3.07-1.27a4.31 4.31 0 0 1-1.27-3.07V8.92a4.298 4.298 0 0 1 .33-1.66a4.38 4.38 0 0 1 2.35-2.36a4.31 4.31 0 0 1 1.66-.33h5.79a4.4 4.4 0 0 1 1.67.33a4.38 4.38 0 0 1 2.35 2.36c.22.529.33 1.097.32 1.67v.9l2.53-2a2.09 2.09 0 0 1 3.06.53c.207.313.328.675.35 1.05"/></svg>';
+const SIDEBAR_GOOGLE_MEET_SIDE_BTN_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M913 3118 c13 -29 90 -205 172 -391 l148 -338 -168 -767 c-92 -422 -170 -773 -173 -779 -3 -10 35 -13 169 -13 l174 0 144 368 c142 361 283 721 424 1079 39 100 73 181 74 179 1 -1 -65 -362 -147 -801 -83 -439 -150 -804 -150 -812 0 -10 34 -13 169 -13 l169 0 34 97 c20 54 156 442 304 862 148 421 270 758 272 750 1 -8 -58 -393 -133 -857 -74 -463 -135 -845 -135 -847 0 -3 77 -4 172 -3 l171 3 313 970 c172 534 310 973 306 976 -4 4 -146 93 -315 198 l-308 191 -169 -2 -170 -3 131 -229 c72 -126 133 -235 136 -244 3 -8 -133 96 -302 232 l-308 246 -169 0 c-92 0 -168 -3 -168 -6 0 -3 68 -140 152 -303 l152 -296 -90 82 c-49 45 -195 181 -324 302 l-235 220 -172 1 -173 0 23 -52z m1624 -555 c-4 -3 -7 0 -7 7 0 7 3 10 7 7 3 -4 3 -10 0 -14z" transform="translate(0,400) scale(0.1,-0.1)"/></svg>';
 const SIDEBAR_GOOGLE_MEET_OFF_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path stroke-miterlimit="10" d="m11.047 10l-4 3.991m0-3.982l4 3.991"/><path stroke-linejoin="round" d="M12 5.32H6.095A3.595 3.595 0 0 0 2.5 8.923v6.162a3.595 3.595 0 0 0 3.595 3.595H12a3.595 3.595 0 0 0 3.595-3.595V8.924A3.594 3.594 0 0 0 12 5.32m9.5 4.118v5.135c0 .25-.071.496-.205.708a1.355 1.355 0 0 1-.555.493a1.27 1.27 0 0 1-.73.124a1.366 1.366 0 0 1-.677-.278l-3.225-2.588a1.377 1.377 0 0 1-.503-1.047c0-.2.045-.396.133-.575c.092-.168.218-.315.37-.432l3.225-2.567a1.36 1.36 0 0 1 .678-.278c.25-.032.504.011.729.124a1.325 1.325 0 0 1 .76 1.181"/></g></svg>';
 const SIDEBAR_WHATSAPP_SVG =
@@ -4434,8 +4448,15 @@ function renderSidebar() {
     googleMeetBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--google-meet';
     googleMeetBtn.setAttribute('aria-label', 'Open Google Meet');
     googleMeetBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SVG;
-    googleMeetBtn.addEventListener('click', openGoogleMeetModal);
+    googleMeetBtn.addEventListener('click', openGoogleMeetLinksLayer);
     bindSidebarCursorTooltip(googleMeetBtn, 'Open Google Meet');
+    const googleMeetSideBtn = document.createElement('button');
+    googleMeetSideBtn.type = 'button';
+    googleMeetSideBtn.id = 'googleMeetSideBtn';
+    googleMeetSideBtn.className = 'sidebar-class-report-meet-side-btn';
+    googleMeetSideBtn.setAttribute('aria-label', 'Miro Whiteboard');
+    googleMeetSideBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SIDE_BTN_SVG;
+    bindSidebarCursorTooltip(googleMeetSideBtn, 'Miro Whiteboard');
     const addStudentBtn = document.createElement('button');
     addStudentBtn.type = 'button';
     addStudentBtn.id = 'addSchoolBtn';
@@ -4494,6 +4515,7 @@ function renderSidebar() {
     const classReportHeaderActions = document.createElement('div');
     classReportHeaderActions.className = 'sidebar-section-actions';
     classReportHeaderActions.appendChild(googleMeetBtn);
+    classReportHeaderActions.appendChild(googleMeetSideBtn);
     classReportHeaderActions.appendChild(classReportPromptBtn);
     classReportHeaderActions.appendChild(classReportDownloadBtn);
     bindSidebarCursorTooltip(classReportDownloadBtn, 'Download class report (PDF)');
@@ -8126,6 +8148,224 @@ function openGoogleMeetModal() {
     schoolToggle.focus();
 }
 
+function openGoogleMeetLinksLayer() {
+    const layer = document.getElementById('googleMeetLinksLayer');
+    if (!layer) return;
+    updateGoogleMeetLinksPopupStats();
+    renderGoogleMeetLinksStudentsRows();
+    if (googleMeetLinksLayerHideTimer) {
+        window.clearTimeout(googleMeetLinksLayerHideTimer);
+        googleMeetLinksLayerHideTimer = null;
+    }
+    const popup = layer.querySelector('.google-meet-popup');
+    const backdrop = layer.querySelector('.google-meet-links-layer-backdrop');
+    layer.hidden = false;
+    layer.setAttribute('aria-hidden', 'false');
+    if (popup) {
+        popup.classList.remove('google-meet-popup--leave');
+        popup.classList.remove('google-meet-popup--enter');
+        void popup.offsetWidth;
+        popup.classList.add('google-meet-popup--enter');
+    }
+    if (backdrop) {
+        backdrop.classList.remove('google-meet-links-layer-backdrop--leave');
+        backdrop.classList.remove('google-meet-links-layer-backdrop--enter');
+        void backdrop.offsetWidth;
+        backdrop.classList.add('google-meet-links-layer-backdrop--enter');
+    }
+}
+
+function closeGoogleMeetLinksLayer() {
+    const layer = document.getElementById('googleMeetLinksLayer');
+    if (!layer) return;
+    const popup = layer.querySelector('.google-meet-popup');
+    const backdrop = layer.querySelector('.google-meet-links-layer-backdrop');
+    if (popup) {
+        popup.classList.remove('google-meet-popup--enter');
+        popup.classList.add('google-meet-popup--leave');
+    }
+    if (backdrop) {
+        backdrop.classList.remove('google-meet-links-layer-backdrop--enter');
+        backdrop.classList.add('google-meet-links-layer-backdrop--leave');
+    }
+    if (googleMeetLinksLayerHideTimer) {
+        window.clearTimeout(googleMeetLinksLayerHideTimer);
+    }
+    googleMeetLinksLayerHideTimer = window.setTimeout(() => {
+        layer.hidden = true;
+        layer.setAttribute('aria-hidden', 'true');
+        popup?.classList.remove('google-meet-popup--leave');
+        backdrop?.classList.remove('google-meet-links-layer-backdrop--leave');
+        googleMeetLinksLayerHideTimer = null;
+    }, 240);
+}
+
+function updateGoogleMeetLinksPopupStats() {
+    const totalStudentsEl = document.querySelector('.google-meet-popup .card-total-students .meet-stat-value');
+    const savedEl = document.querySelector('.google-meet-popup .card-links-saved .meet-stat-value');
+    const savedSubEl = document.querySelector('.google-meet-popup .card-links-saved .meet-stat-sub');
+    const missingEl = document.querySelector('.google-meet-popup .card-links-missing .meet-stat-value');
+    const missingSubEl = document.querySelector('.google-meet-popup .card-links-missing .meet-stat-sub');
+    const sharedEl = document.querySelector('.google-meet-popup .card-invalid-links .meet-stat-value');
+    const sharedSubEl = document.querySelector('.google-meet-popup .card-invalid-links .meet-stat-sub');
+    if (!totalStudentsEl) return;
+    const registeredNames = getAllRosterStudentNamesSorted();
+    const total = registeredNames.length;
+    let saved = 0;
+    const validLinkBuckets = new Map();
+    registeredNames.forEach((name) => {
+        const rawLink = getGoogleMeetLinkForStudent(name);
+        if (!rawLink) return;
+        if (!isPlausibleGoogleMeetUrl(rawLink)) return;
+        saved += 1;
+        const normalized = normalizeGoogleMeetUrl(rawLink).toLowerCase();
+        validLinkBuckets.set(normalized, (validLinkBuckets.get(normalized) || 0) + 1);
+    });
+    let sharedStudents = 0;
+    validLinkBuckets.forEach((count) => {
+        if (count > 1) sharedStudents += count;
+    });
+    const missing = Math.max(0, total - saved);
+    const savedPct = total > 0 ? Math.round((saved / total) * 100) : 0;
+    totalStudentsEl.textContent = String(total);
+    if (savedEl) savedEl.textContent = String(saved);
+    if (savedSubEl) savedSubEl.textContent = `${savedPct}% of students`;
+    if (missingEl) missingEl.textContent = String(missing);
+    if (missingSubEl) missingSubEl.textContent = missing > 0 ? 'Needs attention' : 'All set';
+    if (sharedEl) sharedEl.textContent = String(sharedStudents);
+    if (sharedSubEl) sharedSubEl.textContent = 'Students sharing the same link';
+}
+
+function getGoogleMeetLinkForStudent(studentName) {
+    const exact = String(studentGoogleMeetLinksByName[studentName] || '').trim();
+    if (exact) return exact;
+    const target = String(studentName || '').trim().toLowerCase();
+    if (!target) return '';
+    for (const [name, link] of Object.entries(studentGoogleMeetLinksByName)) {
+        if (String(name || '').trim().toLowerCase() === target) {
+            return String(link || '').trim();
+        }
+    }
+    return '';
+}
+
+function getGoogleMeetLinkStateForStudent(studentName) {
+    const rawLink = getGoogleMeetLinkForStudent(studentName);
+    const hasLink = !!rawLink;
+    const isValidLink = hasLink && isPlausibleGoogleMeetUrl(rawLink);
+    const state = isValidLink ? 'saved' : (hasLink ? 'invalid' : 'missing');
+    return { state, rawLink, hasLink, isValidLink };
+}
+
+function getVisibleMeetLinksRowCheckboxes() {
+    return Array.from(document.querySelectorAll('#meetLinksStudentsBody .meet-links-checkbox'));
+}
+
+function syncMeetLinksSelectAllCheckbox() {
+    const selectAll = document.getElementById('meetLinksSelectAll');
+    if (!selectAll) return;
+    const rowCheckboxes = getVisibleMeetLinksRowCheckboxes();
+    const total = rowCheckboxes.length;
+    const checked = rowCheckboxes.filter((cb) => cb.checked).length;
+    selectAll.indeterminate = checked > 0 && checked < total;
+    selectAll.checked = total > 0 && checked === total;
+}
+
+function setAllVisibleMeetLinksRowsSelected(checked) {
+    getVisibleMeetLinksRowCheckboxes().forEach((cb) => {
+        cb.checked = !!checked;
+    });
+    syncMeetLinksSelectAllCheckbox();
+}
+
+function renderGoogleMeetLinksStudentsRows() {
+    const layer = document.getElementById('googleMeetLinksLayer');
+    const listBody = document.getElementById('meetLinksStudentsBody');
+    if (!listBody || !layer) return;
+    listBody.innerHTML = '';
+    const searchInput = layer.querySelector('.meet-links-search-input');
+    const statusSelect = layer.querySelector('.meet-links-status-select');
+    const searchTerm = String(searchInput?.value || '').trim().toLowerCase();
+    const selectedStatus = String(statusSelect?.value || '').trim().toLowerCase();
+    const names = getAllRosterStudentNamesSorted();
+    const filteredNames = names.filter((studentName) => {
+        const { state } = getGoogleMeetLinkStateForStudent(studentName);
+        const matchesSearch = !searchTerm || studentName.toLowerCase().includes(searchTerm);
+        const matchesStatus = !selectedStatus || state === selectedStatus;
+        return matchesSearch && matchesStatus;
+    });
+    if (filteredNames.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'meet-links-row';
+        empty.innerHTML = `
+            <div class="meet-links-cell" style="grid-column: 1 / -1; justify-content: center; color: #8b93a8; font-weight: 600;">
+                No students match current filters
+            </div>
+        `;
+        listBody.appendChild(empty);
+        syncMeetLinksSelectAllCheckbox();
+        return;
+    }
+    filteredNames.forEach((studentName) => {
+        const { state, rawLink, hasLink, isValidLink } = getGoogleMeetLinkStateForStudent(studentName);
+        const rowStateClass = state === 'saved' ? 'meet-links-row--saved' : (state === 'invalid' ? 'meet-links-row--invalid' : 'meet-links-row--missing');
+        const statusClass = state === 'saved' ? 'meet-links-status--saved' : (state === 'invalid' ? 'meet-links-status--invalid' : 'meet-links-status--missing');
+        const statusLabel = state === 'saved' ? 'Saved' : (state === 'invalid' ? 'Invalid' : 'Missing');
+        const initials = String(studentName || '')
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() || '')
+            .join('');
+        const row = document.createElement('div');
+        row.className = `meet-links-row ${rowStateClass}`;
+        row.setAttribute('role', 'row');
+        const linkMarkup = isValidLink
+            ? `
+                <span class="meet-links-link-icon" aria-hidden="true">
+                    <img src="icon/google-meet.png" alt="Google Meet" />
+                </span>
+                <span class="meet-links-url">${rawLink}</span>
+                <button type="button" class="meet-links-open-external" aria-label="Open Meet in new tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </button>
+            `
+            : (hasLink
+                ? `<span class="meet-links-url">${rawLink}</span>`
+                : `<button type="button" class="meet-links-add-link-btn">Add link</button>`);
+        row.innerHTML = `
+            <div class="meet-links-cell meet-links-cell--check">
+                <label class="meet-links-checkbox-label">
+                    <input type="checkbox" class="meet-links-checkbox" aria-label="Select student" />
+                    <span class="meet-links-checkbox-ui" aria-hidden="true"></span>
+                </label>
+            </div>
+            <div class="meet-links-cell meet-links-cell--student">
+                <span class="meet-links-avatar" aria-hidden="true">${initials}</span>
+                <span class="meet-links-student-name"></span>
+            </div>
+            <div class="meet-links-cell meet-links-cell--link">
+                ${linkMarkup}
+            </div>
+            <div class="meet-links-cell meet-links-cell--status">
+                <span class="meet-links-status ${statusClass}"><span class="meet-links-status-dot"></span>${statusLabel}</span>
+            </div>
+            <div class="meet-links-cell meet-links-cell--actions">
+                <button type="button" class="meet-links-icon-btn meet-links-icon-btn--edit" aria-label="Edit link">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button type="button" class="meet-links-icon-btn meet-links-icon-btn--more" aria-label="More options">⋯</button>
+            </div>
+        `;
+        const nameEl = row.querySelector('.meet-links-student-name');
+        if (nameEl) nameEl.textContent = studentName;
+        const rowCheckbox = row.querySelector('.meet-links-checkbox');
+        rowCheckbox?.addEventListener('change', () => syncMeetLinksSelectAllCheckbox());
+        listBody.appendChild(row);
+    });
+    syncMeetLinksSelectAllCheckbox();
+}
+
 function closeGoogleMeetModal() {
     const modal = document.getElementById('googleMeetModal');
     if (!modal) {
@@ -8150,12 +8390,33 @@ function setupGoogleMeetModal() {
     const sharedSchoolCheckbox = document.getElementById('googleMeetSharedSchoolCheckbox');
     const sharedSchoolInput = document.getElementById('googleMeetSharedSchoolInput');
     const sharedSchoolSave = document.getElementById('googleMeetSharedSchoolSave');
+    const meetLinksLayer = document.getElementById('googleMeetLinksLayer');
+    const meetLinksBackdrop = meetLinksLayer?.querySelector('.google-meet-links-layer-backdrop');
+    const meetLinksSearch = meetLinksLayer?.querySelector('.meet-links-search-input');
+    const meetLinksStatus = meetLinksLayer?.querySelector('.meet-links-status-select');
+    const meetLinksStatusIcon = meetLinksLayer?.querySelector('.status-filter-icon');
+    const meetLinksSelectAll = meetLinksLayer?.querySelector('#meetLinksSelectAll');
 
     if (!modal || !form || !schoolToggle || !listWrap) {
         return;
     }
 
     backdrop?.addEventListener('click', closeGoogleMeetModal);
+    meetLinksBackdrop?.addEventListener('click', closeGoogleMeetLinksLayer);
+    if (meetLinksLayer && meetLinksLayer.dataset.controlsBound !== '1') {
+        meetLinksLayer.dataset.controlsBound = '1';
+        meetLinksSearch?.addEventListener('input', () => renderGoogleMeetLinksStudentsRows());
+        meetLinksStatus?.addEventListener('change', () => renderGoogleMeetLinksStudentsRows());
+        meetLinksSelectAll?.addEventListener('change', () => {
+            setAllVisibleMeetLinksRowsSelected(meetLinksSelectAll.checked);
+        });
+        meetLinksStatusIcon?.addEventListener('click', () => {
+            if (!meetLinksStatus) return;
+            meetLinksStatus.value = '';
+            renderGoogleMeetLinksStudentsRows();
+            meetLinksStatus.focus();
+        });
+    }
     cancelBtn?.addEventListener('click', closeGoogleMeetModal);
     schoolToggle.addEventListener('click', () => {
         const isOpen = schoolToggle.getAttribute('aria-expanded') === 'true';
