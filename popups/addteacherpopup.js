@@ -83,41 +83,6 @@
                             <div id="addTeacherEmailWrap" class="add-teacher-password-wrap is-hidden" aria-hidden="true">
                             </div>
                         </section>
-
-                        <section class="add-teacher-card add-teacher-card--advanced">
-                            <h3 class="add-teacher-card-title">Advanced Settings (Optional)</h3>
-                            <div class="add-teacher-two-col">
-                                <label class="add-student-label">
-                                    <span>Languages Spoken</span>
-                                    <select>
-                                        <option selected>Select languages</option>
-                                    </select>
-                                </label>
-                                <label class="add-student-label">
-                                    <span>Specialties</span>
-                                    <select>
-                                        <option selected>Select specialties</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <div class="add-teacher-two-col">
-                                <label class="add-student-label">
-                                    <span>Max Weekly Hours</span>
-                                    <input type="number" min="0" step="1" placeholder="e.g. 40">
-                                </label>
-                                <label class="add-student-label">
-                                    <span>Upload Profile Photo</span>
-                                    <button type="button" class="add-teacher-upload-btn">Click to upload</button>
-                                </label>
-                            </div>
-                            <label class="add-student-label">
-                                <span>Notes</span>
-                                <textarea rows="2" placeholder="Add any additional notes..."></textarea>
-                            </label>
-                        </section>
-                    </div>
-
-                    <div class="add-teacher-redesign-side-col">
                         <section class="add-teacher-card add-teacher-card--professional">
                             <h3 class="add-teacher-card-title">Professional Settings</h3>
                             <div class="add-teacher-two-col">
@@ -159,7 +124,9 @@
                                 </label>
                             </div>
                         </section>
+                    </div>
 
+                    <div class="add-teacher-redesign-side-col">
                         <section class="add-teacher-card add-teacher-card--availability">
                             <h3 class="add-teacher-card-title">Availability</h3>
                             <table class="add-teacher-availability-table" aria-hidden="true">

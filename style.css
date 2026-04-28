@@ -529,7 +529,7 @@ body {
 .google-meet-label input {
     width: 100%;
     border: 1px solid #cfd5ec;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 9px 10px;
     font: inherit;
     color: #1f2937;
@@ -538,7 +538,7 @@ body {
 .google-meet-label select {
     width: 100%;
     border: 1px solid #cfd5ec;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 9px 10px;
     font: inherit;
     color: #1f2937;
@@ -697,7 +697,7 @@ body {
     width: 16px;
     height: 16px;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     background: #dfe3f3;
     position: relative;
     transition: none;
@@ -861,7 +861,7 @@ body {
 
 .google-meet-student-list.google-meet-school-list.is-multi-column .google-meet-student-row {
     border: 1px solid #c9d4f4;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 10px;
     border-bottom: 1px solid #c9d4f4;
 }
@@ -1135,7 +1135,7 @@ body {
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #cfd5ec;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 10px;
     font: inherit;
     font-size: 0.85rem;
@@ -1498,7 +1498,7 @@ body {
     max-height: min(90vh, 640px);
     padding: 22px 22px 18px;
     background: white;
-    border-radius: 16px;
+    border-radius: 15px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     display: flex;
     flex-direction: column;
@@ -1533,7 +1533,7 @@ body {
     min-width: 0;
     padding: 12px 14px 64px;
     border: 1px solid #c5cae9;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.95rem;
     font-family: inherit;
     line-height: 1.45;
@@ -1564,7 +1564,7 @@ body {
 .btn-class-topic-cancel,
 .btn-class-topic-save {
     padding: 10px 18px;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.95rem;
     font-weight: 600;
     cursor: pointer;
@@ -1605,7 +1605,7 @@ body {
     min-width: 0;
     padding: 10px 12px;
     border: 1px solid #c5cae9;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.92rem;
     font-family: inherit;
     background: #fff;
@@ -1620,7 +1620,7 @@ body {
 .btn-class-topic-exercise-add {
     padding: 10px 14px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #e8eaf6;
     color: #334461;
     font-weight: 600;
@@ -1701,7 +1701,7 @@ body {
     padding: 0;
     margin: 0 auto;
     border: 1px solid #c5cae9;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #fff;
     color: #334461;
     cursor: pointer;
@@ -1852,7 +1852,7 @@ input.student-reposition-modal-day {
     color: #6271c8;
     width: 26px;
     height: 26px;
-    border-radius: 6px;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1903,7 +1903,7 @@ input.student-reposition-modal-day {
     color: #334461;
     background: #eef1ff;
     border: 1px solid #c5cae9;
-    border-radius: 6px;
+    border-radius: 10px;
     cursor: pointer;
     min-width: 36px;
     min-height: 36px;
@@ -1963,7 +1963,7 @@ input.student-reposition-modal-day {
     top: 50%;
     width: 0.75rem;
     height: 0.75rem;
-    border-radius: 3px;
+    border-radius: 5px;
     transform: translate(-50%, -50%) scale(0);
     transform-origin: center;
     transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
@@ -2006,7 +2006,7 @@ input.student-reposition-modal-day {
 .btn-teacher-login-submit,
 .btn-app-message-ok {
     padding: 10px 14px;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.92rem;
     font-weight: 600;
     cursor: pointer;
@@ -2048,7 +2048,7 @@ input.student-reposition-modal-day {
     max-width: 460px;
     padding: 22px 22px 18px;
     background: white;
-    border-radius: 16px;
+    border-radius: 15px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     display: flex;
     flex-direction: column;
@@ -2230,7 +2230,7 @@ input.student-reposition-modal-day {
     top: 50%;
     width: 0.5rem;
     height: 0.5rem;
-    border-radius: 3px;
+    border-radius: 5px;
     transform: translate(-50%, -50%) scale(0);
     transform-origin: center;
     transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
@@ -2282,7 +2282,7 @@ input.student-reposition-modal-day {
 .school-settings-label input {
     padding: 8px 12px;
     border: 1px solid #c5cae9;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.92rem;
     font-family: inherit;
 }
@@ -2305,7 +2305,7 @@ input.student-reposition-modal-day {
 .btn-school-settings-cancel,
 .btn-school-settings-save {
     padding: 10px 14px;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.92rem;
     font-weight: 600;
     cursor: pointer;
@@ -2348,7 +2348,7 @@ input.student-reposition-modal-day {
     max-width: 420px;
     padding: 22px 22px 18px;
     background: white;
-    border-radius: 16px;
+    border-radius: 15px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
     display: flex;
     flex-direction: column;
@@ -2386,7 +2386,7 @@ input.student-reposition-modal-day {
 .btn-delete-school-cancel,
 .btn-delete-school-confirm {
     padding: 10px 16px;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.92rem;
     font-weight: 600;
     cursor: pointer;
@@ -2577,7 +2577,7 @@ input.student-reposition-modal-day {
     width: 100%;
     padding: 8px 10px;
     border: 1px solid #ce93d8;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.95rem;
     font-family: inherit;
     background: #fff;
@@ -2649,6 +2649,7 @@ input.student-reposition-modal-day {
 
 .add-modal-dialog {
     position: fixed;
+    top: 3%;
     left: 21%;
     z-index: 1;
 
@@ -2741,7 +2742,7 @@ input.student-reposition-modal-day {
     width: 100%;
     height: 100%;
     transform: none;
-    border-radius: 6px;
+    border-radius: 10px;
     object-fit: cover;
     box-shadow: none;
     pointer-events: none;
@@ -2868,7 +2869,7 @@ input.student-reposition-modal-day {
     vertical-align: middle;
     background: #fff;
     border: 1px solid #666;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
     margin: 0;
 }
@@ -2880,7 +2881,7 @@ input.student-reposition-modal-day {
     top: 50%;
     width: 0.7rem;
     height: 0.7rem;
-    border-radius: 2px;
+    border-radius: 5px;
     transform: translate(-50%, -50%) scale(0);
     transform-origin: center;
     transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
@@ -3153,7 +3154,7 @@ input.student-reposition-modal-day {
     min-height: 34px;
     padding: 6px 10px;
     border: 1px solid #ddd;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #f9fafb;
     font-size: 0.9rem;
     color: #333;
@@ -3199,7 +3200,7 @@ input.student-reposition-modal-day {
     margin-top: 2px;
     padding: 6px 8px;
     border: 1px solid #ddd;
-    border-radius: 6px;
+    border-radius: 10px;
     font-size: 0.9rem;
     background: #fff;
     box-sizing: border-box;
@@ -3498,7 +3499,7 @@ input.student-reposition-modal-day {
 .add-teacher-redesign-header-icon {
     width: 42px;
     height: 42px;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid #d8e1f2;
     background: linear-gradient(145deg, #f4f8ff 0%, #eaf1ff 100%);
     color: #2f63c8;
@@ -3531,11 +3532,19 @@ input.student-reposition-modal-day {
     gap: 10px;
 }
 
+.add-teacher-redesign-side-col {
+    min-height: 100%;
+}
+
+.add-teacher-card--availability {
+    flex: 1 1 auto;
+}
+
 .add-teacher-card {
     border: 1px solid #e2e8f4;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #ffffff;
-    padding: 12px;
+    padding: 5px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -3648,7 +3657,7 @@ input.student-reposition-modal-day {
 
 .add-teacher-segmented-btn {
     border: 1px solid #d6deeb;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 7px 8px;
     background: #f9fbff;
     color: #51617f;
@@ -3685,7 +3694,7 @@ input.student-reposition-modal-day {
 
 .add-teacher-ghost-btn {
     border: 1px solid #d7dfed;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 6px 8px;
     background: #f8faff;
     color: #3f5b93;
@@ -3696,7 +3705,7 @@ input.student-reposition-modal-day {
 
 .add-teacher-upload-btn {
     border: 1px dashed #c8d4eb;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #f8fbff;
     color: #4667a6;
     font-size: 0.75rem;
@@ -3704,18 +3713,6 @@ input.student-reposition-modal-day {
     text-align: center;
     cursor: pointer;
     font-family: inherit;
-}
-
-.add-modal-dialog.add-modal-dialog--expanded {
-    width: min(1080px, 92vw);
-    max-width: min(1080px, 92vw);
-}
-
-.add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
-    position: fixed;
-    top: 3%;
-    left: 21%;
-    transform: none;
 }
 
 @media (min-width: 1900px) and (min-height: 1000px) {
@@ -3819,7 +3816,7 @@ input.student-reposition-modal-day {
 .add-student-redesign-miro-logo {
     width: 30px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: 10px;
     object-fit: cover;
     flex: 0 0 30px;
     border: 1px solid #d9e1fb;
@@ -3842,7 +3839,7 @@ input.student-reposition-modal-day {
 .add-student-redesign-miro-icon {
     width: 30px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #5d74c7;
     color: #fff;
     font-size: 0.72rem;
@@ -4151,7 +4148,7 @@ input.student-reposition-modal-day {
     margin-top: 2px;
     padding: 6px 8px;
     border: 1px solid #ddd;
-    border-radius: 6px;
+    border-radius: 10px;
     font-size: 0.9rem;
     background: #fff;
     box-sizing: border-box;
@@ -4543,7 +4540,7 @@ input.student-reposition-modal-day {
 .class-report-group.collapsed .class-report-group-title {
     margin-bottom: 0;
     border-bottom-color: transparent;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #f3f5fb;
 }
 
@@ -4578,7 +4575,7 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 5px;
     background-color: transparent;
     box-shadow: inset 0 0 0 0 transparent;
     transition:
@@ -4615,7 +4612,7 @@ input.student-reposition-modal-day {
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 7px;
+    border-radius: 10px;
     background: transparent;
     color: var(--school-primary, #334461);
     cursor: pointer;
@@ -4660,7 +4657,7 @@ input.student-reposition-modal-day {
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 7px;
+    border-radius: 10px;
     background: transparent;
     color: #25d366;
     cursor: pointer;
@@ -4816,7 +4813,7 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
     height: 20px;
     border: 1px solid #fff;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #d50000;
     overflow: hidden;
     flex-shrink: 0;
@@ -4997,7 +4994,7 @@ input.student-reposition-modal-day {
     color: #334461;
     background: #f5f6fc;
     border: 1px solid #c5cae9;
-    border-radius: 6px;
+    border-radius: 10px;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
@@ -5047,7 +5044,7 @@ input.student-reposition-modal-day {
 .sidebar-section-title-text-trigger:focus-visible {
     outline: 2px solid var(--school-primary, #334461);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: 5px;
 }
 
 .sidebar-section-title:hover::after {
@@ -5241,7 +5238,7 @@ input.student-reposition-modal-day {
     padding: 0;
 
     border: 1px solid #334461;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #fff;
     color: #334461;
     line-height: 0;
@@ -5486,7 +5483,7 @@ input.student-reposition-modal-day {
 
 .admin-panel-blank {
     min-height: min(360px, 55vh);
-    border-radius: 12px;
+    border-radius: 10px;
     background: #f4f5f9;
     border: 1px dashed #c5cae9;
     box-sizing: border-box;
@@ -5502,7 +5499,7 @@ input.student-reposition-modal-day {
 .admin-dashboard-category {
     background: #f7f8fc;
     border: 1px solid #d9def5;
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 12px 14px 14px;
     min-width: 0;
 }
@@ -5526,7 +5523,7 @@ input.student-reposition-modal-day {
     padding: 10px 10px;
     background: #fff;
     border: 1px solid #e8eaf6;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.78rem;
     color: #333;
     display: flex;
@@ -5568,7 +5565,7 @@ input.student-reposition-modal-day {
 .admin-grid-cell {
     background: #f7f8fc;
     border: 1px solid #d9def5;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px 10px;
     font-size: 0.78rem;
     color: #333;
@@ -5579,7 +5576,7 @@ input.student-reposition-modal-day {
     width: 100%;
     min-width: 0;
     border: 1px solid #c8cfef;
-    border-radius: 7px;
+    border-radius: 10px;
     padding: 6px 8px;
     font-size: 0.75rem;
     box-sizing: border-box;
@@ -5595,7 +5592,7 @@ input.student-reposition-modal-day {
     border: 1px solid #c5cae9;
     background: #eef1ff;
     color: 334461;
-    border-radius: 7px;
+    border-radius: 10px;
     font-size: 0.72rem;
     padding: 5px 8px;
     cursor: pointer;
@@ -5667,7 +5664,7 @@ input.student-reposition-modal-day {
 
 .btn-student-class-report-add {
     padding: 10px 16px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: none;
     background: #334461;
     color: #fff;
@@ -5739,7 +5736,7 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
     padding: 6px 8px;
     border: 1px solid #c5cae9;
-    border-radius: 6px;
+    border-radius: 10px;
     font-family: inherit;
     font-size: 0.9rem;
     text-align: center;
@@ -5771,7 +5768,7 @@ input.student-reposition-modal-day {
     white-space: nowrap;
     padding: 6px 8px;
     border: 1px solid #c5cae9;
-    border-radius: 6px;
+    border-radius: 10px;
     text-align: center;
     font-family: inherit;
     font-size: 0.9rem;
@@ -5796,7 +5793,7 @@ input.student-reposition-modal-day {
     padding: 0;
 
     flex-shrink: 0;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #fff;
     cursor: pointer;
     display: flex;
@@ -6039,7 +6036,7 @@ header h1 {
 .btn {
     padding: 12px 24px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 1em;
     cursor: pointer;
     font-weight: 600;
@@ -6085,7 +6082,7 @@ header h1 {
     width: 100%;
     min-width: 0;
     background: #334461;
-    border-radius: 8px;
+    border-radius: 10px;
     overflow: hidden;
     margin-bottom: 2px;
     box-sizing: border-box;
@@ -6304,7 +6301,7 @@ header h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    border-radius: 2px;
+    border-radius: 5px;
 }
 
 .time-slot-student-chip:hover {
@@ -6357,7 +6354,7 @@ header h1 {
     gap: 4px;
     padding: 4px 6px;
     border: 1px solid #c5cae9;
-    border-radius: 6px;
+    border-radius: 10px;
     background: #f5f7ff;
     color: #334461;
     font-size: 0.68rem;
@@ -6496,7 +6493,7 @@ header h1 {
     width: 14px;
     height: 14px;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     box-sizing: border-box;
     background: #dfe3f3;
     appearance: none;
@@ -6566,7 +6563,7 @@ header h1 {
     height: 34px;
     padding: 0 10px;
     border: 1px solid #c5cae9;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.82rem;
     color: #1f2340;
     background: #fff;
@@ -6589,7 +6586,7 @@ header h1 {
 .calendar-link-popover-btn {
     min-width: 72px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: none;
     font-size: 0.75rem;
     font-weight: 700;
@@ -6874,7 +6871,7 @@ header h1 {
 }
 
 .calendar-prompt-class-count {
-    border-radius: 12px;
+    border-radius: 10px;
     background: #efedff;
     color: #5750d6;
     font-size: 0.82rem;
@@ -6937,7 +6934,7 @@ header h1 {
 .calendar-prompt-popover-btn {
     min-width: 188px;
     height: 48px;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid #e3e6f0;
     font-size: 0.88rem;
     font-weight: 700;
@@ -7169,7 +7166,7 @@ header h1 {
 
     background: white;
     border: 1px solid #d8dbe7;
-    border-radius: 8px;
+    border-radius: 10px;
     box-shadow: 2.5px 2.5px 5px rgba(0, 0, 0, 0.25);
 }
 
@@ -7308,7 +7305,7 @@ header h1 {
     align-items: flex-start;
     background: #fff;
     border: 1px solid #d8dbe7;
-    border-radius: 8px;
+    border-radius: 10px;
     box-shadow: 2.5px 2.5px 5px rgba(0, 0, 0, 0.25);
     z-index: 1001;
     pointer-events: none;
@@ -7417,7 +7414,7 @@ header h1 {
 .context-submenu-item {
     width: 100%;
     border: 0;
-    border-radius: 6px;
+    border-radius: 10px;
     background: transparent;
     color: #2f2f2f;
     text-align: left;
@@ -7448,7 +7445,7 @@ header h1 {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: 5px;
     color: #7f89a5;
     background: #edf0f7;
     flex: 0 0 auto;
@@ -7480,7 +7477,7 @@ header h1 {
 .context-submenu-student-item {
     width: 100%;
     border: 0;
-    border-radius: 6px;
+    border-radius: 10px;
     background: transparent;
     color: #2f2f2f;
     text-align: left;
@@ -7626,7 +7623,7 @@ header h1 {
     height: 40px;
     padding: 0 16px;
     border: 1px solid #cfd5ec;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #fff;
     font-size: 0.88rem;
     font-weight: 600;
@@ -7748,7 +7745,7 @@ header h1 {
     flex-shrink: 0;
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7799,7 +7796,7 @@ header h1 {
     display: flex;
     flex-direction: column;
     border: 1px solid #eceff7;
-    border-radius: 14px;
+    border-radius: 15px;
     background: #fff;
     overflow: hidden;
 }
@@ -8075,7 +8072,7 @@ header h1 {
     height: 32px;
     padding: 0;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     color: #5d6685;
     cursor: pointer;
@@ -8120,7 +8117,7 @@ header h1 {
     flex-direction: column;
     gap: 10px;
     padding: 12px;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid #dde3f1;
     background: #ffffff;
     box-shadow: 0 14px 28px rgba(10, 26, 51, 0.2);
@@ -8176,7 +8173,7 @@ header h1 {
 .meet-links-add-dialog-btn {
     height: 32px;
     padding: 0 12px;
-    border-radius: 9px;
+    border-radius: 10px;
     border: 1px solid transparent;
     font-family: inherit;
     font-size: 0.78rem;
@@ -8279,7 +8276,7 @@ header h1 {
     height: 34px;
     padding: 0;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: transparent;
     color: #5d6685;
     cursor: pointer;
