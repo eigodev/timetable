@@ -2644,7 +2644,9 @@ input.student-reposition-modal-day {
 .add-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .add-modal-dialog {
@@ -2654,12 +2656,11 @@ input.student-reposition-modal-day {
     z-index: 1;
 
     width: 770px;
-    height: 500px;
+    height: 550px;
     padding: 20px;
 
     border: 0;
     box-sizing: content-box;
-    padding-bottom: 76px;
     background: white;
     border-radius: 20px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -3684,18 +3685,20 @@ input.student-reposition-modal-day {
 }
 
 .add-teacher-segmented-btn {
-    border: 1px solid #d6deeb;
-    border-radius: 10px;
-    padding: 7px 8px;
-    background: #f9fbff;
-    color: #51617f;
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 5px;
     gap: 6px;
+
+    border: 1px solid #d6deeb;
+    border-radius: 10px;
+    background: #f9fbff;
+
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #51617f;
+    cursor: pointer;
 }
 
 .add-teacher-segmented-btn.is-active {
