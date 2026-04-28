@@ -81,16 +81,6 @@
                                 </label>
                             </div>
                             <div id="addTeacherEmailWrap" class="add-teacher-password-wrap is-hidden" aria-hidden="true">
-                                <div class="add-teacher-password-options" aria-hidden="true">
-                                    <button type="button" class="add-teacher-option-card is-active">
-                                        <strong>Auto-generate password</strong>
-                                        <span>A secure password will be generated and emailed.</span>
-                                    </button>
-                                    <button type="button" class="add-teacher-option-card">
-                                        <strong>Create manually</strong>
-                                        <span>Set a custom password for this teacher.</span>
-                                    </button>
-                                </div>
                             </div>
                         </section>
 
