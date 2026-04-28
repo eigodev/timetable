@@ -93,16 +93,16 @@
     <div id="contextMenu" class="context-menu"></div>
 
     <!-- Add teacher profile / add school modal -->
-    <div id="addStudentModal" class="add-student-modal add-modal am" data-ui="add-modal" aria-hidden="true">
-        <div class="add-student-modal-backdrop am-bd" id="addStudentModalBackdrop"></div>
-        <div class="add-student-dialog add-modal__dialog am-dlg" data-ui="add-modal-dialog" role="dialog" aria-label="Add profile, student, or school">
-            <form id="addStudentForm" class="add-student-form add-modal__form am-form" data-ui="add-modal-form">
+    <div id="addModal" class="add-modal am" data-ui="add-modal" aria-hidden="true">
+        <div class="add-modal-backdrop am-bd" id="addModalBackdrop"></div>
+        <div class="add-modal-dialog add-modal__dialog am-dlg" data-ui="add-modal-dialog" role="dialog" aria-label="Add profile, student, or school">
+            <form id="addStudentForm" class="add-modal-form add-modal__form am-form" data-ui="add-modal-form">
                 <div class="add-popup-content add-modal__content am-c" data-ui="add-popup-content">
                     <div class="addstudentpopup add-popup-section add-popup-section--student am-s am-s--st" data-mode="student"></div>
                     <div class="addschoolpopup add-popup-section add-popup-section--school am-s am-s--sc" data-mode="school"></div>
                     <div class="addteacherpopup add-popup-section add-popup-section--teacher am-s am-s--tc" data-mode="teacher"></div>
                 </div>
-                <div class="add-student-actions am-act">
+                <div class="add-modal-actions am-act">
                     <button type="button" class="btn-add-student-cancel" id="addStudentCancel">Cancel</button>
                     <button type="submit" class="btn-add-student-submit" id="addStudentFormSubmit">Add</button>
                 </div>
@@ -187,15 +187,15 @@
                 <div class="add-student-redesign-fields-card">
                     <div class="add-student-name-row add-student-form-row add-student-form-row--names">
                         <label class="add-student-label">
-                            <span>Given name(s) *</span>
-                            <input type="text" id="editStudentFirst" name="firstName" autocomplete="off" required maxlength="80" placeholder="e.g. Ana Julia or Carolina Mayumi" title="All given names; use spaces inside this field only">
+                            <span>First name</span>
+                            <input type="text" id="editStudentFirst" name="firstName" autocomplete="off" required maxlength="80" placeholder="Your first name">
                         </label>
                         <label class="add-student-label">
-                            <span>Family name *</span>
-                            <input type="text" id="editStudentLast" name="lastName" autocomplete="off" required maxlength="80" placeholder="e.g. Silva or Nakadomari">
+                            <span>Last name</span>
+                            <input type="text" id="editStudentLast" name="lastName" autocomplete="off" required maxlength="80" placeholder="Your last name">
                         </label>
                     </div>
-                    <div class="add-student-modal-contact-row">
+                    <div class="add-modal-contact-row">
                         <label class="add-student-label add-student-contact-city-wrap">
                             <span>City</span>
                             <input type="text" id="editStudentCity" name="city" autocomplete="address-level2" maxlength="120" placeholder="Enter city">
@@ -629,6 +629,18 @@
             </div>
         </div>
     </div>
+
+    <!-- Popups -->
+    <div class="add-modal"></div>
+    <div class="add-school"></div>
+    <div class="add-student"></div>
+    <div class="add-teacher"></div>
+    <div class="app-message"></div>
+    <div class="edit-student"></div>
+    <div class="google-meet-link"></div>
+    <div class="login-student"></div>
+    <div class="login-teacher"></div>
+    <div class="student-reposition"></div>
 
     <!-- Admin control panel -->
 

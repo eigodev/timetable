@@ -23,7 +23,7 @@
         if (!studentPopupContainer) return;
 
         studentPopupContainer.innerHTML = `
-            <div id="addStudentHeaderRow" class="add-student-form-section am-sec is-hidden" aria-hidden="true">
+            <div id="addStudentHeaderRow" class="add-modal-form-section am-sec is-hidden" aria-hidden="true">
                 <div class="add-student-heading-block add-student-heading add-student-redesign-heading">
                     <div class="add-student-redesign-heading-icon" aria-hidden="true">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -37,20 +37,20 @@
                     </div>
                 </div>
             </div>
-            <div id="addStudentFields" class="add-student-form-section am-sec is-hidden" aria-hidden="true">
+            <div id="addStudentFields" class="add-modal-form-section am-sec is-hidden" aria-hidden="true">
                 <div class="add-student-redesign-fields-card">
                     <div class="add-student-name-row add-student-form-row add-student-form-row--names is-hidden" id="addStudentNameRow" aria-hidden="true">
                         <label class="add-student-label">
-                            <span>Given name(s) *</span>
-                            <input type="text" id="addStudentFirst" name="firstName" autocomplete="off" maxlength="80" placeholder="e.g. Ana Julia or Carolina Mayumi" title="All given names; use spaces inside this field only">
+                            <span>First Name</span>
+                            <input type="text" id="addStudentFirst" name="firstName" autocomplete="off" maxlength="80" placeholder="Samuel">
                         </label>
                         <label class="add-student-label">
-                            <span>Family name *</span>
-                            <input type="text" id="addStudentLast" name="lastName" autocomplete="off" maxlength="80" placeholder="e.g. Silva or Nakadomari">
+                            <span>Last Name</span>
+                            <input type="text" id="addStudentLast" name="lastName" autocomplete="off" maxlength="80" placeholder="Öettinger">
                         </label>
                     </div>
 
-                    <div id="addStudentContactRow" class="add-student-modal-contact-row am-row is-hidden" aria-hidden="true">
+                    <div id="addStudentContactRow" class="add-modal-contact-row am-row is-hidden" aria-hidden="true">
                         <label class="add-student-label add-student-contact-city-wrap" id="addStudentContactCityWrap">
                             <span>City</span>
                             <input type="text" id="addStudentCity" name="city" autocomplete="address-level2" maxlength="120" placeholder="Enter city">

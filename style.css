@@ -1279,8 +1279,8 @@ body {
     transition: filter 0.2s ease;
 }
 
-/* Add student modal */
-.add-student-modal {
+/* Add modal */
+.add-modal {
     display: none;
     position: fixed;
     inset: 0;
@@ -1380,7 +1380,7 @@ body {
     }
 }
 
-.add-student-modal.is-open .add-student-modal-backdrop,
+.add-modal.is-open .add-modal-backdrop,
 .edit-student-modal.is-open .edit-student-modal-backdrop,
 .school-settings-modal.is-open .school-settings-modal-backdrop,
 .delete-school-modal.is-open .delete-school-modal-backdrop,
@@ -1391,7 +1391,7 @@ body {
     animation: modal-backdrop-in 0.28s ease-out both;
 }
 
-.add-student-modal.is-open .add-student-dialog,
+.add-modal.is-open .add-modal-dialog,
 .edit-student-modal.is-open .edit-student-dialog,
 .school-settings-modal.is-open .school-settings-dialog,
 .delete-school-modal.is-open .delete-school-dialog,
@@ -1403,7 +1403,7 @@ body {
 }
 
 .google-meet-modal.is-closing .google-meet-modal-backdrop,
-.add-student-modal.is-closing .add-student-modal-backdrop,
+.add-modal.is-closing .add-modal-backdrop,
 .edit-student-modal.is-closing .edit-student-modal-backdrop,
 .school-settings-modal.is-closing .school-settings-modal-backdrop,
 .delete-school-modal.is-closing .delete-school-modal-backdrop,
@@ -1415,7 +1415,7 @@ body {
 }
 
 .google-meet-modal.is-closing .google-meet-dialog,
-.add-student-modal.is-closing .add-student-dialog,
+.add-modal.is-closing .add-modal-dialog,
 .edit-student-modal.is-closing .edit-student-dialog,
 .school-settings-modal.is-closing .school-settings-dialog,
 .delete-school-modal.is-closing .delete-school-dialog,
@@ -1431,7 +1431,7 @@ body {
 }
 
 .google-meet-modal.is-closing,
-.add-student-modal.is-closing,
+.add-modal.is-closing,
 .edit-student-modal.is-closing,
 .delete-school-modal.is-closing,
 .school-settings-modal.is-closing,
@@ -1443,7 +1443,7 @@ body {
     display: flex;
 }
 
-.add-student-modal.is-open,
+.add-modal.is-open,
 .google-meet-modal.is-open,
 .delete-school-modal.is-open {
     display: flex;
@@ -2637,17 +2637,17 @@ input.student-reposition-modal-day {
     filter: brightness(1.06);
 }
 
-.add-student-modal.is-open {
+.add-modal.is-open {
     display: flex;
 }
 
-.add-student-modal-backdrop {
+.add-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
 }
 
-.add-student-dialog {
+.add-modal-dialog {
     position: fixed;
     left: 21%;
     z-index: 1;
@@ -2666,7 +2666,7 @@ input.student-reposition-modal-day {
     overflow: visible;
 }
 
-.add-student-dialog.add-student-dialog--expanded {
+.add-modal-dialog.add-modal-dialog--expanded {
     max-width: 65vw;
 }
 
@@ -2676,7 +2676,7 @@ input.student-reposition-modal-day {
     color: #334461;
 }
 
-.add-student-form {
+.add-modal-form {
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -3041,6 +3041,7 @@ input.student-reposition-modal-day {
     }
 }
 
+.add-modal-form-section,
 .add-student-form-section {
     display: flex;
     flex-direction: column;
@@ -3060,25 +3061,13 @@ input.student-reposition-modal-day {
     display: contents;
 }
 
-.am,
-.am-form,
-.am-dlg,
-.am-bd,
-.am-act,
-.am-sec,
-.am-row,
-.am-s--st,
-.am-s--sc,
-.am-s--tc {
-    /* Short selector aliases for add-modal migration (non-breaking). */
-}
-
 .add-school-form-section {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
+.add-modal-form-section.is-hidden,
 .add-student-form-section.is-hidden {
     display: none;
 }
@@ -3265,7 +3254,7 @@ input.student-reposition-modal-day {
     display: none;
 }
 
-.add-student-modal-contact-row {
+.add-modal-contact-row {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
@@ -3273,64 +3262,64 @@ input.student-reposition-modal-day {
     width: 100%;
 }
 
-.add-student-modal-contact-row.is-hidden {
+.add-modal-contact-row.is-hidden {
     display: none;
 }
 
-.add-student-modal-contact-row .add-modal-contact-city-wrap {
+.add-modal-contact-row .add-modal-contact-city-wrap {
     flex: 1 1 0;
     min-width: 0;
     margin-top: 0;
 }
 
-.add-student-modal-contact-row .add-student-contact-city-wrap {
+.add-modal-contact-row .add-student-contact-city-wrap {
     flex: 1 1 0;
     min-width: 0;
     margin-top: 0;
 }
 
-.add-student-modal-contact-row .add-modal-contact-email-wrap {
+.add-modal-contact-row .add-modal-contact-email-wrap {
     flex: 1 1 0;
     min-width: 0;
     margin-top: 0;
 }
 
-.add-student-modal-contact-row .add-modal-contact-city-wrap #addStudentCity {
+.add-modal-contact-row .add-modal-contact-city-wrap #addStudentCity {
     width: 100%;
     box-sizing: border-box;
 }
 
-.add-student-modal-contact-row .add-modal-contact-country-wrap {
+.add-modal-contact-row .add-modal-contact-country-wrap {
     flex: 0 0 auto;
     margin-top: 0;
 }
 
-.add-student-modal-contact-row .add-student-contact-country-wrap {
+.add-modal-contact-row .add-student-contact-country-wrap {
     flex: 0 0 auto;
     margin-top: 0;
 }
 
-.add-student-modal-contact-row .add-modal-contact-phone-wrap {
-    flex: 0 0 auto;
-    margin-top: 0;
-    min-width: 0;
-}
-
-.add-student-modal-contact-row .add-student-contact-phone-wrap {
+.add-modal-contact-row .add-modal-contact-phone-wrap {
     flex: 0 0 auto;
     margin-top: 0;
     min-width: 0;
 }
 
-.add-student-modal-contact-row .add-modal-contact-phone-wrap .add-student-phone-row {
+.add-modal-contact-row .add-student-contact-phone-wrap {
+    flex: 0 0 auto;
+    margin-top: 0;
+    min-width: 0;
+}
+
+.add-modal-contact-row .add-modal-contact-phone-wrap .add-student-phone-row {
     width: auto;
 }
 
-.add-student-modal-contact-row .add-student-contact-phone-wrap .add-student-phone-row {
+.add-modal-contact-row .add-student-contact-phone-wrap .add-student-phone-row {
     width: auto;
 }
 
-.add-student-modal-contact-row .add-modal-contact-phone-wrap #addStudentPhone {
+.add-modal-contact-row .add-modal-contact-phone-wrap #addStudentPhone {
     flex: 0 0 auto;
     width: 8rem;
     min-width: 0;
@@ -3338,7 +3327,7 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
 }
 
-.add-student-modal-contact-row .add-student-contact-phone-wrap #addStudentPhone {
+.add-modal-contact-row .add-student-contact-phone-wrap #addStudentPhone {
     flex: 0 0 auto;
     width: 8rem;
     min-width: 0;
@@ -3346,7 +3335,7 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
 }
 
-.add-student-modal-contact-row #addTeacherPhone {
+.add-modal-contact-row #addTeacherPhone {
     flex: 0 0 auto;
     width: 8rem;
     min-width: 0;
@@ -3477,6 +3466,14 @@ input.student-reposition-modal-day {
 }
 
 .add-student-title {
+    margin: 0;
+    font-family: 'Gluten', cursive;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #334461;
+}
+
+.add-teacher-title {
     margin: 0;
     font-family: 'Gluten', cursive;
     font-size: 1.15rem;
@@ -3839,25 +3836,25 @@ input.student-reposition-modal-day {
 }
 
 /* Add School: offsite + edit — solid #334461 (sidebar Passport row stays red) */
-.add-student-dialog .add-school-external-split.sidebar-section-title-passport-split {
+.add-modal-dialog .add-school-external-split.sidebar-section-title-passport-split {
     border: 1px solid #fff;
     background: #334461;
     width: 34px;
     height: 100%;
 }
 
-.add-student-dialog .add-school-external-split .sidebar-section-title-passport-split-rule {
+.add-modal-dialog .add-school-external-split .sidebar-section-title-passport-split-rule {
     background: #fff;
 }
 
-.add-student-dialog .add-school-external-split .sidebar-section-title-passport-btn {
+.add-modal-dialog .add-school-external-split .sidebar-section-title-passport-btn {
     width: 100%;
     min-width: 0;
     height: 100%;
     color: #fff;
 }
 
-.add-student-dialog .add-school-external-split .sidebar-section-title-passport-btn:hover {
+.add-modal-dialog .add-school-external-split .sidebar-section-title-passport-btn:hover {
     background: rgba(255, 255, 255, 0.2);
 }
 
@@ -3951,7 +3948,7 @@ input.student-reposition-modal-day {
     margin-top: 0;
 }
 
-.add-student-actions {
+.add-modal-actions {
     position: absolute;
     right: 20px;
     bottom: 20px;

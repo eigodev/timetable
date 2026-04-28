@@ -132,13 +132,13 @@
 
     function openAddSchoolPopup() {
         if (typeof window.requestAddPopupMode === 'function') {
-            window.requestAddPopupMode('student');
+            window.requestAddPopupMode('school');
         }
     }
 
     const registry = ensureAddPopupRegistry();
     registry.register('school', {
-        mode: 'student',
+        mode: 'school',
         render: renderAddSchoolPopup
     });
     renderAddSchoolPopup();

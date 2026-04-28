@@ -79,10 +79,10 @@ let schoolThemeColors = {};
 let schoolBillingModels = {};
 /** Per-school billing configuration values, keyed by normalized school title. */
 let schoolBillingConfigs = {};
-let addStudentModalMode = 'student';
+let addModalMode = 'school';
 let addStudentTargetSchool = '';
 const ADD_MODAL_MODE_ALIASES = {
-    school: 'student',
+    school: 'school',
     student: 'student-global',
     'student-global': 'student-global',
     'student-entry': 'student-entry',
@@ -141,7 +141,7 @@ function openModalWithAnimation(modal) {
 
 function getCanonicalAddModalMode(mode) {
     const key = String(mode || '').trim().toLowerCase();
-    return ADD_MODAL_MODE_ALIASES[key] || 'student';
+    return ADD_MODAL_MODE_ALIASES[key] || 'school';
 }
 
 function ensureAddPopupProvidersRendered() {
@@ -157,7 +157,7 @@ function ensureAddPopupProvidersRendered() {
 function getAddModalDialogEl() {
     return document.querySelector('[data-ui="add-modal-dialog"]')
         || document.querySelector('.am-dlg')
-        || document.querySelector('.add-student-dialog');
+        || document.querySelector('.add-modal-dialog');
 }
 
 function setGoogleMeetToggleText(nextText, animate = false) {
@@ -338,8 +338,8 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
-            const addStudentModal = document.getElementById('addStudentModal');
-            if (addStudentModal?.classList.contains('is-open')) {
+            const addModal = document.getElementById('addModal');
+            if (addModal?.classList.contains('is-open')) {
                 e.preventDefault();
                 closeAddStudentModal();
                 return;
@@ -434,7 +434,7 @@ function setupGlobalPointerDownToDismissOverlays() {
                 { id: 'schoolSettingsModal', close: closeSchoolSettingsModal },
                 { id: 'googleMeetModal', close: closeGoogleMeetModal },
                 { id: 'editStudentModal', close: closeEditStudentModal },
-                { id: 'addStudentModal', close: closeAddStudentModal }
+                { id: 'addModal', close: closeAddStudentModal }
             ];
 
             for (const item of modalDismissOrder) {
@@ -2256,13 +2256,20 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
             chip.type = 'button';
             chip.className = 'time-slot-student-chip';
             chip.dataset.studentId = buildGoogleMeetStudentId(name);
-            const chipLabel = formatStudentDisplayNameForCalendarChip(name);
-            chip.textContent = chipLabel;
+            chip.textContent = normalizeStudentDisplayName(name);
             chip.title = name;
             chip.setAttribute('aria-label', `Show ${name} in student list`);
             wrap.appendChild(chip);
         });
         slotEl.appendChild(wrap);
+        const chips = wrap.querySelectorAll('.time-slot-student-chip');
+        chips.forEach((chip) => {
+            const fullName = String(chip.title || '').trim();
+            if (!fullName) return;
+            if (isElementTextHorizontallyOverflowing(chip)) {
+                chip.textContent = formatStudentDisplayNameForCalendarChip(fullName);
+            }
+        });
     }
     slotEl.title = label;
     slotEl.classList.toggle('time-slot--with-student-names', names.length > 0);
@@ -6399,9 +6406,9 @@ function setupAdminSidebarNavDelegation() {
 }
 
 /**
- * Split a stored display name into given name(s) + family name.
- * The last whitespace-separated token is always the family name so compound
- * given names work ("Carolina Mayumi Nakadomari" → first "Carolina Mayumi", last "Nakadomari").
+ * Split a stored display name into First name + last name.
+ * The last whitespace-separated token is always the last name so compound
+ * first names work ("Carolina Mayumi Nakadomari" → first "Carolina", last "Mayumi Nakadomari").
  */
 function splitName(fullName) {
     const cleaned = String(fullName || '').trim().replace(/\s+/g, ' ');
@@ -6416,17 +6423,26 @@ function splitName(fullName) {
     };
 }
 
-/** Short label for calendar chips: "Carolina Nakadomari" → "Carolina N.."; single names unchanged. */
+function normalizeStudentDisplayName(fullName) {
+    return String(fullName || '').trim().replace(/\s+/g, ' ');
+}
+
+function isElementTextHorizontallyOverflowing(el) {
+    if (!el) return false;
+    return Math.ceil(el.scrollWidth) > Math.ceil(el.clientWidth) + 1;
+}
+
+/** Short label for calendar chips when full name does not fit. */
 function formatStudentDisplayNameForCalendarChip(fullName) {
-    const cleaned = String(fullName || '').trim().replace(/\s+/g, ' ');
+    const cleaned = normalizeStudentDisplayName(fullName);
     if (!cleaned) return '';
     const parts = cleaned.split(' ');
     if (parts.length < 2) return cleaned;
     const last = parts[parts.length - 1];
     const initial = String(last).charAt(0);
     if (!initial) return cleaned;
-    const given = parts.slice(0, -1).join(' ');
-    return `${given} ${initial}..`;
+    const first = parts.slice(0, -1).join(' ');
+    return `${first} ${initial}.`;
 }
 
 function getStudentPhoneInfo(studentName) {
@@ -6702,7 +6718,7 @@ async function upsertStudentFromEditForm(action = 'save') {
 
     const fullName = `${String(first).trim()} ${String(last).trim()}`.replace(/\s+/g, ' ').trim();
     if (!fullName) {
-        alert('Please enter given name(s) and family name.');
+        alert('Please enter First name and Last name.');
         return;
     }
     if (!nextSchool) {
@@ -7079,7 +7095,7 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
     const email = String(emailRaw || '').trim();
     const password = String(passwordRaw || '');
     if (!first || !last) {
-        showAppMessage('Please enter given name(s) and family name.');
+        showAppMessage('Please enter First name and Last name.');
         return;
     }
     if (!email) {
@@ -7152,7 +7168,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const last = String(lastName || '').trim();
     const schoolName = String(schoolNameRaw || '').trim();
     if (!first || !last) {
-        alert('Please enter given name(s) and family name.');
+        alert('Please enter First name and Last name.');
         return;
     }
     if (!schoolName) {
@@ -7462,13 +7478,20 @@ function updateAddStudentPassportFieldVisibility() {
     const submitBtn = document.getElementById('addStudentFormSubmit');
     if (!dialog || !schoolInput || !schoolSelect) return;
 
-    const isTeacherMode = addStudentModalMode === 'teacher';
-    const isStudentEntryMode = addStudentModalMode === 'student-entry';
-    const isStudentGlobalMode = addStudentModalMode === 'student-global';
-    const isAddSchoolMode = addStudentModalMode === 'student';
+    const isTeacherMode = addModalMode === 'teacher';
+    const isStudentEntryMode = addModalMode === 'student-entry';
+    const isStudentGlobalMode = addModalMode === 'student-global';
+    const isAddSchoolMode = addModalMode === 'school';
     const showStudentFields = isStudentEntryMode || isStudentGlobalMode;
     const useNameFields = isTeacherMode || isStudentEntryMode;
     const useNameFieldsAny = useNameFields || isStudentGlobalMode;
+    const modal = document.getElementById('addModal');
+
+    if (modal) {
+        modal.classList.toggle('add-modal--student', showStudentFields);
+        modal.classList.toggle('add-modal--teacher', isTeacherMode);
+        modal.classList.toggle('add-modal--school', isAddSchoolMode);
+    }
 
     if (teacherContactRow) {
         teacherContactRow.classList.toggle('is-hidden', !isTeacherMode);
@@ -7660,7 +7683,7 @@ function updateAddStudentPassportFieldVisibility() {
             passportLinkInput.value = '';
         }
     }
-    dialog.classList.remove('add-student-dialog--expanded');
+    dialog.classList.remove('add-modal-dialog--expanded');
 
     if (submitBtn) {
         submitBtn.textContent = isTeacherMode ? 'Add teacher' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
@@ -7672,9 +7695,9 @@ function updateAddStudentPassportFieldVisibility() {
     updateAddSchoolBillingExplainer();
 }
 
-function openAddStudentModal(mode = 'student') {
+function openAddStudentModal(mode = 'school') {
     ensureAddPopupProvidersRendered();
-    const modal = document.getElementById('addStudentModal');
+    const modal = document.getElementById('addModal');
     const teacherFirstInput = document.getElementById('addTeacherFirst');
     const teacherLastInput = document.getElementById('addTeacherLast');
     const teacherPhoneInput = document.getElementById('addTeacherPhone');
@@ -7704,12 +7727,12 @@ function openAddStudentModal(mode = 'student') {
 
     const normalizedMode = getCanonicalAddModalMode(mode);
     const preservedEntrySchool = normalizedMode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';
-    addStudentModalMode =
+    addModalMode =
         normalizedMode === 'teacher'
             ? 'teacher'
-            : (normalizedMode === 'student-entry' ? 'student-entry' : (normalizedMode === 'student-global' ? 'student-global' : 'student'));
-    addStudentTargetSchool = addStudentModalMode === 'student-entry' ? preservedEntrySchool : '';
-    if (addStudentModalMode === 'teacher' && (!teacherFirstInput || !teacherLastInput)) {
+            : (normalizedMode === 'student-entry' ? 'student-entry' : (normalizedMode === 'student-global' ? 'student-global' : 'school'));
+    addStudentTargetSchool = addModalMode === 'student-entry' ? preservedEntrySchool : '';
+    if (addModalMode === 'teacher' && (!teacherFirstInput || !teacherLastInput)) {
         return;
     }
     if (teacherFirstInput) teacherFirstInput.value = '';
@@ -7763,12 +7786,12 @@ function openAddStudentModal(mode = 'student') {
     updateAddStudentPassportFieldVisibility();
 
     openModalWithAnimation(modal);
-    if (addStudentModalMode === 'teacher' && teacherFirstInput) {
+    if (addModalMode === 'teacher' && teacherFirstInput) {
         teacherFirstInput.focus();
-    } else if ((addStudentModalMode === 'student-entry' || addStudentModalMode === 'student-global') && studentFirstInput) {
+    } else if ((addModalMode === 'student-entry' || addModalMode === 'student-global') && studentFirstInput) {
         studentFirstInput.focus();
     } else {
-        if (addStudentModalMode === 'student-global') {
+        if (addModalMode === 'student-global') {
             schoolSelect?.focus();
         } else {
             schoolInput.focus();
@@ -8952,7 +8975,7 @@ function setupGoogleMeetModal() {
 }
 
 function closeAddStudentModal() {
-    const modal = document.getElementById('addStudentModal');
+    const modal = document.getElementById('addModal');
     if (!modal) {
         return;
     }
@@ -8967,10 +8990,10 @@ function closeAddStudentModal() {
 
 function setupAddStudentModal() {
     ensureAddPopupProvidersRendered();
-    const modal = document.getElementById('addStudentModal');
+    const modal = document.getElementById('addModal');
     const form = document.getElementById('addStudentForm');
     const cancelBtn = document.getElementById('addStudentCancel');
-    const backdrop = document.getElementById('addStudentModalBackdrop');
+    const backdrop = document.getElementById('addModalBackdrop');
     const schoolInput = document.getElementById('addSchoolNameInput');
     const studentFirstInput = document.getElementById('addStudentFirst');
     const studentLastInput = document.getElementById('addStudentLast');
@@ -9003,7 +9026,7 @@ function setupAddStudentModal() {
     teacherPhoneCountrySelect?.addEventListener('change', handleAddTeacherPhoneCountryChanged);
     const schoolSelectEl = document.getElementById('addStudentGroupSelect');
     schoolSelectEl?.addEventListener('change', () => {
-        if (addStudentModalMode !== 'student-global') return;
+        if (addModalMode !== 'student-global') return;
         syncAddStudentModalThemeFromSchoolTitle(schoolSelectEl.value);
     });
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
@@ -9090,7 +9113,7 @@ function setupAddStudentModal() {
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (addStudentModalMode === 'teacher') {
+        if (addModalMode === 'teacher') {
             const teacherValidityEls = [
                 document.getElementById('addTeacherFirst'),
                 document.getElementById('addTeacherLast'),
@@ -9114,11 +9137,11 @@ function setupAddStudentModal() {
         }
         const first = document.getElementById('addStudentFirst')?.value || '';
         const last = document.getElementById('addStudentLast')?.value || '';
-        if (addStudentModalMode === 'student-entry') {
+        if (addModalMode === 'student-entry') {
             await addStudentToSchoolFromForm(first, last, addStudentTargetSchool);
             return;
         }
-        if (addStudentModalMode === 'student-global') {
+        if (addModalMode === 'student-global') {
             const schoolName = document.getElementById('addStudentGroupSelect')?.value || '';
             await addStudentToSchoolFromForm(first, last, schoolName);
             return;
