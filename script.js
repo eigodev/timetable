@@ -5970,6 +5970,15 @@ function setupPasswordToggle(inputId, buttonId) {
 
 function setupPasswordToggles() {
     setupPasswordToggle('addTeacherPassword', 'addTeacherPasswordToggle');
+    const addTeacherPwdInput = document.getElementById('addTeacherPassword');
+    const addTeacherPwdGen = document.getElementById('addTeacherPasswordGenerate');
+    if (addTeacherPwdGen && addTeacherPwdInput && addTeacherPwdGen.dataset.bound !== '1') {
+        addTeacherPwdGen.dataset.bound = '1';
+        addTeacherPwdGen.addEventListener('click', () => {
+            addTeacherPwdInput.value = generateAddStudentPlatePassword();
+            addTeacherPwdInput.focus();
+        });
+    }
     const addStudentPwdInput = document.getElementById('addStudentPassword');
     const addStudentPwdGen = document.getElementById('addStudentPasswordGenerate');
     if (addStudentPwdGen && addStudentPwdInput && addStudentPwdGen.dataset.bound !== '1') {
@@ -7765,7 +7774,7 @@ function openAddStudentModal(mode = 'school') {
     if (teacherEmailInput) teacherEmailInput.value = '';
     if (teacherPasswordInput) {
         teacherPasswordInput.value = '';
-        teacherPasswordInput.type = 'password';
+        teacherPasswordInput.type = 'text';
         setPasswordToggleVisual(teacherPasswordInput, teacherPasswordToggleBtn);
     }
     if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;

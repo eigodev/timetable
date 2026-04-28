@@ -52,10 +52,23 @@
                                 </label>
                             </div>
                             <div id="addTeacherContactRow" class="add-teacher-contact-stack is-hidden" aria-hidden="true">
-                                <label class="add-student-label add-student-contact-email-wrap">
-                                    <span>Email Address *</span>
-                                    <input type="email" id="addTeacherEmail" name="teacherEmail" autocomplete="email" maxlength="120" placeholder="Enter email address">
-                                </label>
+                                <div class="add-teacher-two-col add-teacher-email-password-row">
+                                    <label class="add-student-label add-student-contact-email-wrap">
+                                        <span>Email Address *</span>
+                                        <input type="email" id="addTeacherEmail" name="teacherEmail" autocomplete="email" maxlength="120" placeholder="Enter email address">
+                                    </label>
+                                    <label class="add-student-label" for="addTeacherPassword">
+                                        <span>Password *</span>
+                                        <div class="password-input-wrap password-input-wrap--student-generate">
+                                            <input type="text" id="addTeacherPassword" name="teacherPassword" readonly autocomplete="off" spellcheck="false" minlength="8" maxlength="120" placeholder="@xxxNxNN" title="Use the button to generate a password" aria-label="Generated password (read-only)">
+                                            <button type="button" id="addTeacherPasswordGenerate" class="btn-add-student-password-generate" aria-label="Generate password" title="Random @CCCNCNN password (8 characters)">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="btn-add-student-password-generate-svg" aria-hidden="true">
+                                                    <path fill-rule="evenodd" d="M2.25 6a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V6Zm3.97.97a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 0 1-1.06-1.06l1.72-1.72-1.72-1.72a.75.75 0 0 1 0-1.06Zm4.28 4.28a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </label>
+                                </div>
                                 <label class="add-student-label add-student-contact-phone-wrap add-teacher-phone-wrap">
                                     <span>Phone Number</span>
                                     <div class="add-teacher-phone-row">
@@ -68,15 +81,6 @@
                                 </label>
                             </div>
                             <div id="addTeacherEmailWrap" class="add-teacher-password-wrap is-hidden" aria-hidden="true">
-                                <label class="add-student-label" for="addTeacherPassword">
-                                    <span>Password Options</span>
-                                    <div class="password-input-wrap">
-                                        <input type="password" id="addTeacherPassword" name="teacherPassword" autocomplete="new-password" minlength="8" maxlength="120" placeholder="Create password">
-                                        <button type="button" id="addTeacherPasswordToggle" class="password-toggle-btn" aria-label="Show password" title="Show password" aria-pressed="false">
-                                            <span class="password-toggle-btn-icon" aria-hidden="true"></span>
-                                        </button>
-                                    </div>
-                                </label>
                                 <div class="add-teacher-password-options" aria-hidden="true">
                                     <button type="button" class="add-teacher-option-card is-active">
                                         <strong>Auto-generate password</strong>
