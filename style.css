@@ -3568,6 +3568,16 @@ input.student-reposition-modal-day {
     font-size: 0.96rem;
     font-weight: 700;
     color: #2a3e64;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.add-teacher-card-title svg {
+    width: 15px;
+    height: 15px;
+    color: #3e67b2;
+    flex-shrink: 0;
 }
 
 .add-teacher-two-col {

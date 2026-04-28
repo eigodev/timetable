@@ -44,7 +44,12 @@
                 <div class="add-teacher-fields-container">
                     <div class="add-teacher-redesign-main-col">
                         <section class="add-teacher-card add-teacher-card--basic">
-                            <h3 class="add-teacher-card-title">Basic Information</h3>
+                            <h3 class="add-teacher-card-title">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M4.5 3.75a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3V6.75a3 3 0 0 0-3-3h-15Zm4.125 3a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm-3.873 8.703a4.126 4.126 0 0 1 7.746 0 .75.75 0 0 1-.351.92 7.47 7.47 0 0 1-3.522.877 7.47 7.47 0 0 1-3.522-.877.75.75 0 0 1-.351-.92ZM15 8.25a.75.75 0 0 0 0 1.5h3.75a.75.75 0 0 0 0-1.5H15ZM14.25 12a.75.75 0 0 1 .75-.75h3.75a.75.75 0 0 1 0 1.5H15a.75.75 0 0 1-.75-.75Zm.75 2.25a.75.75 0 0 0 0 1.5h3.75a.75.75 0 0 0 0-1.5H15Z" clip-rule="evenodd" />
+                                </svg>
+                                <span>Basic Information</span>
+                            </h3>
                             <div id="addTeacherNameRow" class="add-teacher-two-col is-hidden" aria-hidden="true">
                                 <label class="add-student-label">
                                     <span>First Name *</span>
@@ -79,7 +84,12 @@
                             </div>
                         </section>
                         <section id="addTeacherEmailWrap" class="add-teacher-card add-teacher-card--credentials add-teacher-password-wrap is-hidden" aria-hidden="true">
-                            <h3 class="add-teacher-card-title">Login Credentials</h3>
+                            <h3 class="add-teacher-card-title">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd" />
+                                </svg>
+                                <span>Login Credentials</span>
+                            </h3>
                             <div class="add-teacher-two-col add-teacher-email-password-row">
                                 <label class="add-student-label add-student-contact-email-wrap">
                                     <span>Email Address *</span>
