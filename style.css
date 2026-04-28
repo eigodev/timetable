@@ -3576,6 +3576,12 @@ input.student-reposition-modal-day {
     gap: 8px;
 }
 
+.add-teacher-three-col {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
 .add-teacher-two-col.is-hidden {
     display: none;
 }
@@ -3892,6 +3898,7 @@ tr td.add-teacher-availability-table-day {
         grid-template-columns: 1fr;
     }
     .add-teacher-two-col,
+    .add-teacher-three-col,
     .add-teacher-password-options {
         grid-template-columns: 1fr;
     }

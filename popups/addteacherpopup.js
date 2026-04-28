@@ -56,35 +56,46 @@
                                 </label>
                             </div>
                             <div id="addTeacherContactRow" class="add-teacher-contact-stack is-hidden" aria-hidden="true">
-                                <div class="add-teacher-two-col add-teacher-email-password-row">
-                                    <label class="add-student-label add-student-contact-email-wrap">
-                                        <span>Email Address *</span>
-                                        <input type="email" id="addTeacherEmail" name="teacherEmail" autocomplete="email" maxlength="120" placeholder="Enter email address">
+                                <div class="add-teacher-three-col">
+                                    <label class="add-student-label add-student-contact-city-wrap">
+                                        <span>City</span>
+                                        <input type="text" id="addTeacherCity" name="teacherCity" autocomplete="address-level2" maxlength="120" placeholder="Enter city">
                                     </label>
-                                    <label class="add-student-label" for="addTeacherPassword">
-                                        <span>Password *</span>
-                                        <div class="password-input-wrap password-input-wrap--student-generate">
-                                            <input type="text" id="addTeacherPassword" name="teacherPassword" readonly autocomplete="off" spellcheck="false" minlength="8" maxlength="120" placeholder="@xxxNxNN" title="Use the button to generate a password" aria-label="Generated password (read-only)">
-                                            <button type="button" id="addTeacherPasswordGenerate" class="btn-add-student-password-generate" aria-label="Generate password" title="Random @CCCNCNN password (8 characters)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="btn-add-student-password-generate-svg" aria-hidden="true">
-                                                    <path fill-rule="evenodd" d="M2.25 6a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V6Zm3.97.97a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 0 1-1.06-1.06l1.72-1.72-1.72-1.72a.75.75 0 0 1 0-1.06Zm4.28 4.28a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd" />
-                                                </svg>
-                                            </button>
+                                    <label class="add-student-label add-student-contact-country-wrap">
+                                        <span>Country</span>
+                                        <input type="text" id="addTeacherCountry" name="teacherCountry" autocomplete="country" maxlength="120" placeholder="Enter country">
+                                    </label>
+                                    <label class="add-student-label add-student-contact-phone-wrap add-teacher-phone-wrap">
+                                        <span>Phone Number</span>
+                                        <div class="add-teacher-phone-row">
+                                            <div class="add-student-phone-country-wrap" id="addTeacherDialCodeWrap">
+                                                <img id="addTeacherPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
+                                                <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" aria-label="Country code"></select>
+                                            </div>
+                                            <input type="tel" id="addTeacherPhone" name="teacherPhone" autocomplete="tel-national" maxlength="30" placeholder="Enter phone number">
                                         </div>
                                     </label>
                                 </div>
-                                <label class="add-student-label add-student-contact-phone-wrap add-teacher-phone-wrap">
-                                    <span>Phone Number</span>
-                                    <div class="add-teacher-phone-row">
-                                        <div class="add-student-phone-country-wrap" id="addTeacherDialCodeWrap">
-                                            <img id="addTeacherPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
-                                            <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" aria-label="Country code"></select>
-                                        </div>
-                                        <input type="tel" id="addTeacherPhone" name="teacherPhone" autocomplete="tel-national" maxlength="30" placeholder="Enter phone number">
+                            </div>
+                        </section>
+                        <section id="addTeacherEmailWrap" class="add-teacher-card add-teacher-card--credentials add-teacher-password-wrap is-hidden" aria-hidden="true">
+                            <h3 class="add-teacher-card-title">Login Credentials</h3>
+                            <div class="add-teacher-two-col add-teacher-email-password-row">
+                                <label class="add-student-label add-student-contact-email-wrap">
+                                    <span>Email Address *</span>
+                                    <input type="email" id="addTeacherEmail" name="teacherEmail" autocomplete="email" maxlength="120" placeholder="Enter email address">
+                                </label>
+                                <label class="add-student-label" for="addTeacherPassword">
+                                    <span>Password *</span>
+                                    <div class="password-input-wrap password-input-wrap--student-generate">
+                                        <input type="text" id="addTeacherPassword" name="teacherPassword" readonly autocomplete="off" spellcheck="false" minlength="8" maxlength="120" placeholder="@xxxNxNN" title="Use the button to generate a password" aria-label="Generated password (read-only)">
+                                        <button type="button" id="addTeacherPasswordGenerate" class="btn-add-student-password-generate" aria-label="Generate password" title="Random @CCCNCNN password (8 characters)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="btn-add-student-password-generate-svg" aria-hidden="true">
+                                                <path fill-rule="evenodd" d="M2.25 6a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V6Zm3.97.97a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 0 1-1.06-1.06l1.72-1.72-1.72-1.72a.75.75 0 0 1 0-1.06Zm4.28 4.28a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </label>
-                            </div>
-                            <div id="addTeacherEmailWrap" class="add-teacher-password-wrap is-hidden" aria-hidden="true">
                             </div>
                         </section>
                         <section class="add-teacher-card add-teacher-card--professional">
@@ -142,67 +153,6 @@
                     </div>
 
                     <div class="add-teacher-redesign-side-col">
-                        <section class="add-teacher-card add-teacher-card--availability">
-                            <h3 class="add-teacher-card-title">Availability</h3>
-                            <table class="add-teacher-availability-table" aria-hidden="true">
-                                <thead>
-                                    <tr>
-                                        <th class="add-teacher-availability-table-day">Day</th>
-                                        <th class="add-teacher-availability-table-available">Available</th>
-                                        <th class="add-teacher-availability-table-start">Start</th>
-                                        <th class="add-teacher-availability-table-end">End</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Sunday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
-                                        <td class="add-teacher-start-time">09:00</td>
-                                        <td class="add-teacher-end-time">17:00</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Monday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox">
-                                        </td><td class="add-teacher-start-time">08:00</td>
-                                        <td class="add-teacher-end-time">18:00</td>
-                                        </tr>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Tuesday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
-                                        <td class="add-teacher-start-time">08:00</td>
-                                        <td class="add-teacher-end-time">18:00</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Wednesday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
-                                        <td class="add-teacher-start-time">08:00</td>
-                                        <td class="add-teacher-end-time">18:00</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Thursday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
-                                        <td class="add-teacher-start-time">08:00</td>
-                                        <td class="add-teacher-end-time">18:00</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Friday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
-                                        <td class="add-teacher-start-time">08:00</td>
-                                        <td class="add-teacher-end-time">18:00</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="add-teacher-availability-table-day">Saturday</td>
-                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
-                                        <td class="add-teacher-start-time">09:00</td>
-                                        <td class="add-teacher-end-time">17:00</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <div class="add-teacher-availability-actions">
-                                <button type="button" class="add-teacher-ghost-btn">Clear All</button>
-                                <button type="button" class="add-teacher-ghost-btn">Custom Calendar Setup</button>
-                            </div>
-                        </section>
                         <section class="add-teacher-photo-block">
                             <h3 class="add-teacher-photo-title">Upload Profile Photo</h3>
                             <button type="button" class="add-teacher-upload-dropzone" aria-label="Upload profile photo">
