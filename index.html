@@ -31,6 +31,11 @@
                 </div>
             </div>
             <div class="teacher-list" id="teacherList">
+                <button type="button" id="addTeacherProfileBtn" class="sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher" aria-label="Add teacher profile">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M8.5 4.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 13c.552 0 1.01-.452.9-.994a5.002 5.002 0 0 0-9.802 0c-.109.542.35.994.902.994h8ZM12.5 3.5a.75.75 0 0 1 .75.75v1h1a.75.75 0 0 1 0 1.5h-1v1a.75.75 0 0 1-1.5 0v-1h-1a.75.75 0 0 1 0-1.5h1v-1a.75.75 0 0 1 .75-.75Z"/>
+                    </svg>
+                </button>
                 <!-- Teachers will be populated by JavaScript -->
             </div>
         </aside>
@@ -88,14 +93,16 @@
     <div id="contextMenu" class="context-menu"></div>
 
     <!-- Add teacher profile / add school modal -->
-    <div id="addStudentModal" class="add-student-modal" aria-hidden="true">
-        <div class="add-student-modal-backdrop" id="addStudentModalBackdrop"></div>
-        <div class="add-student-dialog" role="dialog" aria-label="Add profile, student, or school">
-            <form id="addStudentForm" class="add-student-form">
-                <div class="addteacherpopup"></div>
-                <div class="addstudentpopup"></div>
-                <div class="addschoolpopup"></div>
-                <div class="add-student-actions">
+    <div id="addStudentModal" class="add-student-modal add-modal am" data-ui="add-modal" aria-hidden="true">
+        <div class="add-student-modal-backdrop am-bd" id="addStudentModalBackdrop"></div>
+        <div class="add-student-dialog add-modal__dialog am-dlg" data-ui="add-modal-dialog" role="dialog" aria-label="Add profile, student, or school">
+            <form id="addStudentForm" class="add-student-form add-modal__form am-form" data-ui="add-modal-form">
+                <div class="add-popup-content add-modal__content am-c" data-ui="add-popup-content">
+                    <div class="addstudentpopup add-popup-section add-popup-section--student am-s am-s--st" data-mode="student"></div>
+                    <div class="addschoolpopup add-popup-section add-popup-section--school am-s am-s--sc" data-mode="school"></div>
+                    <div class="addteacherpopup add-popup-section add-popup-section--teacher am-s am-s--tc" data-mode="teacher"></div>
+                </div>
+                <div class="add-student-actions am-act">
                     <button type="button" class="btn-add-student-cancel" id="addStudentCancel">Cancel</button>
                     <button type="submit" class="btn-add-student-submit" id="addStudentFormSubmit">Add</button>
                 </div>
@@ -626,9 +633,9 @@
     <!-- Admin control panel -->
 
     <!-- JavaScript -->
-    <script src="addteacherpopup.js"></script>
-    <script src="addstudentpopup.js"></script>
-    <script src="addschoolpopup.js"></script>
     <script src="script.js"></script>
+    <script src="addschoolpopup.js"></script>
+    <script src="addstudentpopup.js"></script>
+    <script src="addteacherpopup.js"></script>
 </body>
 </html>

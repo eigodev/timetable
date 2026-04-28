@@ -2,12 +2,28 @@
 // 1) Render markup
 // 2) Keep school-popup-specific helpers below
 (function addSchoolPopupModule() {
+    function ensureAddPopupRegistry() {
+        if (window.addPopupRegistry) return window.addPopupRegistry;
+        const registry = {
+            providers: {},
+            register(mode, provider) {
+                if (!mode || !provider) return;
+                this.providers[mode] = provider;
+            },
+            get(mode) {
+                return this.providers[mode] || null;
+            }
+        };
+        window.addPopupRegistry = registry;
+        return registry;
+    }
+
     function renderAddSchoolPopup() {
         const schoolPopupContainer = document.querySelector('.addschoolpopup');
         if (!schoolPopupContainer) return;
 
         schoolPopupContainer.innerHTML = `
-            <div id="addSchoolFields" class="add-school-form-section is-hidden" aria-hidden="true">
+            <div id="addSchoolFields" class="add-school-form-section am-sec is-hidden" aria-hidden="true">
                 <div class="add-school-heading">
                     <h1 class="add-school-title">Add School</h1>
                     <h4 class="add-school-subtitle">Add a new school and how classes and payments work.</h4>
@@ -120,7 +136,11 @@
         }
     }
 
-    // School-popup logic section
+    const registry = ensureAddPopupRegistry();
+    registry.register('school', {
+        mode: 'student',
+        render: renderAddSchoolPopup
+    });
     renderAddSchoolPopup();
     window.renderAddSchoolPopup = renderAddSchoolPopup;
     window.openAddSchoolPopup = openAddSchoolPopup;

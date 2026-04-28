@@ -1,0 +1,3 @@
+{"sessionId":"27b422","runId":"pre-fix-1","hypothesisId":"H1","location":"addteacherpopup.js:4","message":"Initial DOM query results","data":{"hasAddTeacherButton":true,"hasPopup":true,"readyState":"loading"},"timestamp":1777349926941}
+{"sessionId":"27b422","runId":"pre-fix-1","hypothesisId":"H3","location":"addteacherpopup.js:15","message":"Click listener bound to initial button reference","data":{"bound":true},"timestamp":1777349926942}
+{"sessionId":"27b422","runId":"pre-fix-1","hypothesisId":"H2","location":"addteacherpopup.js:8","message":"Button existence at DOMContentLoaded","data":{"hasAddTeacherButtonAfterDom":true},"timestamp":1777349926957}

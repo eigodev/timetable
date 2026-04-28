@@ -81,6 +81,13 @@ let schoolBillingModels = {};
 let schoolBillingConfigs = {};
 let addStudentModalMode = 'student';
 let addStudentTargetSchool = '';
+const ADD_MODAL_MODE_ALIASES = {
+    school: 'student',
+    student: 'student-global',
+    'student-global': 'student-global',
+    'student-entry': 'student-entry',
+    teacher: 'teacher'
+};
 let pendingDeleteSchoolTitle = '';
 let pendingSchoolSettingsTitle = '';
 let schoolSettingsColorTarget = '';
@@ -130,6 +137,27 @@ function openModalWithAnimation(modal) {
     modal.classList.remove('is-closing');
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
+}
+
+function getCanonicalAddModalMode(mode) {
+    const key = String(mode || '').trim().toLowerCase();
+    return ADD_MODAL_MODE_ALIASES[key] || 'student';
+}
+
+function ensureAddPopupProvidersRendered() {
+    const registry = window.addPopupRegistry;
+    if (!registry || typeof registry.get !== 'function') return;
+    ['student', 'school', 'teacher'].forEach((modeKey) => {
+        const provider = registry.get(modeKey);
+        if (!provider || typeof provider.render !== 'function') return;
+        provider.render();
+    });
+}
+
+function getAddModalDialogEl() {
+    return document.querySelector('[data-ui="add-modal-dialog"]')
+        || document.querySelector('.am-dlg')
+        || document.querySelector('.add-student-dialog');
 }
 
 function setGoogleMeetToggleText(nextText, animate = false) {
@@ -829,7 +857,7 @@ function openAddSchoolColorPopup(target, anchorEl) {
     const options = document.getElementById('addSchoolColorPopupOptions');
     const primaryInput = document.getElementById('addSchoolPrimaryColor');
     const secondaryInput = document.getElementById('addSchoolSecondaryColor');
-    const dialog = document.querySelector('.add-student-dialog');
+    const dialog = getAddModalDialogEl();
     if (!popup || !options || !anchorEl || !dialog || !primaryInput || !secondaryInput) return;
     addSchoolColorTarget = target === 'secondary' ? 'secondary' : 'primary';
     options.innerHTML = '';
@@ -6524,40 +6552,40 @@ function buildStudentWhatsappMessage(studentName) {
     const greetingOptions = ['Hi', 'Hi there', 'Hello', 'Hello there', 'Hey', 'Hey there'];
     const greeting = greetingOptions[Math.floor(Math.random() * greetingOptions.length)] || 'Hi there';
     const followUpOptions = [
-        'How are you?',
-        'How are you doing?',
-        "How's it going?",
-        'How have you been?',
-        "How's everything?",
-        'How are things going?',
-        "How's your day going?",
-        "How's your day been so far?",
-        "What's up?",
-        "What's going on?",
-        "How's it going so far?",
-        'How are things?',
-        'How are you today?',
-        "I hope you're doing well.",
-        "Hope you're having a great day."
+        'How are you? 👋',
+        'How are you doing? 👋',
+        "How's it going? 👋",
+        'How have you been? 👋',
+        "How's everything? 👋",
+        'How are things going? 👋',
+        "How's your day going? 👋",
+        "How's your day been so far? 👋",
+        "What's up? 👋",
+        "What's going on? 👋",
+        "How's it going so far? 👋",
+        'How are things? 👋',
+        'How are you today? 👋',
+        "I hope you're doing well. 👋",
+        "Hope you're having a great day. 👋"
     ];
     const followUp = followUpOptions[Math.floor(Math.random() * followUpOptions.length)] || 'How are you today?';
     const meetLink = String(studentGoogleMeetLinksByName[fullName] || '').trim();
     const meetLine = `*${meetLink || "<Google Meet link>"}*`;
     const classLinkLineOptions = [
-        "Here's the link for our class.",
-        "Here's your class link.",
-        "Here's the link to our class.",
-        'This is our class link.',
-        "Here's your link for today's class.",
-        "Here's the link for our lesson today.",
-        "Here's your class link for today.",
-        "Here's where we'll meet.",
-        'Please find the class link below.',
-        'Here is the link for our class.',
+        "Here's the link for our class. ☝️",
+        "Here's your class link. ☝️",
+        "Here's the link to our class. ☝️",
+        'This is our class link. ☝️',
+        "Here's your link for today's class. ☝️",
+        "Here's the link for our lesson today. ☝️",
+        "Here's your class link for today. ☝️",
+        "Here's where we'll meet. ☝️",
+        'Please find the class link below. ☝️',
+        'Here is the link for our class. ☝️',
         'You can access the class using the link below.',
-        'Class link.',
-        'Your class link.',
-        'Join here.'
+        'Class link. ☝️',
+        'Your class link. ☝️',
+        'Join here. ☝️'
     ];
     const classLinkLine = classLinkLineOptions[Math.floor(Math.random() * classLinkLineOptions.length)] || "Here's your class link.";
     return `${dateLine}
@@ -7058,6 +7086,13 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
         showAppMessage('Please enter an email address.');
         return;
     }
+    const phoneEl = document.getElementById('addTeacherPhone');
+    const phoneVal = phoneEl ? String(phoneEl.value || '').trim() : '';
+    if (!phoneVal || !digitsOnly(phoneVal)) {
+        showAppMessage('Please enter a valid phone number.');
+        phoneEl?.focus();
+        return;
+    }
     if (password.length < 8) {
         showAppMessage('Password must have at least 8 characters.');
         return;
@@ -7378,6 +7413,7 @@ function bindStudentPhoneLocalFieldBlur(phoneInput) {
 
 function updateAddStudentPassportFieldVisibility() {
     const teacherNameRow = document.getElementById('addTeacherNameRow');
+    const teacherHeaderRow = document.getElementById('addTeacherHeaderRow');
     const studentNameRow = document.getElementById('addStudentNameRow');
     const studentHeaderRow = document.getElementById('addStudentHeaderRow');
     const studentFields = document.getElementById('addStudentFields');
@@ -7394,7 +7430,6 @@ function updateAddStudentPassportFieldVisibility() {
     const countryInput = document.getElementById('addStudentCountry');
     const teacherContactRow = document.getElementById('addTeacherContactRow');
     const studentContactRow = document.getElementById('addStudentContactRow');
-    const teacherBasicInfoSection = document.getElementById('addTeacherBasicInfoSection');
     const contactCityWrap = document.getElementById('addStudentContactCityWrap');
     const contactCountryWrap = document.getElementById('addStudentContactCountryWrap');
     const accountWrap = document.getElementById('addStudentAccountWrap');
@@ -7412,7 +7447,7 @@ function updateAddStudentPassportFieldVisibility() {
     const passportLinkInput = document.getElementById('addStudentPassportLink');
     const teacherWrap = document.getElementById('addStudentMentorWrap');
     const teacherSelect = document.getElementById('addStudentMentor');
-    const rowTeacherTheme = document.getElementById('addStudentMentorRow');
+    const addStudentMentorRow = document.getElementById('addStudentMentorRow');
     const schoolReadonlyWrap = document.getElementById('addStudentSchoolReadonlyWrap');
     const schoolReadonlyText = document.getElementById('addStudentSchoolReadonly');
     const schoolFieldLabel = document.querySelector('.add-student-group-field-label');
@@ -7423,7 +7458,7 @@ function updateAddStudentPassportFieldVisibility() {
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
-    const dialog = document.querySelector('.add-student-dialog');
+    const dialog = getAddModalDialogEl();
     const submitBtn = document.getElementById('addStudentFormSubmit');
     if (!dialog || !schoolInput || !schoolSelect) return;
 
@@ -7439,6 +7474,7 @@ function updateAddStudentPassportFieldVisibility() {
         teacherContactRow.classList.toggle('is-hidden', !isTeacherMode);
         teacherContactRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
     }
+
     if (studentContactRow) {
         studentContactRow.classList.toggle('is-hidden', !showStudentFields);
         studentContactRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
@@ -7447,9 +7483,9 @@ function updateAddStudentPassportFieldVisibility() {
         studentHeaderRow.classList.toggle('is-hidden', !showStudentFields);
         studentHeaderRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
     }
-    if (teacherBasicInfoSection) {
-        teacherBasicInfoSection.classList.toggle('is-hidden', !isTeacherMode);
-        teacherBasicInfoSection.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+    if (teacherHeaderRow) {
+        teacherHeaderRow.classList.toggle('is-hidden', !isTeacherMode);
+        teacherHeaderRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
     }
     if (teacherFields) {
         teacherFields.classList.toggle('is-hidden', !isTeacherMode);
@@ -7496,15 +7532,16 @@ function updateAddStudentPassportFieldVisibility() {
             teacherSelect.value = '';
         }
     }
-    if (rowTeacherTheme) {
-        rowTeacherTheme.classList.toggle('is-hidden', isTeacherMode);
-        rowTeacherTheme.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
+    if (addStudentMentorRow) {
+        addStudentMentorRow.classList.toggle('is-hidden', isTeacherMode);
+        addStudentMentorRow.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
     }
     if (teacherNameRow && teacherFirstInput && teacherLastInput) {
         teacherNameRow.classList.toggle('is-hidden', !isTeacherMode);
         teacherNameRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
         teacherFirstInput.required = isTeacherMode;
         teacherLastInput.required = isTeacherMode;
+        if (teacherPhoneInput) teacherPhoneInput.required = isTeacherMode;
         if (!isTeacherMode) {
             teacherFirstInput.value = '';
             teacherLastInput.value = '';
@@ -7626,7 +7663,7 @@ function updateAddStudentPassportFieldVisibility() {
     dialog.classList.remove('add-student-dialog--expanded');
 
     if (submitBtn) {
-        submitBtn.textContent = isTeacherMode ? 'Add' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
+        submitBtn.textContent = isTeacherMode ? 'Add teacher' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
     }
     if (phoneCountrySelect && useNameFieldsAny) {
         updateAddStudentPhonePlaceholder();
@@ -7636,6 +7673,7 @@ function updateAddStudentPassportFieldVisibility() {
 }
 
 function openAddStudentModal(mode = 'student') {
+    ensureAddPopupProvidersRendered();
     const modal = document.getElementById('addStudentModal');
     const teacherFirstInput = document.getElementById('addTeacherFirst');
     const teacherLastInput = document.getElementById('addTeacherLast');
@@ -7664,11 +7702,12 @@ function openAddStudentModal(mode = 'student') {
         return;
     }
 
-    const preservedEntrySchool = mode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';
+    const normalizedMode = getCanonicalAddModalMode(mode);
+    const preservedEntrySchool = normalizedMode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';
     addStudentModalMode =
-        mode === 'teacher'
+        normalizedMode === 'teacher'
             ? 'teacher'
-            : (mode === 'student-entry' ? 'student-entry' : (mode === 'student-global' ? 'student-global' : 'student'));
+            : (normalizedMode === 'student-entry' ? 'student-entry' : (normalizedMode === 'student-global' ? 'student-global' : 'student'));
     addStudentTargetSchool = addStudentModalMode === 'student-entry' ? preservedEntrySchool : '';
     if (addStudentModalMode === 'teacher' && (!teacherFirstInput || !teacherLastInput)) {
         return;
@@ -8927,6 +8966,7 @@ function closeAddStudentModal() {
 }
 
 function setupAddStudentModal() {
+    ensureAddPopupProvidersRendered();
     const modal = document.getElementById('addStudentModal');
     const form = document.getElementById('addStudentForm');
     const cancelBtn = document.getElementById('addStudentCancel');
@@ -9051,6 +9091,20 @@ function setupAddStudentModal() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (addStudentModalMode === 'teacher') {
+            const teacherValidityEls = [
+                document.getElementById('addTeacherFirst'),
+                document.getElementById('addTeacherLast'),
+                document.getElementById('addTeacherEmail'),
+                document.getElementById('addTeacherPhone'),
+                document.getElementById('addTeacherPassword')
+            ].filter(Boolean);
+            for (let i = 0; i < teacherValidityEls.length; i++) {
+                const el = teacherValidityEls[i];
+                if (typeof el.checkValidity === 'function' && !el.checkValidity()) {
+                    el.reportValidity();
+                    return;
+                }
+            }
             const first = document.getElementById('addTeacherFirst')?.value || '';
             const last = document.getElementById('addTeacherLast')?.value || '';
             const email = document.getElementById('addTeacherEmail')?.value || '';

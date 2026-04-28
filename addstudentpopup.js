@@ -2,12 +2,28 @@
 // 1) Render markup
 // 2) Keep student-popup-specific helpers below
 (function addStudentPopupModule() {
+    function ensureAddPopupRegistry() {
+        if (window.addPopupRegistry) return window.addPopupRegistry;
+        const registry = {
+            providers: {},
+            register(mode, provider) {
+                if (!mode || !provider) return;
+                this.providers[mode] = provider;
+            },
+            get(mode) {
+                return this.providers[mode] || null;
+            }
+        };
+        window.addPopupRegistry = registry;
+        return registry;
+    }
+
     function renderAddStudentPopup() {
         const studentPopupContainer = document.querySelector('.addstudentpopup');
         if (!studentPopupContainer) return;
 
         studentPopupContainer.innerHTML = `
-            <div id="addStudentHeaderRow" class="add-student-form-section is-hidden" aria-hidden="true">
+            <div id="addStudentHeaderRow" class="add-student-form-section am-sec is-hidden" aria-hidden="true">
                 <div class="add-student-heading-block add-student-heading add-student-redesign-heading">
                     <div class="add-student-redesign-heading-icon" aria-hidden="true">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -21,7 +37,7 @@
                     </div>
                 </div>
             </div>
-            <div id="addStudentFields" class="add-student-form-section is-hidden" aria-hidden="true">
+            <div id="addStudentFields" class="add-student-form-section am-sec is-hidden" aria-hidden="true">
                 <div class="add-student-redesign-fields-card">
                     <div class="add-student-name-row add-student-form-row add-student-form-row--names is-hidden" id="addStudentNameRow" aria-hidden="true">
                         <label class="add-student-label">
@@ -34,7 +50,7 @@
                         </label>
                     </div>
 
-                    <div id="addStudentContactRow" class="add-student-modal-contact-row is-hidden" aria-hidden="true">
+                    <div id="addStudentContactRow" class="add-student-modal-contact-row am-row is-hidden" aria-hidden="true">
                         <label class="add-student-label add-student-contact-city-wrap" id="addStudentContactCityWrap">
                             <span>City</span>
                             <input type="text" id="addStudentCity" name="city" autocomplete="address-level2" maxlength="120" placeholder="Enter city">
@@ -133,7 +149,11 @@
         }
     }
 
-    // Student-popup logic section
+    const registry = ensureAddPopupRegistry();
+    registry.register('student', {
+        mode: 'student-global',
+        render: renderAddStudentPopup
+    });
     renderAddStudentPopup();
     window.renderAddStudentPopup = renderAddStudentPopup;
     window.openAddStudentPopup = openAddStudentPopup;
