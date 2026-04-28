@@ -3709,8 +3709,27 @@ input.student-reposition-modal-day {
 .add-modal-dialog.add-modal-dialog--expanded {
     width: min(1080px, 92vw);
     max-width: min(1080px, 92vw);
-    left: 50%;
-    transform: translateX(-50%);
+}
+
+.add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
+    position: fixed;
+    top: 3%;
+    left: 21%;
+    transform: none;
+}
+
+@media (min-width: 1900px) and (min-height: 1000px) {
+    .add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
+        top: 3%;
+        left: 19%;
+    }
+}
+
+@media (max-width: 1366px) and (max-height: 768px) {
+    .add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
+        top: 3%;
+        left: 21%;
+    }
 }
 
 @media (max-width: 1060px) {
