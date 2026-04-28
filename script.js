@@ -5967,8 +5967,8 @@ function submitStudentRepositionBooking() {
     }
 
     const tutorName = String(getTutorRosterNameForStudent(studentName) || '').trim();
-    if (!tutorName || !isActiveTeacherName(tutorName)) {
-        showAppMessage('No active tutor was found for your profile.');
+    if (!tutorName) {
+        showAppMessage('No tutor was found for your profile.');
         return;
     }
 
@@ -5981,7 +5981,7 @@ function submitStudentRepositionBooking() {
     }
 
     if (!teacherUnavailableStudentNamesByTeacher[tutorName]) {
-        teacherUnavailableStudentNamesByTeacher[tutorName] = {};
+        teacherUnavailableStudentNamesByTeacher[tutorName] = getUnavailableStudentNamesMetaFromSchedule(teacherSchedules[tutorName]);
     }
     teacherUnavailableStudentNamesByTeacher[tutorName][slotKey] = studentName;
 
@@ -5993,7 +5993,10 @@ function submitStudentRepositionBooking() {
     saveAllSchedules();
 
     if (currentTeacher && String(currentTeacher).trim().toLowerCase() === studentName.toLowerCase()) {
-        slotStates = mergeStudentCalendarWithTutorFreeSlots(studentName, tutorName);
+        // Optimistic UI: show booking immediately in the student calendar.
+        slotStates[slotKey] = 'rescheduled';
+        studentVisibleRescheduledNamesBySlot[slotKey] = studentName;
+        loadTeacherSchedule(currentTeacher);
         refreshCalendarDisplay();
         updateSummary();
     }
