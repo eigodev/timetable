@@ -128,6 +128,7 @@ let classStartNotificationTimer = null;
 let classStartNotificationPermissionRequested = false;
 const CLASS_START_NOTIFY_LEAD_MINUTES = 5;
 const classStartNotifiedKeys = new Set();
+const studentClassStartNotifiedKeys = new Set();
 const MODAL_CLOSE_ANIMATION_MS = 220;
 const modalCloseTimers = new WeakMap();
 
@@ -4349,6 +4350,8 @@ function performTeacherSessionLogout() {
     loggedInTeacherName = '';
     loggedInStudentFullName = '';
     currentTeacher = null;
+    resetClassStartNotificationCache();
+    notifyUpcomingClasses();
     try {
         sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
     } catch {
@@ -5490,6 +5493,7 @@ function setLoggedOutDashboard() {
         adminPanel.hidden = true;
         adminPanel.innerHTML = '';
     }
+    resetClassStartNotificationCache();
 }
 
 function setSidebarSectionCollapsed(section, collapsed, animate = true) {
@@ -9668,6 +9672,7 @@ function initCurrentTimeIndicator() {
 
 function resetClassStartNotificationCache() {
     classStartNotifiedKeys.clear();
+    studentClassStartNotifiedKeys.clear();
 }
 
 function getNextDateForDayAndHour(dayName, hour, now = new Date()) {
@@ -9709,6 +9714,22 @@ function getUpcomingClassSlotsForSelectedTeacher(now = new Date()) {
     return items;
 }
 
+function getUpcomingClassSlotsForLoggedInStudent(now = new Date()) {
+    const studentName = String(loggedInStudentFullName || '').trim();
+    if (!studentName) return [];
+    const items = [];
+    DAYS.forEach((day) => {
+        for (let hour = START_HOUR; hour < END_HOUR; hour++) {
+            const state = getSlotState(day, hour);
+            if (!isClassLikeSlotState(state)) continue;
+            const startsAt = getNextDateForDayAndHour(day, hour, now);
+            if (!startsAt) continue;
+            items.push({ day, hour, startsAt, state, studentName });
+        }
+    });
+    return items;
+}
+
 function maybeRequestNotificationPermission() {
     if (typeof Notification === 'undefined') return;
     if (Notification.permission !== 'default') return;
@@ -9720,8 +9741,9 @@ function maybeRequestNotificationPermission() {
 function notifyUpcomingClasses() {
     if (typeof Notification === 'undefined') return;
     const now = new Date();
-    const upcoming = getUpcomingClassSlotsForSelectedTeacher(now);
-    if (upcoming.length === 0) return;
+    const upcomingTeacher = getUpcomingClassSlotsForSelectedTeacher(now);
+    const upcomingStudent = getUpcomingClassSlotsForLoggedInStudent(now);
+    if (upcomingTeacher.length === 0 && upcomingStudent.length === 0) return;
     if (Notification.permission === 'default') {
         maybeRequestNotificationPermission();
         return;
@@ -9729,19 +9751,71 @@ function notifyUpcomingClasses() {
     if (Notification.permission !== 'granted') return;
     const leadMs = CLASS_START_NOTIFY_LEAD_MINUTES * 60 * 1000;
     const toleranceMs = 60 * 1000;
-    upcoming.forEach(({ day, hour, startsAt }) => {
+    const onTimeToleranceMs = 60 * 1000;
+    upcomingTeacher.forEach(({ day, hour, startsAt }) => {
         const diffMs = startsAt.getTime() - now.getTime();
-        if (diffMs <= 0 || diffMs > leadMs + toleranceMs || diffMs < leadMs - toleranceMs) return;
         const dateKey = `${startsAt.getFullYear()}-${startsAt.getMonth() + 1}-${startsAt.getDate()}`;
-        const notifyKey = `${String(currentTeacher || '').trim().toLowerCase()}|${dateKey}|${day}|${hour}`;
-        if (classStartNotifiedKeys.has(notifyKey)) return;
-        classStartNotifiedKeys.add(notifyKey);
-        const title = 'Class starts soon';
-        const body = `${currentTeacher}: ${day} at ${formatHour(hour)} starts in ${CLASS_START_NOTIFY_LEAD_MINUTES} minutes.`;
-        try {
-            new Notification(title, { body, tag: notifyKey });
-        } catch {
-            // Ignore notification constructor errors (browser policy / unsupported context).
+        const teacherKeyBase = `teacher|${String(currentTeacher || '').trim().toLowerCase()}|${dateKey}|${day}|${hour}`;
+        const inLeadWindow = diffMs > 0 && diffMs <= leadMs + toleranceMs && diffMs >= leadMs - toleranceMs;
+        if (inLeadWindow) {
+            const notifyKey = `${teacherKeyBase}|lead5`;
+            if (!classStartNotifiedKeys.has(notifyKey)) {
+                classStartNotifiedKeys.add(notifyKey);
+                const title = 'Class starts soon';
+                const body = `${currentTeacher}: ${day} at ${formatHour(hour)} starts in ${CLASS_START_NOTIFY_LEAD_MINUTES} minutes.`;
+                try {
+                    new Notification(title, { body, tag: notifyKey });
+                } catch {
+                    // Ignore notification constructor errors (browser policy / unsupported context).
+                }
+            }
+        }
+        const inOnTimeWindow = Math.abs(diffMs) <= onTimeToleranceMs;
+        if (inOnTimeWindow) {
+            const notifyKey = `${teacherKeyBase}|onTime`;
+            if (!classStartNotifiedKeys.has(notifyKey)) {
+                classStartNotifiedKeys.add(notifyKey);
+                const title = 'Class starts now';
+                const body = `${currentTeacher}: ${day} at ${formatHour(hour)} is starting now.`;
+                try {
+                    new Notification(title, { body, tag: notifyKey });
+                } catch {
+                    // Ignore notification constructor errors (browser policy / unsupported context).
+                }
+            }
+        }
+    });
+    upcomingStudent.forEach(({ day, hour, startsAt, studentName }) => {
+        const diffMs = startsAt.getTime() - now.getTime();
+        const dateKey = `${startsAt.getFullYear()}-${startsAt.getMonth() + 1}-${startsAt.getDate()}`;
+        const studentKeyBase = `student|${String(studentName || '').trim().toLowerCase()}|${dateKey}|${day}|${hour}`;
+        const inLeadWindow = diffMs > 0 && diffMs <= leadMs + toleranceMs && diffMs >= leadMs - toleranceMs;
+        if (inLeadWindow) {
+            const notifyKey = `${studentKeyBase}|lead5`;
+            if (!studentClassStartNotifiedKeys.has(notifyKey)) {
+                studentClassStartNotifiedKeys.add(notifyKey);
+                const title = 'Your class starts soon';
+                const body = `${day} at ${formatHour(hour)} starts in ${CLASS_START_NOTIFY_LEAD_MINUTES} minutes.`;
+                try {
+                    new Notification(title, { body, tag: notifyKey });
+                } catch {
+                    // Ignore notification constructor errors (browser policy / unsupported context).
+                }
+            }
+        }
+        const inOnTimeWindow = Math.abs(diffMs) <= onTimeToleranceMs;
+        if (inOnTimeWindow) {
+            const notifyKey = `${studentKeyBase}|onTime`;
+            if (!studentClassStartNotifiedKeys.has(notifyKey)) {
+                studentClassStartNotifiedKeys.add(notifyKey);
+                const title = 'Your class starts now';
+                const body = `${day} at ${formatHour(hour)} is starting now.`;
+                try {
+                    new Notification(title, { body, tag: notifyKey });
+                } catch {
+                    // Ignore notification constructor errors (browser policy / unsupported context).
+                }
+            }
         }
     });
 }
