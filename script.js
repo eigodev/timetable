@@ -7683,7 +7683,7 @@ function updateAddStudentPassportFieldVisibility() {
             passportLinkInput.value = '';
         }
     }
-    dialog.classList.remove('add-modal-dialog--expanded');
+    dialog.classList.toggle('add-modal-dialog--expanded', isTeacherMode);
 
     if (submitBtn) {
         submitBtn.textContent = isTeacherMode ? 'Add teacher' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
