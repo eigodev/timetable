@@ -9002,6 +9002,7 @@ function setupAddStudentModal() {
     const modal = document.getElementById('addModal');
     const form = document.getElementById('addStudentForm');
     const cancelBtn = document.getElementById('addStudentCancel');
+    const teacherHeaderCancelBtn = document.getElementById('addTeacherHeaderCancel');
     const backdrop = document.getElementById('addModalBackdrop');
     const schoolInput = document.getElementById('addSchoolNameInput');
     const studentFirstInput = document.getElementById('addStudentFirst');
@@ -9022,6 +9023,9 @@ function setupAddStudentModal() {
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
+    }
+    if (teacherHeaderCancelBtn) {
+        teacherHeaderCancelBtn.addEventListener('click', () => closeAddStudentModal());
     }
     if (backdrop) {
         backdrop.addEventListener('click', () => closeAddStudentModal());
