@@ -5920,13 +5920,111 @@ function closeStudentRepositionModal() {
     closeModalWithAnimation(modal);
 }
 
+function parseRepositionHourInput(rawValue) {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return Number.NaN;
+    const numeric = Number.parseInt(raw, 10);
+    if (Number.isFinite(numeric)) return numeric;
+    const match = raw.match(/^(\d{1,2})(?::(\d{1,2}))?\s*([ap]\.?m\.?)?$/i);
+    if (!match) return Number.NaN;
+    let hour = Number.parseInt(match[1], 10);
+    const minute = Number.parseInt(match[2] || '0', 10);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute) || minute < 0 || minute > 59) return Number.NaN;
+    const meridiem = String(match[3] || '').toLowerCase().replace(/\./g, '');
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+    return hour;
+}
+
+function normalizeRepositionDayInput(rawValue) {
+    const raw = String(rawValue || '').trim().toLowerCase();
+    if (!raw) return '';
+    const matched = DAYS.find((d) => String(d || '').trim().toLowerCase() === raw);
+    return matched ? String(matched) : '';
+}
+
+function submitStudentRepositionBooking() {
+    const modal = document.getElementById('studentRepositionModal');
+    const dayInput = document.getElementById('studentRepositionModalDay');
+    const timeInput = document.getElementById('studentRepositionModalTime');
+    if (!modal || !dayInput || !timeInput) return;
+
+    const studentName = String(loggedInStudentFullName || '').trim();
+    if (!studentName) {
+        showAppMessage('Please log in as a student to schedule a reposition.');
+        return;
+    }
+
+    const day = normalizeRepositionDayInput(dayInput.value) || normalizeRepositionDayInput(modal.dataset.repositionDay);
+    const hour = parseRepositionHourInput(timeInput.value || modal.dataset.repositionHour);
+    if (!day || !Number.isFinite(hour)) {
+        showAppMessage('Please provide a valid day and time.');
+        return;
+    }
+    if (hour < START_HOUR || hour >= END_HOUR) {
+        showAppMessage(`Please choose a time between ${formatHour(START_HOUR)} and ${formatHour(END_HOUR - 1)}.`);
+        return;
+    }
+
+    const tutorName = String(getTutorRosterNameForStudent(studentName) || '').trim();
+    if (!tutorName || !isActiveTeacherName(tutorName)) {
+        showAppMessage('No active tutor was found for your profile.');
+        return;
+    }
+
+    const slotKey = `${day}-${hour}`;
+    const tutorSlots = computeSlotStatesForProfile(tutorName);
+    const currentState = String(tutorSlots[slotKey] || '').trim().toLowerCase();
+    if (currentState !== 'available') {
+        showAppMessage('This slot is no longer available. Please choose another time.');
+        return;
+    }
+
+    if (!teacherUnavailableStudentNamesByTeacher[tutorName]) {
+        teacherUnavailableStudentNamesByTeacher[tutorName] = {};
+    }
+    teacherUnavailableStudentNamesByTeacher[tutorName][slotKey] = studentName;
+
+    const tutorRawSchedule = teacherSchedules[tutorName]
+        ? getScheduleSlotMapWithoutMeta(teacherSchedules[tutorName])
+        : {};
+    tutorRawSchedule[slotKey] = 'unavailable';
+    teacherSchedules[tutorName] = withUnavailableStudentNamesMeta(tutorName, tutorRawSchedule);
+    saveAllSchedules();
+
+    if (currentTeacher && String(currentTeacher).trim().toLowerCase() === studentName.toLowerCase()) {
+        slotStates = mergeStudentCalendarWithTutorFreeSlots(studentName, tutorName);
+        refreshCalendarDisplay();
+        updateSummary();
+    }
+
+    resetClassStartNotificationCache();
+    notifyUpcomingClasses();
+    closeStudentRepositionModal();
+    showAppMessage(`Reposition booked for ${day} at ${formatHour(hour)}.`);
+}
+
 function setupStudentRepositionModal() {
     const modal = document.getElementById('studentRepositionModal');
     const closeBtn = document.getElementById('studentRepositionModalClose');
     const backdrop = document.getElementById('studentRepositionModalBackdrop');
-    if (!modal || !closeBtn) return;
-    closeBtn.addEventListener('click', () => closeStudentRepositionModal());
+    const scheduleBtn = document.getElementById('studentRepositionModalSchedule');
+    const dayInput = document.getElementById('studentRepositionModalDay');
+    const timeInput = document.getElementById('studentRepositionModalTime');
+    if (!modal) return;
+    closeBtn?.addEventListener('click', () => closeStudentRepositionModal());
     backdrop?.addEventListener('click', () => closeStudentRepositionModal());
+    scheduleBtn?.addEventListener('click', () => submitStudentRepositionBooking());
+    dayInput?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        submitStudentRepositionBooking();
+    });
+    timeInput?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        submitStudentRepositionBooking();
+    });
 }
 
 function randomIntBelow(max) {
