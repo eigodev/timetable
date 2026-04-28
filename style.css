@@ -3676,12 +3676,22 @@ input.student-reposition-modal-day {
     font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .add-teacher-segmented-btn.is-active {
     border-color: #5d86d8;
     color: #2b4f9e;
     background: #f2f7ff;
+}
+
+.add-teacher-segmented-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
 }
 
 .add-teacher-availability-table {
