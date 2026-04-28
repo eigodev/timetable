@@ -124,6 +124,10 @@ let googleMeetUseSharedSchoolLink = false;
 let googleMeetSharedLinkModeBySchoolKey = {};
 let calendarTodayRefreshTimer = null;
 let currentTimeIndicatorTimer = null;
+let classStartNotificationTimer = null;
+let classStartNotificationPermissionRequested = false;
+const CLASS_START_NOTIFY_LEAD_MINUTES = 5;
+const classStartNotifiedKeys = new Set();
 const MODAL_CLOSE_ANIMATION_MS = 220;
 const modalCloseTimers = new WeakMap();
 
@@ -6242,6 +6246,7 @@ function selectTeacher(teacherName, opts) {
     }
 
     currentTeacher = scheduleLoadKey;
+    resetClassStartNotificationCache();
     renderSidebarHeaderProfile();
 
     document.querySelectorAll('.teacher-item').forEach((item) => {
@@ -6264,6 +6269,7 @@ function selectTeacher(teacherName, opts) {
     });
 
     loadTeacherSchedule(scheduleLoadKey);
+    notifyUpcomingClasses();
     applyCalendarStatePaletteCssVars();
     refreshContextMenuTheme();
 
@@ -9575,6 +9581,8 @@ function scheduleNextTodayCalendarHighlightRefresh() {
     const delayMs = Math.max(1000, nextMidnight.getTime() - now.getTime() + 1000);
     calendarTodayRefreshTimer = window.setTimeout(() => {
         refreshTodayCalendarHighlight();
+        resetClassStartNotificationCache();
+        notifyUpcomingClasses();
         scheduleNextTodayCalendarHighlightRefresh();
     }, delayMs);
 }
@@ -9655,6 +9663,96 @@ function initCurrentTimeIndicator() {
         currentTimeIndicatorTimer = null;
     }
     currentTimeIndicatorTimer = window.setInterval(updateCurrentTimeIndicator, 30000);
+    startClassStartNotificationTimer();
+}
+
+function resetClassStartNotificationCache() {
+    classStartNotifiedKeys.clear();
+}
+
+function getNextDateForDayAndHour(dayName, hour, now = new Date()) {
+    const targetDayIndex = DAYS.findIndex((d) => String(d || '').trim() === String(dayName || '').trim());
+    const targetHour = Number.parseInt(String(hour), 10);
+    if (targetDayIndex < 0 || !Number.isFinite(targetHour)) return null;
+    const next = new Date(now);
+    next.setSeconds(0, 0);
+    next.setHours(targetHour, 0, 0, 0);
+    const diff = targetDayIndex - now.getDay();
+    const addDays = diff < 0 ? diff + 7 : diff;
+    next.setDate(now.getDate() + addDays);
+    if (next.getTime() <= now.getTime()) {
+        next.setDate(next.getDate() + 7);
+    }
+    return next;
+}
+
+function isClassLikeSlotState(state) {
+    const normalized = String(state || '').trim().toLowerCase();
+    if (!normalized || normalized === 'available' || normalized === 'unavailable' || normalized === 'rescheduled') {
+        return false;
+    }
+    return !!resolveSchoolTokenInfoFromState(normalized);
+}
+
+function getUpcomingClassSlotsForSelectedTeacher(now = new Date()) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher) || loggedInStudentFullName) return [];
+    const items = [];
+    DAYS.forEach((day) => {
+        for (let hour = START_HOUR; hour < END_HOUR; hour++) {
+            const state = getSlotState(day, hour);
+            if (!isClassLikeSlotState(state)) continue;
+            const startsAt = getNextDateForDayAndHour(day, hour, now);
+            if (!startsAt) continue;
+            items.push({ day, hour, startsAt, state });
+        }
+    });
+    return items;
+}
+
+function maybeRequestNotificationPermission() {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'default') return;
+    if (classStartNotificationPermissionRequested) return;
+    classStartNotificationPermissionRequested = true;
+    Notification.requestPermission().catch(() => {});
+}
+
+function notifyUpcomingClasses() {
+    if (typeof Notification === 'undefined') return;
+    const now = new Date();
+    const upcoming = getUpcomingClassSlotsForSelectedTeacher(now);
+    if (upcoming.length === 0) return;
+    if (Notification.permission === 'default') {
+        maybeRequestNotificationPermission();
+        return;
+    }
+    if (Notification.permission !== 'granted') return;
+    const leadMs = CLASS_START_NOTIFY_LEAD_MINUTES * 60 * 1000;
+    const toleranceMs = 60 * 1000;
+    upcoming.forEach(({ day, hour, startsAt }) => {
+        const diffMs = startsAt.getTime() - now.getTime();
+        if (diffMs <= 0 || diffMs > leadMs + toleranceMs || diffMs < leadMs - toleranceMs) return;
+        const dateKey = `${startsAt.getFullYear()}-${startsAt.getMonth() + 1}-${startsAt.getDate()}`;
+        const notifyKey = `${String(currentTeacher || '').trim().toLowerCase()}|${dateKey}|${day}|${hour}`;
+        if (classStartNotifiedKeys.has(notifyKey)) return;
+        classStartNotifiedKeys.add(notifyKey);
+        const title = 'Class starts soon';
+        const body = `${currentTeacher}: ${day} at ${formatHour(hour)} starts in ${CLASS_START_NOTIFY_LEAD_MINUTES} minutes.`;
+        try {
+            new Notification(title, { body, tag: notifyKey });
+        } catch {
+            // Ignore notification constructor errors (browser policy / unsupported context).
+        }
+    });
+}
+
+function startClassStartNotificationTimer() {
+    if (classStartNotificationTimer) {
+        clearInterval(classStartNotificationTimer);
+        classStartNotificationTimer = null;
+    }
+    notifyUpcomingClasses();
+    classStartNotificationTimer = window.setInterval(notifyUpcomingClasses, 30000);
 }
 
 // Refresh calendar display based on current slotStates
@@ -9673,6 +9771,7 @@ function refreshCalendarDisplay() {
             }
         }
     });
+    notifyUpcomingClasses();
 }
 
 // Format hour for display (e.g., 8 -> "8:00 a.m.", 13 -> "1:00 p.m.")
@@ -9733,6 +9832,8 @@ function setSlotState(day, hour, state) {
     
     // Save to teacher schedule and localStorage
     saveTeacherSchedule(currentTeacher);
+    resetClassStartNotificationCache();
+    notifyUpcomingClasses();
     
     updateSummary();
 }
