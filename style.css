@@ -3548,6 +3548,9 @@ input.student-reposition-modal-day {
 
 .add-teacher-redesign-side-col {
     min-height: 100%;
+    min-width: 35%;
+    padding: 0 0 0 20px;
+    border-left: 1px solid #0e1d381c;
 }
 
 .add-teacher-card {
@@ -3679,32 +3682,34 @@ input.student-reposition-modal-day {
 }
 
 .add-teacher-segmented {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 .add-teacher-segmented-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 5px;
-    gap: 6px;
+    padding: 10px;
+    gap: 15px;
 
-    border: 1px solid #d6deeb;
+    border: none;
+    border: 1px solid transparent;
     border-radius: 10px;
     background: #f9fbff;
 
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: #51617f;
     cursor: pointer;
 }
 
 .add-teacher-segmented-btn.is-active {
+    border: 1px solid #0d1338;
     border-color: #5d86d8;
-    color: #2b4f9e;
     background: #f2f7ff;
+    color: #2b4f9e;
 }
 
 .add-teacher-segmented-btn svg {
