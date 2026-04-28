@@ -3689,6 +3689,11 @@ input.student-reposition-modal-day {
     width: 60px;
 }
 
+.add-teacher-availability-table-start,
+.add-teacher-availability-table-end {
+    text-align: center;
+}
+
 .add-teacher-availability-table th,
 .add-teacher-availability-table td {
     border-bottom: 1px solid #ebeff7;
