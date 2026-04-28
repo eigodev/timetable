@@ -132,20 +132,20 @@
                             <table class="add-teacher-availability-table" aria-hidden="true">
                                 <thead>
                                     <tr>
-                                        <th>Day</th>
-                                        <th>Available</th>
-                                        <th>Start</th>
-                                        <th>End</th>
+                                        <th class="add-teacher-availability-table-day">Day</th>
+                                        <th class="add-teacher-availability-table-available">Available</th>
+                                        <th class="add-teacher-availability-table-start">Start</th>
+                                        <th class="add-teacher-availability-table-end">End</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td>Monday</td><td><input type="checkbox" checked></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td>Tuesday</td><td><input type="checkbox" checked></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td>Wednesday</td><td><input type="checkbox" checked></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td>Thursday</td><td><input type="checkbox" checked></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td>Friday</td><td><input type="checkbox" checked></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td>Saturday</td><td><input type="checkbox"></td><td>09:00</td><td>17:00</td></tr>
-                                    <tr><td>Sunday</td><td><input type="checkbox"></td><td>09:00</td><td>17:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Monday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Tuesday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Wednesday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Thursday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Friday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Saturday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>09:00</td><td>17:00</td></tr>
+                                    <tr><td class="add-teacher-availability-table-day">Sunday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>09:00</td><td>17:00</td></tr>
                                 </tbody>
                             </table>
                             <div class="add-teacher-availability-actions">

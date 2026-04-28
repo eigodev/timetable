@@ -3536,10 +3536,6 @@ input.student-reposition-modal-day {
     min-height: 100%;
 }
 
-.add-teacher-card--availability {
-    flex: 1 1 auto;
-}
-
 .add-teacher-card {
     border: 1px solid #e2e8f4;
     border-radius: 10px;
@@ -3701,6 +3697,9 @@ input.student-reposition-modal-day {
 .add-teacher-availability-table td {
     border-bottom: 1px solid #ebeff7;
     padding: 5px;
+    height: 30px;
+    line-height: 20px;
+    vertical-align: middle;
 }
 
 .add-teacher-checkbox {
