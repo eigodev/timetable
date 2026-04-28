@@ -146,33 +146,35 @@
                     <div class="add-teacher-redesign-side-col">
                         <section class="add-teacher-card add-teacher-card--teaching-type">
                             <h3 class="add-teacher-card-title">Teaching Type</h3>
+                            <input type="hidden" id="addTeacherTeachingType" name="teacherTeachingType" value="both">
                             <div class="add-teacher-segmented" role="group" aria-label="Teaching type">
-                                <button type="button" class="add-teacher-segmented-btn">
+                                <button type="button" class="add-teacher-segmented-btn" data-teaching-type="private" aria-pressed="false">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6" aria-hidden="true">
                                         <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd" />
                                     </svg>
                                     <span>Private Classes</span>
                                 </button>
-                                <button type="button" class="add-teacher-segmented-btn">
+                                <button type="button" class="add-teacher-segmented-btn" data-teaching-type="group" aria-pressed="false">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6" aria-hidden="true">
                                         <path fill-rule="evenodd" d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" clip-rule="evenodd" />
                                         <path d="M5.082 14.254a8.287 8.287 0 0 0-1.308 5.135 9.687 9.687 0 0 1-1.764-.44l-.115-.04a.563.563 0 0 1-.373-.487l-.01-.121a3.75 3.75 0 0 1 3.57-4.047ZM20.226 19.389a8.287 8.287 0 0 0-1.308-5.135 3.75 3.75 0 0 1 3.57 4.047l-.01.121a.563.563 0 0 1-.373.486l-.115.04c-.567.2-1.156.349-1.764.441Z" />
                                     </svg>
                                     <span>Group Classes</span>
                                 </button>
-                                <button type="button" class="add-teacher-segmented-btn is-active">Both</button>
+                                <button type="button" class="add-teacher-segmented-btn is-active" data-teaching-type="both" aria-pressed="true">Both</button>
                             </div>
                         </section>
                         <section class="add-teacher-photo-block">
                             <h3 class="add-teacher-photo-title">Upload Profile Photo</h3>
+                            <input type="file" id="addTeacherPhotoInput" accept="image/png,image/jpeg,image/jpg" hidden>
                             <button type="button" class="add-teacher-upload-dropzone" aria-label="Upload profile photo">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path d="M20 16.2a4.2 4.2 0 0 0-1.1-8.26 5.6 5.6 0 0 0-10.78 1.7A3.7 3.7 0 0 0 8 17h12Z"></path>
                                     <path d="M12 18V11"></path>
                                     <path d="m9.5 13.5 2.5-2.5 2.5 2.5"></path>
                                 </svg>
-                                <span class="add-teacher-upload-main">Click to upload</span>
-                                <span class="add-teacher-upload-sub">JPG, PNG up to 2MB</span>
+                                <span class="add-teacher-upload-main" id="addTeacherUploadMain">Click to upload</span>
+                                <span class="add-teacher-upload-sub" id="addTeacherUploadSub">JPG, PNG up to 2MB</span>
                             </button>
                         </section>
                     </div>

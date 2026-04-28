@@ -7777,6 +7777,19 @@ function openAddStudentModal(mode = 'school') {
         teacherPasswordInput.type = 'text';
         setPasswordToggleVisual(teacherPasswordInput, teacherPasswordToggleBtn);
     }
+    const teacherTeachingTypeInput = document.getElementById('addTeacherTeachingType');
+    if (teacherTeachingTypeInput) teacherTeachingTypeInput.value = 'both';
+    document.querySelectorAll('.add-teacher-segmented .add-teacher-segmented-btn').forEach((btn) => {
+        const isBoth = String(btn.getAttribute('data-teaching-type') || '').trim() === 'both';
+        btn.classList.toggle('is-active', isBoth);
+        btn.setAttribute('aria-pressed', isBoth ? 'true' : 'false');
+    });
+    const teacherPhotoInput = document.getElementById('addTeacherPhotoInput');
+    if (teacherPhotoInput) teacherPhotoInput.value = '';
+    const teacherUploadMain = document.getElementById('addTeacherUploadMain');
+    const teacherUploadSub = document.getElementById('addTeacherUploadSub');
+    if (teacherUploadMain) teacherUploadMain.textContent = 'Click to upload';
+    if (teacherUploadSub) teacherUploadSub.textContent = 'JPG, PNG up to 2MB';
     if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;
     if (addSchoolExternalPanel) {
         addSchoolExternalPanel.classList.add('is-collapsed');
@@ -9037,6 +9050,47 @@ function setupAddStudentModal() {
     studentLastInput?.addEventListener('input', syncAddStudentUsername);
     phoneCountrySelect?.addEventListener('change', handleAddStudentPhoneCountryChanged);
     teacherPhoneCountrySelect?.addEventListener('change', handleAddTeacherPhoneCountryChanged);
+    if (modal.dataset.teacherUiBound !== '1') {
+        modal.dataset.teacherUiBound = '1';
+        modal.addEventListener('click', (e) => {
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const teachBtn = target.closest('.add-teacher-segmented-btn');
+            if (teachBtn) {
+                const wrap = teachBtn.closest('.add-teacher-segmented');
+                if (!wrap) return;
+                const nextType = String(teachBtn.getAttribute('data-teaching-type') || '').trim() || 'both';
+                const hiddenInput = document.getElementById('addTeacherTeachingType');
+                if (hiddenInput) hiddenInput.value = nextType;
+                wrap.querySelectorAll('.add-teacher-segmented-btn').forEach((btn) => {
+                    const active = btn === teachBtn;
+                    btn.classList.toggle('is-active', active);
+                    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                return;
+            }
+            const uploadBtn = target.closest('.add-teacher-upload-dropzone');
+            if (uploadBtn) {
+                const fileInput = document.getElementById('addTeacherPhotoInput');
+                fileInput?.click();
+            }
+        });
+        modal.addEventListener('change', (e) => {
+            const target = e.target;
+            if (!(target instanceof HTMLInputElement)) return;
+            if (target.id !== 'addTeacherPhotoInput') return;
+            const main = document.getElementById('addTeacherUploadMain');
+            const sub = document.getElementById('addTeacherUploadSub');
+            const file = target.files && target.files[0] ? target.files[0] : null;
+            if (!file) {
+                if (main) main.textContent = 'Click to upload';
+                if (sub) sub.textContent = 'JPG, PNG up to 2MB';
+                return;
+            }
+            if (main) main.textContent = file.name;
+            if (sub) sub.textContent = `${Math.max(1, Math.round(file.size / 1024))} KB selected`;
+        });
+    }
     const schoolSelectEl = document.getElementById('addStudentGroupSelect');
     schoolSelectEl?.addEventListener('change', () => {
         if (addModalMode !== 'student-global') return;
