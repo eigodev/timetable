@@ -5283,16 +5283,14 @@ function renderAdminOverviewPanel() {
                       const email = String(teacherEmailsByName[name] || '').trim();
                       const rawPw = String(teacherPasswordsByName[name] || '').trim();
                       const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
-                      return 
-                      
-                      `<div class="admin-dashboard-item">
+                      return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
                         <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
                         <button class="admin-dashboard-item-remove">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-                                    <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                                      <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
                                 </svg>
                             </div>
                         </button>
@@ -6697,40 +6695,40 @@ function buildStudentWhatsappMessage(studentName) {
     const greetingOptions = ['Hi', 'Hi there', 'Hello', 'Hello there', 'Hey', 'Hey there'];
     const greeting = greetingOptions[Math.floor(Math.random() * greetingOptions.length)] || 'Hi there';
     const followUpOptions = [
-        'How are you? 👋',
-        'How are you doing? 👋',
-        "How's it going? 👋",
-        'How have you been? 👋',
-        "How's everything? 👋",
-        'How are things going? 👋',
-        "How's your day going? 👋",
-        "How's your day been so far? 👋",
-        "What's up? 👋",
-        "What's going on? 👋",
-        "How's it going so far? 👋",
-        'How are things? 👋',
-        'How are you today? 👋',
-        "I hope you're doing well. 👋",
-        "Hope you're having a great day. 👋"
+        'How are you?',
+        'How are you doing?',
+        "How's it going?",
+        'How have you been?',
+        "How's everything?",
+        'How are things going?',
+        "How's your day going?",
+        "How's your day been so far?",
+        "What's up?",
+        "What's going on?",
+        "How's it going so far?",
+        'How are things?',
+        'How are you today?',
+        "I hope you're doing well.",
+        "Hope you're having a great day."
     ];
     const followUp = followUpOptions[Math.floor(Math.random() * followUpOptions.length)] || 'How are you today?';
     const meetLink = String(studentGoogleMeetLinksByName[fullName] || '').trim();
     const meetLine = `*${meetLink || "<Google Meet link>"}*`;
     const classLinkLineOptions = [
-        "Here's the link for our class. ☝️",
-        "Here's your class link. ☝️",
-        "Here's the link to our class. ☝️",
-        'This is our class link. ☝️',
-        "Here's your link for today's class. ☝️",
-        "Here's the link for our lesson today. ☝️",
-        "Here's your class link for today. ☝️",
-        "Here's where we'll meet. ☝️",
-        'Please find the class link below. ☝️',
-        'Here is the link for our class. ☝️',
+        "Here's the link for our class.",
+        "Here's your class link.",
+        "Here's the link to our class.",
+        'This is our class link.',
+        "Here's your link for today's class.",
+        "Here's the link for our lesson today.",
+        "Here's your class link for today.",
+        "Here's where we'll meet.",
+        'Please find the class link below.',
+        'Here is the link for our class.',
         'You can access the class using the link below.',
-        'Class link. ☝️',
-        'Your class link. ☝️',
-        'Join here. ☝️'
+        'Class link.',
+        'Your class link.',
+        'Join here.'
     ];
     const classLinkLine = classLinkLineOptions[Math.floor(Math.random() * classLinkLineOptions.length)] || "Here's your class link.";
     return `${dateLine}
