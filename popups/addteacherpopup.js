@@ -37,7 +37,7 @@
                 </div>
             </div>
             <div id="addTeacherFields" class="add-modal-form-section am-sec is-hidden" aria-hidden="true">
-                <div class="add-teacher-redesign-layout">
+                <div class="add-teacher-fields-container">
                     <div class="add-teacher-redesign-main-col">
                         <section class="add-teacher-card add-teacher-card--basic">
                             <h3 class="add-teacher-card-title">Basic Information</h3>
@@ -139,20 +139,66 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td class="add-teacher-availability-table-day">Monday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td class="add-teacher-availability-table-day">Tuesday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td class="add-teacher-availability-table-day">Wednesday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td class="add-teacher-availability-table-day">Thursday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td class="add-teacher-availability-table-day">Friday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>08:00</td><td>18:00</td></tr>
-                                    <tr><td class="add-teacher-availability-table-day">Saturday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>09:00</td><td>17:00</td></tr>
-                                    <tr><td class="add-teacher-availability-table-day">Sunday</td><td class="add-teacher-checkbox"><input type="checkbox"></td><td>09:00</td><td>17:00</td></tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Sunday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
+                                        <td class="add-teacher-start-time">09:00</td>
+                                        <td class="add-teacher-end-time">17:00</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Monday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox">
+                                        </td><td class="add-teacher-start-time">08:00</td>
+                                        <td class="add-teacher-end-time">18:00</td>
+                                        </tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Tuesday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
+                                        <td class="add-teacher-start-time">08:00</td>
+                                        <td class="add-teacher-end-time">18:00</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Wednesday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
+                                        <td class="add-teacher-start-time">08:00</td>
+                                        <td class="add-teacher-end-time">18:00</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Thursday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
+                                        <td class="add-teacher-start-time">08:00</td>
+                                        <td class="add-teacher-end-time">18:00</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Friday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
+                                        <td class="add-teacher-start-time">08:00</td>
+                                        <td class="add-teacher-end-time">18:00</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="add-teacher-availability-table-day">Saturday</td>
+                                        <td class="add-teacher-checkbox"><input type="checkbox"></td>
+                                        <td class="add-teacher-start-time">09:00</td>
+                                        <td class="add-teacher-end-time">17:00</td>
+                                    </tr>
                                 </tbody>
                             </table>
                             <div class="add-teacher-availability-actions">
-                                <button type="button" class="add-teacher-ghost-btn">Copy Monday to All</button>
                                 <button type="button" class="add-teacher-ghost-btn">Clear All</button>
                                 <button type="button" class="add-teacher-ghost-btn">Custom Calendar Setup</button>
                             </div>
+                        </section>
+                        <section class="add-teacher-photo-block">
+                            <h3 class="add-teacher-photo-title">Upload Profile Photo</h3>
+                            <button type="button" class="add-teacher-upload-dropzone" aria-label="Upload profile photo">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M20 16.2a4.2 4.2 0 0 0-1.1-8.26 5.6 5.6 0 0 0-10.78 1.7A3.7 3.7 0 0 0 8 17h12Z"></path>
+                                    <path d="M12 18V11"></path>
+                                    <path d="m9.5 13.5 2.5-2.5 2.5 2.5"></path>
+                                </svg>
+                                <span class="add-teacher-upload-main">Click to upload</span>
+                                <span class="add-teacher-upload-sub">JPG, PNG up to 2MB</span>
+                            </button>
                         </section>
                     </div>
                 </div>

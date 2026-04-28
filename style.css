@@ -3519,9 +3519,8 @@ input.student-reposition-modal-day {
     gap: 2px;
 }
 
-.add-teacher-redesign-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+.add-teacher-fields-container {
+    display: flex;
     gap: 12px;
 }
 
@@ -3537,14 +3536,19 @@ input.student-reposition-modal-day {
 }
 
 .add-teacher-card {
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    gap: 10px;
+
     border: 1px solid #e2e8f4;
     border-radius: 10px;
     background: #ffffff;
-    padding: 5px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
     box-shadow: 0 1px 2px rgba(31, 47, 79, 0.04);
+}
+
+.add-teacher-card--availability {
+    width: 300px;
 }
 
 .add-teacher-card-title {
@@ -3669,16 +3673,11 @@ input.student-reposition-modal-day {
 }
 
 .add-teacher-availability-table {
-    width: max-content;
     max-width: 100%;
     border-collapse: collapse;
     table-layout: auto;
     font-size: 0.76rem;
     color: #495a7b;
-}
-
-.add-teacher-availability-table-day {
-    width: auto;
 }
 
 .add-teacher-availability-table-available,
@@ -3702,10 +3701,20 @@ input.student-reposition-modal-day {
     vertical-align: middle;
 }
 
+tr td.add-teacher-availability-table-day {
+    width: auto;
+    padding: 0px 30px 0px 25px;
+}
+
 .add-teacher-checkbox {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.add-teacher-start-time,
+.add-teacher-end-time {
+    text-align: center;
 }
 
 .add-teacher-availability-table input[type="checkbox"] {
@@ -3792,6 +3801,52 @@ input.student-reposition-modal-day {
     font-family: inherit;
 }
 
+.add-teacher-photo-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.add-teacher-photo-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #2a3e64;
+}
+
+.add-teacher-upload-dropzone {
+    width: 100%;
+    border: 1px dashed #bcd0f4;
+    border-radius: 10px;
+    background: #f2f5fb;
+    min-height: 72px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: #2f63c8;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.add-teacher-upload-dropzone svg {
+    width: 18px;
+    height: 18px;
+}
+
+.add-teacher-upload-main {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.add-teacher-upload-sub {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8d96aa;
+}
+
 @media (min-width: 1900px) and (min-height: 1000px) {
     .add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
         top: 3%;
@@ -3807,7 +3862,7 @@ input.student-reposition-modal-day {
 }
 
 @media (max-width: 1060px) {
-    .add-teacher-redesign-layout {
+    .add-teacher-fields-container {
         grid-template-columns: 1fr;
     }
     .add-teacher-two-col,
