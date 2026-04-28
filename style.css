@@ -3673,7 +3673,8 @@ input.student-reposition-modal-day {
 }
 
 .add-teacher-availability-table {
-    width: 100%;
+    width: max-content;
+    max-width: 100%;
     border-collapse: collapse;
     table-layout: auto;
     font-size: 0.76rem;
