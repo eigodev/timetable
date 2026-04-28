@@ -3054,7 +3054,7 @@ input.student-reposition-modal-day {
 .am-c {
     display: flex;
     flex-direction: column;
-    gap: 0;
+    gap: 20px;
 }
 
 .add-popup-section,
@@ -3492,8 +3492,10 @@ input.student-reposition-modal-day {
 .add-teacher-redesign-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 2px;
+    gap: 10px;
+
+    border-bottom: 1px solid #e2e8f4;
+    padding-bottom: 10px;
 }
 
 .add-teacher-header-actions {
@@ -3706,7 +3708,7 @@ input.student-reposition-modal-day {
 .add-teacher-availability-table td {
     border-bottom: 1px solid #ebeff7;
     padding: 5px;
-    height: 30px;
+    height: 35.75px;
     line-height: 20px;
     vertical-align: middle;
 }
