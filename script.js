@@ -6723,9 +6723,9 @@ function buildStudentWhatsappMessage(studentName) {
         "Here's the link for our lesson today.",
         "Here's your class link for today.",
         "Here's where we'll meet.",
-        'Please find the class link below.',
+        'Please click on the link above to join our class.',
         'Here is the link for our class.',
-        'You can access the class using the link below.',
+        'You can access the class using the link above.',
         'Class link.',
         'Your class link.',
         'Join here.'
