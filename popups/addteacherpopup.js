@@ -77,7 +77,7 @@
                                                 <img id="addTeacherPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
                                                 <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" aria-hidden="true" tabindex="-1" aria-label="Country code (automatic)"></select>
                                             </div>
-                                            <input type="tel" id="addTeacherPhone" name="teacherPhone" autocomplete="tel-national" maxlength="30" placeholder="Enter phone number">
+                                            <input type="tel" id="addTeacherPhone" name="teacherPhone" autocomplete="tel-national" inputmode="numeric" maxlength="30" placeholder="Enter phone number" aria-label="Local phone number">
                                         </div>
                                     </label>
                                 </div>
