@@ -4069,17 +4069,17 @@ tr td.add-teacher-availability-table-day {
 }
 
 /* Miro links popup (standalone, no Google Meet selector reuse) */
-.miro-links-layer {
+.miro-board-content {
     position: fixed;
     inset: 0;
     z-index: 2004;
     display: none;
     box-sizing: border-box;
 }
-.miro-links-layer:not([hidden]) {
+.miro-board-content:not([hidden]) {
     display: flex;
 }
-.miro-links-layer-backdrop {
+.miro-backdrop-layer {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
@@ -8708,7 +8708,7 @@ header h1 {
 
 .google-meet-popup .meet-links-cell--link {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
     min-width: 0;
 }

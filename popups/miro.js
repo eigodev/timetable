@@ -174,8 +174,8 @@
         const host = document.querySelector('.link-miro-board');
         if (!host || host.querySelector(`#${LAYER_ID}`)) return;
         host.innerHTML = `
-            <div id="${LAYER_ID}" class="miro-links-layer" hidden aria-hidden="true">
-                <div class="miro-links-layer-backdrop" data-miro-role="backdrop" aria-hidden="true"></div>
+            <div id="${LAYER_ID}" class="miro-board-content" hidden aria-hidden="true">
+                <div class="miro-backdrop-layer" data-miro-role="backdrop" aria-hidden="true"></div>
                 <div class="miro-popup" role="dialog" aria-modal="true" aria-labelledby="miroLinksHeadline">
                     <div class="miro-header">
                         <div class="miro-header-title">
