@@ -64,7 +64,7 @@
                             <div class="add-student-phone-row add-student-redesign-phone-row">
                                 <div class="add-student-phone-country-wrap" id="addStudentContactDialCodeWrap">
                                     <img id="addStudentPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
-                                    <select id="addStudentPhoneCountry" name="phoneCountry" aria-label="Country code"></select>
+                                    <select id="addStudentPhoneCountry" name="phoneCountry" aria-hidden="true" tabindex="-1" aria-label="Country code (automatic)"></select>
                                 </div>
                                 <input type="tel" id="addStudentPhone" name="phone" autocomplete="tel-national" maxlength="30" placeholder="(__) ____-____">
                             </div>

@@ -2473,6 +2473,7 @@ input.student-reposition-modal-day {
     min-width: 52px;
     max-width: 52px;
     position: relative;
+    pointer-events: none;
 }
 
 #editStudentPhoneCountry {
@@ -2481,9 +2482,10 @@ input.student-reposition-modal-day {
     text-shadow: 0 0 0 transparent;
     font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
     box-sizing: border-box;
-    cursor: pointer;
+    cursor: default;
     appearance: none;
     -webkit-appearance: none;
+    pointer-events: none;
 }
 
 #editStudentPhoneCountry option {
@@ -2719,9 +2721,11 @@ input.student-reposition-modal-day {
     align-items: stretch;
     overflow: hidden;
     border-radius: 50%;
+    pointer-events: none;
 }
 
-#addStudentPhoneCountry {
+#addStudentPhoneCountry,
+#addTeacherPhoneCountry {
     appearance: none;
     -webkit-appearance: none;
     width: 100%;
@@ -2729,10 +2733,12 @@ input.student-reposition-modal-day {
     text-shadow: 0 0 0 transparent;
     font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
     box-sizing: border-box;
-    cursor: pointer;
+    cursor: default;
+    pointer-events: none;
 }
 
-#addStudentPhoneCountry option {
+#addStudentPhoneCountry option,
+#addTeacherPhoneCountry option {
     color: #333;
     font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
 }

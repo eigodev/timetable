@@ -68,14 +68,14 @@
                                     </label>
                                     <label class="add-student-label add-student-contact-country-wrap">
                                         <span>Country</span>
-                                        <input type="text" id="addTeacherCountry" name="teacherCountry" autocomplete="country" maxlength="120" placeholder="Enter country">
+                                        <input type="text" id="addTeacherCountry" name="teacherCountry" readonly autocomplete="off" maxlength="120" title="Filled automatically from the phone country code" aria-label="Country (from phone country code)">
                                     </label>
                                     <label class="add-student-label add-student-contact-phone-wrap add-teacher-phone-wrap">
                                         <span>Phone Number</span>
                                         <div class="add-teacher-phone-row">
                                             <div class="add-student-phone-country-wrap" id="addTeacherDialCodeWrap">
                                                 <img id="addTeacherPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
-                                                <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" aria-label="Country code"></select>
+                                                <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" aria-hidden="true" tabindex="-1" aria-label="Country code (automatic)"></select>
                                             </div>
                                             <input type="tel" id="addTeacherPhone" name="teacherPhone" autocomplete="tel-national" maxlength="30" placeholder="Enter phone number">
                                         </div>
