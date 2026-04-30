@@ -7927,6 +7927,8 @@ function openAddStudentModal(mode = 'school') {
         return;
     }
     bindAddStudentUsernameAutoSync(studentFirstInput, studentLastInput, studentUsernameInput);
+    bindPhoneInputAutoCountry(studentPhoneInput, phoneCountrySelect, updateAddStudentPhonePlaceholder);
+    bindPhoneInputAutoCountry(teacherPhoneInput, teacherPhoneCountrySelect, updateAddTeacherPhonePlaceholder);
 
     const normalizedMode = getCanonicalAddModalMode(mode);
     const preservedEntrySchool = normalizedMode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';
