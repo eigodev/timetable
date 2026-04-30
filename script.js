@@ -1082,7 +1082,7 @@ function normalizeUsername(value) {
 function buildDefaultStudentUsername(firstRaw, lastRaw) {
     const first = normalizeUsername(firstRaw);
     const last = normalizeUsername(lastRaw);
-    const combined = first && last ? `${first}_${last}` : `${first}${last}`;
+    const combined = `${first}${last}`;
     if (!combined) return '';
     return `${combined}_`;
 }
