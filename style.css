@@ -2489,7 +2489,6 @@ input.student-reposition-modal-day {
 
 #editStudentPhoneCountry option {
     color: #333;
-    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
 }
 
 .edit-student-phone-country-flag {
@@ -2739,6 +2738,11 @@ input.student-reposition-modal-day {
 #addStudentPhoneCountry option,
 #addTeacherPhoneCountry option {
     color: #333;
+}
+
+#editStudentPhoneCountry option,
+#addStudentPhoneCountry option,
+#addTeacherPhoneCountry option {
     font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", sans-serif;
 }
 

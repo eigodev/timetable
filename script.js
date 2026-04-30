@@ -51,6 +51,14 @@ function getPhoneCountryFlagImageSrc(countryIso) {
     return PHONE_COUNTRY_FLAG_DATA_URIS[iso] || BRAZIL_FLAG_SVG_DATA_URI;
 }
 
+function getPhoneCountryByIso(countryIso) {
+    const iso = String(countryIso || '').trim().toUpperCase();
+    return PHONE_COUNTRY_OPTIONS.find((item) => item.iso === iso)
+        || PHONE_COUNTRY_OPTIONS.find((item) => item.iso === DEFAULT_PHONE_COUNTRY_ISO)
+        || PHONE_COUNTRY_OPTIONS[0]
+        || null;
+}
+
 /** @type {Record<string, Array<Record<string, string>>>} */
 let studentClassReportRows = {};
 
@@ -980,7 +988,7 @@ function digitsOnly(s) {
 }
 
 function getDialCodeDigitsForCountryIso(iso) {
-    const c = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === String(iso || '').trim().toUpperCase());
+    const c = getPhoneCountryByIso(iso);
     return c ? digitsOnly(c.dialCode) : '';
 }
 
@@ -1026,11 +1034,7 @@ function findPhoneCountryByDialPrefix(rawDigits, requireLocalDigits = true) {
  * Roster `number` is stored as the national/local part only; the flag selector holds the dial code.
  */
 function normalizeStudentPhoneLocalInput(raw, countryIso) {
-    const iso = String(countryIso || '').trim().toUpperCase();
-    const c =
-        PHONE_COUNTRY_OPTIONS.find((item) => item.iso === iso)
-        || PHONE_COUNTRY_OPTIONS.find((item) => item.iso === DEFAULT_PHONE_COUNTRY_ISO)
-        || PHONE_COUNTRY_OPTIONS[0];
+    const c = getPhoneCountryByIso(countryIso);
     const dial = String(c?.dialCode || '').trim();
     let s = String(raw || '').trim();
     if (!s || !dial) return s;
@@ -6743,9 +6747,7 @@ function buildStudentWhatsappUrl(studentName, message = '') {
     const name = String(studentName || '').trim();
     if (!name) return '';
     const phoneInfo = getStudentPhoneInfo(name);
-    const country = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === phoneInfo.countryIso)
-        || PHONE_COUNTRY_OPTIONS.find((item) => item.iso === DEFAULT_PHONE_COUNTRY_ISO)
-        || PHONE_COUNTRY_OPTIONS[0];
+    const country = getPhoneCountryByIso(phoneInfo.countryIso);
     if (!country) return '';
 
     const dialDigits = String(country.dialCode || '').replace(/\D+/g, '');
@@ -7543,9 +7545,7 @@ function updateAddStudentPhonePlaceholder() {
     const flagImg = document.getElementById('addStudentPhoneCountryFlag');
     if (!countrySelect || !phoneInput) return;
 
-    const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
-        || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
-        || PHONE_COUNTRY_OPTIONS[0];
+    const selected = getPhoneCountryByIso(countrySelect.value);
     if (!selected) return;
     phoneInput.placeholder = selected.sample;
     if (flagImg) {
@@ -7583,9 +7583,7 @@ function updateEditStudentPhonePlaceholder() {
     const countryInput = document.getElementById('editStudentCountry');
     if (!countrySelect || !phoneInput) return;
 
-    const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
-        || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
-        || PHONE_COUNTRY_OPTIONS[0];
+    const selected = getPhoneCountryByIso(countrySelect.value);
     if (!selected) return;
     phoneInput.placeholder = selected.sample;
     if (flagImg) {
@@ -7613,9 +7611,7 @@ function updateAddTeacherPhonePlaceholder() {
     const flagImg = document.getElementById('addTeacherPhoneCountryFlag');
     if (!countrySelect || !phoneInput) return;
 
-    const selected = PHONE_COUNTRY_OPTIONS.find((country) => country.iso === countrySelect.value)
-        || PHONE_COUNTRY_OPTIONS.find((country) => country.iso === DEFAULT_PHONE_COUNTRY_ISO)
-        || PHONE_COUNTRY_OPTIONS[0];
+    const selected = getPhoneCountryByIso(countrySelect.value);
     if (!selected) return;
     phoneInput.placeholder = selected.sample;
     if (flagImg) {
