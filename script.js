@@ -1574,7 +1574,15 @@ async function initRoster(preloadedRoster = null) {
     studentCountryByName = {};
     [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
         const c = String(studentCountriesRaw[name] || '').trim();
-        if (c) studentCountryByName[name] = c;
+        if (c) {
+            studentCountryByName[name] = c;
+            return;
+        }
+        const phone = studentPhonesByName[name];
+        if (!phone || typeof phone !== 'object') return;
+        const iso = String(phone.countryIso || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+        const country = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === iso);
+        if (country?.name) studentCountryByName[name] = country.name;
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -6874,7 +6882,10 @@ function openEditStudentModal(studentName, rosterKey) {
     phoneCountrySelect.value = phone.countryIso;
     updateEditStudentPhonePlaceholder();
     if (cityInput) cityInput.value = String(studentCityByName[studentName] || '');
-    if (countryInput) countryInput.value = String(studentCountryByName[studentName] || '');
+    if (countryInput) {
+        const fallbackCountryName = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === phone.countryIso)?.name || '';
+        countryInput.value = String(studentCountryByName[studentName] || fallbackCountryName);
+    }
     if (emailInput) emailInput.value = String(studentEmailsByName[studentName] || '');
     if (usernameInput) usernameInput.value = String(studentUsernamesByName[studentName] || buildDefaultStudentUsernameFromFullName(studentName));
     if (passwordInput) passwordInput.value = '';
