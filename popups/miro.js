@@ -262,6 +262,7 @@
             const rowStatus = getRowStatus(row);
             const lessonsDisplay = String(row.lessonsUrl || '').trim() || 'No lessons board';
             const workbookDisplay = String(row.workbookUrl || '').trim() || 'No workbook board';
+            const hasAnyLink = Boolean(String(row.lessonsUrl || '').trim() || String(row.workbookUrl || '').trim());
             return `
                 <div class="miro-row" data-row-id="${row.id}" role="row">
                     <div></div>
@@ -270,10 +271,10 @@
                         <span class="miro-student-name">${row.student}</span>
                     </div>
                     <div class="miro-link-cell">
-                        <span class="miro-link-icon" aria-hidden="true"><img src="icon/miro.jpeg" alt="Miro"></span>
+                        ${hasAnyLink ? '<span class="miro-link-icon" aria-hidden="true"><img src="icon/miro.jpeg" alt="Miro"></span>' : ''}
                         <div class="miro-link-lines">
-                            <span class="miro-link-text">Lessons: ${lessonsDisplay}</span>
-                            <span class="miro-link-text">Workbook: ${workbookDisplay}</span>
+                            ${hasAnyLink ? `<span class="miro-link-text">Lessons: ${lessonsDisplay}</span>
+                            <span class="miro-link-text">Workbook: ${workbookDisplay}</span>` : ''}
                             <button type="button" class="miro-add-link-btn" data-miro-action="add-link" aria-label="Add link for ${row.student}">Add Link</button>
                         </div>
                     </div>
