@@ -1064,21 +1064,41 @@ function syncPhoneInputWithCountrySelector(phoneInput, countrySelect) {
     if (next !== phoneInput.value) phoneInput.value = digitsOnly(next);
 }
 
-function setPhoneCountrySelectInteraction(countrySelect) {
+function setPhoneCountrySelectInteraction(countrySelect, isInteractive = false) {
     if (!countrySelect) return;
+    const wrap = countrySelect.closest('.add-student-phone-country-wrap') || countrySelect.parentElement;
+    if (isInteractive) {
+        countrySelect.removeAttribute('aria-hidden');
+        countrySelect.removeAttribute('tabindex');
+        countrySelect.setAttribute('aria-label', 'Country code');
+        countrySelect.classList.add('phone-country-select--interactive');
+        if (wrap) wrap.classList.add('phone-country-wrap--interactive');
+        return;
+    }
     countrySelect.setAttribute('aria-hidden', 'true');
     countrySelect.setAttribute('tabindex', '-1');
     countrySelect.setAttribute('aria-label', 'Country code (automatic)');
+    countrySelect.classList.remove('phone-country-select--interactive');
+    if (wrap) wrap.classList.remove('phone-country-wrap--interactive');
 }
 
 function autoDetectPhoneCountry(phoneInput, countrySelect, onCountryChanged) {
     if (!phoneInput || !countrySelect) return;
     const raw = String(phoneInput.value || '');
     const digits = digitsOnly(raw);
+    const hasIntlPrefix = /^\s*(\+|00)/.test(raw);
     if (digits !== raw) {
         phoneInput.value = digits;
     }
-    if (!digits) return;
+    if (!digits) {
+        phoneInput.dataset.phoneAllowNanpChoice = '0';
+        setPhoneCountrySelectInteraction(countrySelect, false);
+        return;
+    }
+    const keepNanpChoice = phoneInput.dataset.phoneAllowNanpChoice === '1'
+        && (countrySelect.value === 'US' || countrySelect.value === 'CA');
+    setPhoneCountrySelectInteraction(countrySelect, keepNanpChoice);
+    if (!hasIntlPrefix) return;
 
     const detected = findPhoneCountryByDialPrefix(digits, true);
     if (!detected) return;
@@ -1089,6 +1109,9 @@ function autoDetectPhoneCountry(phoneInput, countrySelect, onCountryChanged) {
         countrySelect.value = detected.country.iso;
         if (typeof onCountryChanged === 'function') onCountryChanged();
     }
+    const allowNanpChoice = detected.dialDigits === '1';
+    phoneInput.dataset.phoneAllowNanpChoice = allowNanpChoice ? '1' : '0';
+    setPhoneCountrySelectInteraction(countrySelect, allowNanpChoice);
     phoneInput.value = localDigits;
 }
 
@@ -1102,6 +1125,16 @@ function bindPhoneInputAutoCountry(phoneInput, countrySelect, onCountryChanged) 
     phoneInput.addEventListener('blur', () => autoDetectPhoneCountry(phoneInput, countrySelect, onCountryChanged));
     phoneInput.addEventListener('paste', () => {
         window.setTimeout(() => autoDetectPhoneCountry(phoneInput, countrySelect, onCountryChanged), 0);
+    });
+    countrySelect.addEventListener('change', () => {
+        const selectedIso = String(countrySelect.value || '').trim().toUpperCase();
+        const allowNanpChoice = phoneInput.dataset.phoneAllowNanpChoice === '1';
+        if (allowNanpChoice && (selectedIso === 'US' || selectedIso === 'CA')) {
+            setPhoneCountrySelectInteraction(countrySelect, true);
+        } else {
+            setPhoneCountrySelectInteraction(countrySelect, false);
+        }
+        if (typeof onCountryChanged === 'function') onCountryChanged();
     });
 }
 
@@ -5488,6 +5521,10 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
         showAppMessage('Password must have at least 8 characters.');
         return false;
     }
+    if (!isPlatePasswordPatternValid(password)) {
+        showAppMessage('Password must match @xxxnxnn (letters and numbers, case-insensitive).');
+        return false;
+    }
     const emailLc = email.toLowerCase();
     const allStudentNames = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
     const emailConflictTeacher = teachersList.some((n) => {
@@ -6157,6 +6194,20 @@ function generateAddStudentPlatePassword() {
     return `@${randomUppercaseLetterChar()}${randomUppercaseLetterChar()}${randomUppercaseLetterChar()}${randomDigitCharForPassword()}${randomUppercaseLetterChar()}${randomDigitCharForPassword()}${randomDigitCharForPassword()}`;
 }
 
+function isPlatePasswordPatternValid(passwordRaw) {
+    return /^@[a-z]{3}\d[a-z]\d{2}$/i.test(String(passwordRaw || '').trim());
+}
+
+function bindPlatePasswordGenerateButton(buttonEl, inputEl) {
+    if (!buttonEl || !inputEl) return;
+    if (buttonEl.dataset.bound === '1') return;
+    buttonEl.dataset.bound = '1';
+    buttonEl.addEventListener('click', () => {
+        inputEl.value = generateAddStudentPlatePassword();
+        inputEl.focus();
+    });
+}
+
 function setPasswordToggleVisual(inputEl, btnEl) {
     if (!inputEl || !btnEl) return;
     const showing = inputEl.type === 'text';
@@ -6185,22 +6236,10 @@ function setupPasswordToggles() {
     setupPasswordToggle('addTeacherPassword', 'addTeacherPasswordToggle');
     const addTeacherPwdInput = document.getElementById('addTeacherPassword');
     const addTeacherPwdGen = document.getElementById('addTeacherPasswordGenerate');
-    if (addTeacherPwdGen && addTeacherPwdInput && addTeacherPwdGen.dataset.bound !== '1') {
-        addTeacherPwdGen.dataset.bound = '1';
-        addTeacherPwdGen.addEventListener('click', () => {
-            addTeacherPwdInput.value = generateAddStudentPlatePassword();
-            addTeacherPwdInput.focus();
-        });
-    }
+    bindPlatePasswordGenerateButton(addTeacherPwdGen, addTeacherPwdInput);
     const addStudentPwdInput = document.getElementById('addStudentPassword');
     const addStudentPwdGen = document.getElementById('addStudentPasswordGenerate');
-    if (addStudentPwdGen && addStudentPwdInput && addStudentPwdGen.dataset.bound !== '1') {
-        addStudentPwdGen.dataset.bound = '1';
-        addStudentPwdGen.addEventListener('click', () => {
-            addStudentPwdInput.value = generateAddStudentPlatePassword();
-            addStudentPwdInput.focus();
-        });
-    }
+    bindPlatePasswordGenerateButton(addStudentPwdGen, addStudentPwdInput);
     setupPasswordToggle('teacherLoginPassword', 'teacherLoginPasswordToggle');
 }
 
@@ -6988,6 +7027,11 @@ async function upsertStudentFromEditForm(action = 'save') {
         document.getElementById('editStudentUsername')?.focus();
         return;
     }
+    if (nextPasswordRaw && !isPlatePasswordPatternValid(nextPasswordRaw)) {
+        alert('Password must match @xxxnxnn (letters and numbers, case-insensitive).');
+        document.getElementById('editStudentPassword')?.focus();
+        return;
+    }
 
     const oldList = originalKind === 'private'
         ? privateStudentsList
@@ -7233,11 +7277,7 @@ function setupEditStudentModal() {
     firstInput?.addEventListener('input', syncEditStudentUsername);
     lastInput?.addEventListener('input', syncEditStudentUsername);
     if (passwordGenerateBtn && passwordInput && passwordGenerateBtn.dataset.bound !== '1') {
-        passwordGenerateBtn.dataset.bound = '1';
-        passwordGenerateBtn.addEventListener('click', () => {
-            passwordInput.value = generateAddStudentPlatePassword();
-            passwordInput.focus();
-        });
+        bindPlatePasswordGenerateButton(passwordGenerateBtn, passwordInput);
     }
 
     form.addEventListener('submit', async (e) => {
@@ -7341,6 +7381,10 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
         showAppMessage('Password must have at least 8 characters.');
         return;
     }
+    if (!isPlatePasswordPatternValid(password)) {
+        showAppMessage('Password must match @xxxnxnn (letters and numbers, case-insensitive).');
+        return;
+    }
     const emailInput = document.getElementById('addTeacherEmail');
     if (emailInput && typeof emailInput.checkValidity === 'function' && !emailInput.checkValidity()) {
         emailInput.reportValidity();
@@ -7429,6 +7473,11 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     }
     if (password.length < 8) {
         alert('Password must have at least 8 characters.');
+        passwordEl?.focus();
+        return;
+    }
+    if (!isPlatePasswordPatternValid(password)) {
+        alert('Password must match @xxxnxnn (letters and numbers, case-insensitive).');
         passwordEl?.focus();
         return;
     }
@@ -7930,8 +7979,10 @@ function openAddStudentModal(mode = 'school') {
     const passportLinkInput = document.getElementById('addStudentPassportLink');
     const teacherEmailInput = document.getElementById('addTeacherEmail');
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
+    const teacherPasswordGenerateBtn = document.getElementById('addTeacherPasswordGenerate');
     const teacherPasswordToggleBtn = document.getElementById('addTeacherPasswordToggle');
     const studentUsernameInput = document.getElementById('addStudentUsername');
+    const studentPasswordGenerateBtn = document.getElementById('addStudentPasswordGenerate');
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
@@ -7944,6 +7995,8 @@ function openAddStudentModal(mode = 'school') {
     bindAddStudentUsernameAutoSync(studentFirstInput, studentLastInput, studentUsernameInput);
     bindPhoneInputAutoCountry(studentPhoneInput, phoneCountrySelect, updateAddStudentPhonePlaceholder);
     bindPhoneInputAutoCountry(teacherPhoneInput, teacherPhoneCountrySelect, updateAddTeacherPhonePlaceholder);
+    bindPlatePasswordGenerateButton(teacherPasswordGenerateBtn, teacherPasswordInput);
+    bindPlatePasswordGenerateButton(studentPasswordGenerateBtn, studentPasswordInput);
 
     const normalizedMode = getCanonicalAddModalMode(mode);
     const preservedEntrySchool = normalizedMode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';

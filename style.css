@@ -2722,6 +2722,10 @@ input.student-reposition-modal-day {
     pointer-events: none;
 }
 
+.add-student-phone-country-wrap.phone-country-wrap--interactive {
+    pointer-events: auto;
+}
+
 #addStudentPhoneCountry,
 #addTeacherPhoneCountry {
     appearance: none;
@@ -2733,6 +2737,13 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
     cursor: default;
     pointer-events: none;
+}
+
+#editStudentPhoneCountry.phone-country-select--interactive,
+#addStudentPhoneCountry.phone-country-select--interactive,
+#addTeacherPhoneCountry.phone-country-select--interactive {
+    pointer-events: auto;
+    cursor: pointer;
 }
 
 #addStudentPhoneCountry option,
