@@ -308,7 +308,6 @@
                     </div>
                     <div class="meet-links-cell meet-links-cell--student">
                         <span class="meet-links-avatar" aria-hidden="true">${row.initials}</span>
-                        <button type="button" class="meet-links-add-link-btn" data-miro-action="add-link" aria-label="Add link for ${row.student}">Add Link</button>
                         <span class="meet-links-student-name">${row.student}</span>
                     </div>
                     <div class="meet-links-cell meet-links-cell--link">
@@ -316,6 +315,7 @@
                         <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
                             <span class="meet-links-url">Lessons: ${lessonsDisplay}</span>
                             <span class="meet-links-url">Workbook: ${workbookDisplay}</span>
+                            <button type="button" class="meet-links-add-link-btn" data-miro-action="add-link" aria-label="Add link for ${row.student}">Add Link</button>
                         </div>
                     </div>
                     <div class="meet-links-cell meet-links-cell--status">
