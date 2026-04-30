@@ -1838,8 +1838,7 @@ input.student-reposition-modal-day {
 }
 
 .password-input-wrap input {
-    width: 100%;
-    padding-right: 42px;
+    width: 100px;
 }
 
 .password-toggle-btn {
@@ -3445,9 +3444,8 @@ input.student-reposition-modal-day {
 }
 
 #addStudentCountry {
-    width: 100px;
-    min-width: 100px;
-    max-width: 100px;
+    width: 135px;
+    text-align: center;
     box-sizing: border-box;
 }
 
