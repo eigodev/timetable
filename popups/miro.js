@@ -4,39 +4,83 @@
 (function miroLinksPopupModule() {
     const LAYER_ID = 'miroLinksLayer';
     const CLOSE_ANIMATION_MS = 220;
+    const MIRO_LINKS_STORAGE_KEY = 'timetable_miro_board_links_by_student';
     let hideTimer = null;
     let eventsBound = false;
+    let miroLinksByStudent = {};
 
-    const sampleRows = [
-        {
-            id: 'jane-doe',
-            student: 'Jane Doe',
-            initials: 'JD',
-            lessonsUrl: 'https://miro.com/app/board/uXjV-jane-lessons/',
-            workbookUrl: 'https://miro.com/app/board/uXjV-jane-workbook/'
-        },
-        {
-            id: 'alex-brown',
-            student: 'Alex Brown',
-            initials: 'AB',
-            lessonsUrl: '',
-            workbookUrl: ''
-        },
-        {
-            id: 'sam-green',
-            student: 'Sam Green',
-            initials: 'SG',
-            lessonsUrl: 'https://miro.com/app/board/uXjV-sam-lessons/',
-            workbookUrl: ''
-        },
-        {
-            id: 'mary-hill',
-            student: 'Mary Hill',
-            initials: 'MH',
-            lessonsUrl: 'miro-board-link',
-            workbookUrl: 'https://miro.com/app/board/uXjV-mary-workbook/'
+    function loadMiroLinksStorage() {
+        try {
+            const raw = localStorage.getItem(MIRO_LINKS_STORAGE_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+            return parsed;
+        } catch {
+            return {};
         }
-    ];
+    }
+
+    function saveMiroLinksStorage() {
+        try {
+            localStorage.setItem(MIRO_LINKS_STORAGE_KEY, JSON.stringify(miroLinksByStudent || {}));
+        } catch {
+            // Ignore storage issues to keep popup usable.
+        }
+    }
+
+    function normalizeStudentKey(name) {
+        return String(name || '').trim().toLowerCase();
+    }
+
+    function getStudentInitials(name) {
+        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return 'ST';
+        if (parts.length === 1) return String(parts[0]).slice(0, 2).toUpperCase();
+        return `${String(parts[0]).charAt(0)}${String(parts[parts.length - 1]).charAt(0)}`.toUpperCase();
+    }
+
+    function getRosterStudentNames() {
+        const all = [
+            ...(Array.isArray(privateStudentsList) ? privateStudentsList : []),
+            ...(Array.isArray(speakonStudentsList) ? speakonStudentsList : []),
+            ...(Array.isArray(passportStudentsList) ? passportStudentsList : [])
+        ]
+            .map((name) => String(name || '').trim())
+            .filter(Boolean);
+        return [...new Set(all)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
+
+    function getRowsFromRoster() {
+        const names = getRosterStudentNames();
+        return names.map((studentName) => {
+            const key = normalizeStudentKey(studentName);
+            const stored = miroLinksByStudent[key];
+            const lessonsUrl = String(stored?.lessonsUrl || '').trim();
+            const workbookUrl = String(stored?.workbookUrl || '').trim();
+            return {
+                id: key,
+                student: studentName,
+                initials: getStudentInitials(studentName),
+                lessonsUrl,
+                workbookUrl
+            };
+        });
+    }
+
+    function upsertStudentLinks(studentName, lessonsUrl, workbookUrl) {
+        const key = normalizeStudentKey(studentName);
+        if (!key) return;
+        const lessons = String(lessonsUrl || '').trim();
+        const workbook = String(workbookUrl || '').trim();
+        if (!lessons && !workbook) {
+            delete miroLinksByStudent[key];
+            saveMiroLinksStorage();
+            return;
+        }
+        miroLinksByStudent[key] = { lessonsUrl: lessons, workbookUrl: workbook };
+        saveMiroLinksStorage();
+    }
 
     function isValidMiroUrl(urlRaw) {
         const url = String(urlRaw || '').trim();
@@ -64,35 +108,35 @@
         return Math.round((part / total) * 100);
     }
 
-    function percentBand(pct) {
-        if (pct >= 100) return 100;
-        if (pct >= 80) return 80;
-        if (pct >= 60) return 60;
-        if (pct >= 40) return 40;
-        if (pct >= 20) return 20;
+    function percentBand(percentage) {
+        if (percentage >= 100) return 100;
+        if (percentage >= 80) return 80;
+        if (percentage >= 60) return 60;
+        if (percentage >= 40) return 40;
+        if (percentage >= 20) return 20;
         return 0;
     }
 
-    function getValidLinksMessage(pct) {
-        const band = percentBand(pct);
-        if (band === 100) return '100% - Perfect coverage, all students have valid links.';
-        if (band === 80) return `${pct}% - Great progress, almost all students are covered.`;
-        if (band === 60) return `${pct}% - Good progress, keep filling remaining links.`;
-        if (band === 40) return `${pct}% - Midway there, several students still need links.`;
-        if (band === 20) return `${pct}% - Early progress, many links still missing.`;
-        return `${pct}% - No valid coverage yet.`;
+    function getValidLinksMessage(percentage) {
+        const band = percentBand(percentage);
+        if (band === 100) return 'All links valid.';
+        if (band === 80) return `A few links missing.`;
+        if (band === 60) return `Missing links!`;
+        if (band === 40) return `Needs attention.`;
+        if (band === 20) return `A few links added.`;
+        return `No links added yet.`;
     }
 
-    function getIssueMessage(pct, kind) {
-        const band = percentBand(pct);
+    function getIssueMessage(percentage, kind) {
+        const band = percentBand(percentage);
         if (band === 0) return kind === 'missing'
-            ? '0% - Excellent, no missing links.'
-            : '0% - Excellent, no invalid links.';
-        if (band === 20) return `${pct}% - Low ${kind} links.`;
-        if (band === 40) return `${pct}% - Moderate ${kind} links.`;
-        if (band === 60) return `${pct}% - High ${kind} links, review soon.`;
-        if (band === 80) return `${pct}% - Critical ${kind} links, action needed.`;
-        return `${pct}% - All links are ${kind}.`;
+            ? 'No missing links.'
+            : 'No invalid links.';
+        if (band === 20) return `A few ${kind} links.`;
+        if (band === 40) return `Moderate ${kind} links.`;
+        if (band === 60) return `Review soon.`;
+        if (band === 80) return `Action needed.`;
+        return `All links are ${kind}.`;
     }
 
     function showContextMessage(message) {
@@ -104,7 +148,7 @@
     }
 
     function downloadReport() {
-        const rows = sampleRows.map((row) => {
+        const rows = getRowsFromRoster().map((row) => {
             const status = getRowStatus(row);
             const lessons = String(row.lessonsUrl || '').replace(/"/g, '""');
             const workbook = String(row.workbookUrl || '').replace(/"/g, '""');
@@ -236,7 +280,8 @@
         const statusValue = String(document.getElementById('miroLinksStatus')?.value || '').trim();
         if (!body) return;
 
-        const rows = sampleRows.filter((row) => {
+        const rosterRows = getRowsFromRoster();
+        const rows = rosterRows.filter((row) => {
             const rowStatus = getRowStatus(row);
             if (statusValue && rowStatus !== statusValue) return false;
             if (!searchValue) return true;
@@ -289,10 +334,10 @@
             `;
         }).join('');
 
-        const total = sampleRows.length;
-        const saved = sampleRows.filter((r) => getRowStatus(r) === 'saved').length;
-        const invalid = sampleRows.filter((r) => getRowStatus(r) === 'invalid').length;
-        const missing = sampleRows.filter((r) => getRowStatus(r) === 'missing').length;
+        const total = rosterRows.length;
+        const saved = rosterRows.filter((r) => getRowStatus(r) === 'saved').length;
+        const invalid = rosterRows.filter((r) => getRowStatus(r) === 'invalid').length;
+        const missing = rosterRows.filter((r) => getRowStatus(r) === 'missing').length;
         const validPct = toPercent(saved, total);
         const missingPct = toPercent(missing, total);
         const invalidPct = toPercent(invalid, total);
@@ -308,7 +353,7 @@
         if (savedEl) savedEl.textContent = String(saved);
         if (missingEl) missingEl.textContent = String(missing);
         if (invalidEl) invalidEl.textContent = String(invalid);
-        if (totalSubEl) totalSubEl.textContent = total > 0 ? '100% - Roster loaded.' : '0% - No students added yet.';
+        if (totalSubEl) totalSubEl.textContent = total > 0 ? 'All Roster loaded.' : 'No students yet.';
         if (savedSubEl) savedSubEl.textContent = getValidLinksMessage(validPct);
         if (missingSubEl) missingSubEl.textContent = getIssueMessage(missingPct, 'missing');
         if (invalidSubEl) invalidSubEl.textContent = getIssueMessage(invalidPct, 'invalid');
@@ -365,7 +410,7 @@
             const rowEl = target.closest('[data-row-id]');
             if (!rowEl) return;
             const rowId = String(rowEl.getAttribute('data-row-id') || '');
-            const row = sampleRows.find((item) => item.id === rowId);
+            const row = getRowsFromRoster().find((item) => item.id === rowId);
             if (!row) return;
 
             if (target.closest('[data-miro-action="open-lessons"]')) {
@@ -381,14 +426,12 @@
                 if (nextLessons === null) return;
                 const nextWorkbook = window.prompt(`Paste Workbook board URL for ${row.student}:`, String(row.workbookUrl || ''));
                 if (nextWorkbook === null) return;
-                row.lessonsUrl = String(nextLessons || '').trim();
-                row.workbookUrl = String(nextWorkbook || '').trim();
+                upsertStudentLinks(row.student, nextLessons, nextWorkbook);
                 renderRows();
                 return;
             }
             if (target.closest('[data-miro-action="delete"]')) {
-                row.lessonsUrl = '';
-                row.workbookUrl = '';
+                upsertStudentLinks(row.student, '', '');
                 renderRows();
             }
         });
@@ -410,6 +453,7 @@
     }
 
     ensureRendered();
+    miroLinksByStudent = loadMiroLinksStorage();
     bindEvents();
     window.openMiroLinksLayer = openLayer;
     window.closeMiroLinksLayer = closeLayer;
