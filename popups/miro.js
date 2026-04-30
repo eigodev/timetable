@@ -174,72 +174,77 @@
         const host = document.querySelector('.link-miro-board');
         if (!host || host.querySelector(`#${LAYER_ID}`)) return;
         host.innerHTML = `
-            <div id="${LAYER_ID}" class="miro-board-content" hidden aria-hidden="true">
-                <div class="miro-backdrop-layer" data-miro-role="backdrop" aria-hidden="true"></div>
-                <div class="miro-popup" role="dialog" aria-modal="true" aria-labelledby="miroLinksHeadline">
-                    <div class="miro-header">
-                        <div class="miro-header-title">
-                            <h1 id="miroLinksHeadline" class="miro-headline">Miro Board Links</h1>
-                            <p class="miro-guideline">Add, edit and manage your students' Miro board links.</p>
-                        </div>
-                        <div class="miro-header-actions">
-                            <button type="button" class="miro-import-btn" disabled>
-                                <span class="miro-import-btn-icon" aria-hidden="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                </span>
-                                <span>Import Links</span>
-                            </button>
-                            <button type="button" class="miro-close-btn" data-miro-role="close">
-                                <span class="miro-close-btn-icon" aria-hidden="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                                </span>
-                                <span>Close</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="miro-cards">
-                        <div class="miro-card miro-card--total">
-                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122Z"/></svg></span>
-                            <div><p id="miroTotalStudents" class="miro-card-value">0</p><p class="miro-card-label">Total students</p><p id="miroTotalStudentsSub" class="miro-card-sub">No students yet.</p></div>
-                        </div>
-                        <div class="miro-card miro-card--valid">
-                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" /></svg></span>
-                            <div><p id="miroValidLinks" class="miro-card-value">0</p><p class="miro-card-label">Valid links</p><p id="miroValidLinksSub" class="miro-card-sub">No links added yet.</p></div>
-                        </div>
-                        <div class="miro-card miro-card--missing">
-                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd"></path></svg></span>
-                            <div><p id="miroMissingLinks" class="miro-card-value">0</p><p class="miro-card-label">Missing links</p><p id="miroMissingLinksSub" class="miro-card-sub">No missing links.</p></div>
-                        </div>
-                        <div class="miro-card miro-card--invalid">
-                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6"><path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304ZM5.846 11.773a.75.75 0 0 1 0 1.06l-1.757 1.758a3.75 3.75 0 0 0 5.303 5.304l3.129-3.13a.75.75 0 1 1 1.06 1.061l-3.128 3.13a5.25 5.25 0 1 1-7.425-7.426l1.757-1.757a.75.75 0 0 1 1.061 0Zm2.401.26a.75.75 0 0 1 .957.458c.18.512.474.992.885 1.403.31.311.661.555 1.035.733a.75.75 0 0 1-.647 1.354 5.244 5.244 0 0 1-1.449-1.026 5.232 5.232 0 0 1-1.24-1.965.75.75 0 0 1 .46-.957Z" clip-rule="evenodd"></path></svg></span>
-                            <div><p id="miroInvalidLinks" class="miro-card-value">0</p><p class="miro-card-label">Invalid links</p><p id="miroInvalidLinksSub" class="miro-card-sub">No invalid links.</p></div>
-                        </div>
-                        <button type="button" id="miroDownloadReport" class="miro-card miro-download-card" aria-label="Download Miro links report">
-                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg></span>
-                            <div><p class="miro-card-label">Download</p><p class="miro-card-sub">Report CSV</p></div>
-                        </button>
-                    </div>
-                    <p id="miroLinksContextMessage" class="miro-context-message" hidden aria-hidden="true" role="status" aria-live="polite"></p>
-                    <div class="miro-students">
-                        <div class="miro-search-filter">
-                            <div class="miro-search-box">
-                                <input type="search" id="miroLinksSearchInput" class="miro-search-input" placeholder="Search students..." autocomplete="off" aria-label="Search students" />
-                            </div>
-                            <div class="miro-filter-wrap">
-                                <select id="miroLinksStatusFilter" class="miro-filter-select" aria-label="Filter by status">
-                                    <option value="">All status</option>
-                                    <option value="saved">Saved</option>
-                                    <option value="missing">Missing</option>
-                                    <option value="invalid">Invalid</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="miro-table-head" role="row">
-                            <div></div><p>Student</p><p>Miro links</p><p>Status</p><div></div>
-                        </div>
-                        <div class="miro-table-body" id="miroLinksTableBody"></div>
-                    </div>
-                </div>
+            <div id="${LAYER_ID}" class="miro-board-content" hidden aria-hidden="true"> 
+			<div class="miro-container-layer" role="dialog" aria-modal="true" aria-labelledby="miroLinksHeadline">
+				<div class="miro-header">
+					<div class="miro-header-title">
+						<h1 id="miroLinksHeadline" class="miro-headline">Miro Board Links</h1>
+						<p class="miro-guideline">Add, edit and manage your students' Miro board links.</p>
+					</div>
+					<div class="miro-header-actions">
+						<button type="button" class="miro-import-btn" disabled>
+							<span class="miro-import-btn-icon" aria-hidden="true">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+							</span>
+							<span>Import Links</span>
+						</button>
+						<button type="button" class="miro-close-btn" data-miro-role="close">
+							<span class="miro-close-btn-icon" aria-hidden="true">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+							</span>
+							<span>Close</span>
+						</button>
+					</div>
+				</div>
+				<div class="miro-cards">
+					<div class="miro-card miro-card--total">
+						<span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122Z"/></svg></span>
+						<div><p id="miroTotalStudents" class="miro-card-value">0</p><p class="miro-card-label">Total students</p><p id="miroTotalStudentsSub" class="miro-card-sub">No students yet.</p></div>
+					</div>
+					<div class="miro-card miro-card--valid">
+						<span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" /></svg></span>
+						<div><p id="miroValidLinks" class="miro-card-value">0</p><p class="miro-card-label">Valid links</p><p id="miroValidLinksSub" class="miro-card-sub">No links added yet.</p></div>
+					</div>
+					<div class="miro-card miro-card--missing">
+						<span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd"></path></svg></span>
+						<div><p id="miroMissingLinks" class="miro-card-value">0</p><p class="miro-card-label">Missing links</p><p id="miroMissingLinksSub" class="miro-card-sub">No missing links.</p></div>
+					</div>
+					<div class="miro-card miro-card--invalid">
+						<span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6"><path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304ZM5.846 11.773a.75.75 0 0 1 0 1.06l-1.757 1.758a3.75 3.75 0 0 0 5.303 5.304l3.129-3.13a.75.75 0 1 1 1.06 1.061l-3.128 3.13a5.25 5.25 0 1 1-7.425-7.426l1.757-1.757a.75.75 0 0 1 1.061 0Zm2.401.26a.75.75 0 0 1 .957.458c.18.512.474.992.885 1.403.31.311.661.555 1.035.733a.75.75 0 0 1-.647 1.354 5.244 5.244 0 0 1-1.449-1.026 5.232 5.232 0 0 1-1.24-1.965.75.75 0 0 1 .46-.957Z" clip-rule="evenodd"></path></svg></span>
+						<div><p id="miroInvalidLinks" class="miro-card-value">0</p><p class="miro-card-label">Invalid links</p><p id="miroInvalidLinksSub" class="miro-card-sub">No invalid links.</p></div>
+					</div>
+					<button type="button" id="miroDownloadReport" class="miro-card miro-download-card" aria-label="Download Miro links report">
+						<span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg></span>
+						<div><p class="miro-card-label">Download</p><p class="miro-card-sub">Report CSV</p></div>
+					</button>
+				</div>
+				<p id="miroLinksContextMessage" class="miro-context-message" hidden aria-hidden="true" role="status" aria-live="polite"></p>
+				<div class="miro-students">
+					<div class="miro-search-filter">
+						<div class="miro-search-box">
+							<input type="search" id="miroLinksSearchInput" class="miro-search-input" placeholder="Search students..." autocomplete="off" aria-label="Search students" />
+						</div>
+						<div class="miro-filter-wrap">
+							<span class="miro-filter-icon" aria-hidden="true">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+									<path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
+								</svg>
+							</span>
+							<select id="miroLinksStatusFilter" class="miro-filter-select" aria-label="Filter by status">
+								<option value="">All status</option>
+								<option value="saved">Saved</option>
+								<option value="missing">Missing</option>
+								<option value="invalid">Invalid</option>
+							</select>
+						</div>
+					</div>
+					<div class="miro-table-head" role="row">
+						<div></div><p>Student</p><p>Miro links</p><p>Status</p><div></div>
+					</div>
+					<div class="miro-table-body" id="miroLinksTableBody"></div>
+				</div>
+			</div>
+			<div class="miro-backdrop-layer" data-miro-role="backdrop" aria-hidden="true"></div>
             </div>
         `;
     }
@@ -388,6 +393,17 @@
             if (target.id === 'miroLinksSearchInput' || target.id === 'miroLinksStatusFilter') {
                 renderRows();
             }
+        });
+        document.addEventListener('click', (e) => {
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const filterIcon = target.closest('.miro-filter-icon');
+            if (!filterIcon) return;
+            const filterSelect = document.getElementById('miroLinksStatusFilter');
+            if (!(filterSelect instanceof HTMLSelectElement)) return;
+            filterSelect.value = '';
+            renderRows();
+            filterSelect.focus();
         });
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;

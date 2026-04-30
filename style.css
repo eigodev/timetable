@@ -4084,7 +4084,7 @@ tr td.add-teacher-availability-table-day {
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
 }
-.miro-popup {
+.miro-container-layer {
     position: fixed;
     top: 3%;
     left: 21.25%;
@@ -4326,6 +4326,17 @@ tr td.add-teacher-availability-table-day {
     border: 1px solid #cfd5ec;
     border-radius: 10px;
     background: #fff;
+}
+.miro-filter-icon {
+    display: flex;
+    color: #5d6685;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+.miro-filter-icon svg {
+    width: 100%;
+    height: 100%;
 }
 .miro-filter-select {
     min-width: 120px;
