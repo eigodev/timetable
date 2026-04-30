@@ -1,21 +1,75 @@
 // Miro Links Popup
-// Same visual shell as Google Meet links popup, but each student has 2 links:
-// Lessons board + Workbook board.
+// Fully isolated IDs/classes for Miro popup (no Google Meet naming reuse).
 (function miroLinksPopupModule() {
     const LAYER_ID = 'miroLinksLayer';
     const CLOSE_ANIMATION_MS = 220;
     const MIRO_LINKS_STORAGE_KEY = 'timetable_miro_board_links_by_student';
+    const STYLE_TAG_ID = 'miroLinksPopupStyles';
     let hideTimer = null;
     let eventsBound = false;
     let miroLinksByStudent = {};
+
+    function ensureStyles() {
+        if (document.getElementById(STYLE_TAG_ID)) return;
+        const style = document.createElement('style');
+        style.id = STYLE_TAG_ID;
+        style.textContent = `
+.miro-links-layer{position:fixed;inset:0;z-index:2200;display:flex;align-items:center;justify-content:center;padding:28px;box-sizing:border-box}
+.miro-links-layer-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(2px)}
+.miro-popup{position:relative;width:min(1220px,96vw);max-height:min(88vh,900px);display:flex;flex-direction:column;background:#fff;border-radius:22px;box-shadow:0 30px 90px rgba(2,8,23,.3);overflow:hidden}
+.miro-header{display:flex;justify-content:space-between;align-items:flex-start;padding:22px 24px 12px;border-bottom:1px solid #eceff7}
+.miro-header-title{display:flex;flex-direction:column;gap:4px}
+.miro-headline{margin:0;font-size:1.45rem;font-weight:800;color:#1f2a44}
+.miro-guideline{margin:0;font-size:.9rem;color:#6d768f}
+.miro-header-actions{display:flex;gap:10px;align-items:center}
+.miro-import-btn,.miro-close-btn{border:1px solid #d7def1;background:#fff;color:#334155;border-radius:12px;padding:8px 12px;display:inline-flex;align-items:center;gap:8px;font-weight:700;cursor:pointer}
+.miro-close-btn{background:#4f46e5;color:#fff;border-color:#4f46e5}
+.miro-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:14px 16px}
+.miro-card{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #e7ebf7;border-radius:14px;background:#fff}
+.miro-card-icon{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:#eef2ff;color:#4f46e5}
+.miro-card-value{margin:0;font-size:1.25rem;font-weight:800;color:#1f2a44;line-height:1}
+.miro-card-label{margin:0;font-size:.75rem;font-weight:700;color:#55607a;text-transform:uppercase;letter-spacing:.04em}
+.miro-card-sub{margin:2px 0 0;font-size:.72rem;color:#6d768f}
+.miro-download-card{justify-content:center;cursor:pointer;background:#f8faff}
+.miro-context-message{margin:0 16px 10px;padding:8px 12px;border-radius:10px;background:#eef2ff;color:#1f2a44;font-weight:600;font-size:.82rem}
+.miro-students{display:flex;flex-direction:column;min-height:0;flex:1}
+.miro-search-filter{display:flex;gap:10px;align-items:center;padding:0 16px 12px}
+.miro-search-box{position:relative;flex:1}
+.miro-search-input,.miro-filter-select{width:100%;height:42px;border:1px solid #d7def1;border-radius:12px;padding:0 12px;font-size:.9rem}
+.miro-filter-wrap{min-width:180px}
+.miro-table-head,.miro-row{display:grid;grid-template-columns:40px minmax(140px,1.1fr) minmax(220px,2fr) minmax(110px,.9fr) 92px;gap:8px 12px;align-items:center;padding:10px 16px}
+.miro-table-head{background:#f7f8fc;border-top:1px solid #eceff7;border-bottom:1px solid #eceff7}
+.miro-table-head p{margin:0;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6d768f}
+.miro-table-body{overflow:auto;min-height:0;flex:1}
+.miro-row{border-bottom:1px solid #f0f2f8}
+.miro-row:hover{background:#fafbff}
+.miro-student-cell{display:flex;align-items:center;gap:10px}
+.miro-avatar{display:inline-flex;width:30px;height:30px;border-radius:999px;background:#e8ecfb;color:#374151;align-items:center;justify-content:center;font-weight:800;font-size:.73rem}
+.miro-student-name{font-weight:600;color:#1f2a44}
+.miro-link-cell{display:flex;align-items:flex-start;gap:10px}
+.miro-link-icon{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center}
+.miro-link-icon img{width:20px;height:20px;border-radius:4px;object-fit:cover}
+.miro-link-lines{display:flex;flex-direction:column;gap:4px;min-width:0}
+.miro-link-text{font-size:.78rem;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.miro-add-link-btn{border:1px solid #d7def1;background:#fff;color:#4f46e5;border-radius:8px;padding:4px 8px;font-size:.72rem;font-weight:700;cursor:pointer;width:max-content}
+.miro-status{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;font-size:.72rem;font-weight:700}
+.miro-status-dot{width:7px;height:7px;border-radius:999px;background:currentColor}
+.miro-status--saved{color:#0f766e;background:#ecfdf5}
+.miro-status--missing{color:#9a3412;background:#fff7ed}
+.miro-status--invalid{color:#991b1b;background:#fef2f2}
+.miro-actions{display:flex;justify-content:flex-end;gap:6px}
+.miro-icon-btn{width:32px;height:32px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;color:#334155;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.miro-icon-btn svg{width:16px;height:16px}
+        `;
+        document.head.appendChild(style);
+    }
 
     function loadMiroLinksStorage() {
         try {
             const raw = localStorage.getItem(MIRO_LINKS_STORAGE_KEY);
             if (!raw) return {};
             const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-            return parsed;
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch {
             return {};
         }
@@ -25,7 +79,7 @@
         try {
             localStorage.setItem(MIRO_LINKS_STORAGE_KEY, JSON.stringify(miroLinksByStudent || {}));
         } catch {
-            // Ignore storage issues to keep popup usable.
+            // ignore
         }
     }
 
@@ -52,18 +106,15 @@
     }
 
     function getRowsFromRoster() {
-        const names = getRosterStudentNames();
-        return names.map((studentName) => {
+        return getRosterStudentNames().map((studentName) => {
             const key = normalizeStudentKey(studentName);
             const stored = miroLinksByStudent[key];
-            const lessonsUrl = String(stored?.lessonsUrl || '').trim();
-            const workbookUrl = String(stored?.workbookUrl || '').trim();
             return {
                 id: key,
                 student: studentName,
                 initials: getStudentInitials(studentName),
-                lessonsUrl,
-                workbookUrl
+                lessonsUrl: String(stored?.lessonsUrl || '').trim(),
+                workbookUrl: String(stored?.workbookUrl || '').trim()
             };
         });
     }
@@ -83,17 +134,15 @@
     }
 
     function isValidMiroUrl(urlRaw) {
-        const url = String(urlRaw || '').trim();
-        return /^https:\/\/miro\.com\/app\/board\/[^/\s]+\/?$/i.test(url);
+        return /^https:\/\/miro\.com\/app\/board\/[^/\s]+\/?$/i.test(String(urlRaw || '').trim());
     }
 
     function getRowStatus(row) {
         const lessons = String(row.lessonsUrl || '').trim();
         const workbook = String(row.workbookUrl || '').trim();
-        const hasAny = !!(lessons || workbook);
-        if (!hasAny) return 'missing';
-        const anyInvalid = (lessons && !isValidMiroUrl(lessons)) || (workbook && !isValidMiroUrl(workbook));
-        if (anyInvalid) return 'invalid';
+        if (!lessons && !workbook) return 'missing';
+        const invalid = (lessons && !isValidMiroUrl(lessons)) || (workbook && !isValidMiroUrl(workbook));
+        if (invalid) return 'invalid';
         return (lessons && workbook) ? 'saved' : 'missing';
     }
 
@@ -104,8 +153,7 @@
     }
 
     function toPercent(part, total) {
-        if (!total) return 0;
-        return Math.round((part / total) * 100);
+        return total ? Math.round((part / total) * 100) : 0;
     }
 
     function percentBand(percentage) {
@@ -120,27 +168,25 @@
     function getValidLinksMessage(percentage) {
         const band = percentBand(percentage);
         if (band === 100) return 'All links valid.';
-        if (band === 80) return `A few links missing.`;
-        if (band === 60) return `Missing links!`;
-        if (band === 40) return `Needs attention.`;
-        if (band === 20) return `A few links added.`;
-        return `No links added yet.`;
+        if (band === 80) return 'A few links missing.';
+        if (band === 60) return 'Missing links!';
+        if (band === 40) return 'Needs attention.';
+        if (band === 20) return 'A few links added.';
+        return 'No links added yet.';
     }
 
     function getIssueMessage(percentage, kind) {
         const band = percentBand(percentage);
-        if (band === 0) return kind === 'missing'
-            ? 'No missing links.'
-            : 'No invalid links.';
+        if (band === 0) return kind === 'missing' ? 'No missing links.' : 'No invalid links.';
         if (band === 20) return `A few ${kind} links.`;
         if (band === 40) return `Moderate ${kind} links.`;
-        if (band === 60) return `Review soon.`;
-        if (band === 80) return `Action needed.`;
+        if (band === 60) return 'Review soon.';
+        if (band === 80) return 'Action needed.';
         return `All links are ${kind}.`;
     }
 
     function showContextMessage(message) {
-        const toast = document.getElementById('miroContextMessage');
+        const toast = document.getElementById('miroLinksContextMessage');
         if (!toast) return;
         toast.hidden = false;
         toast.setAttribute('aria-hidden', 'false');
@@ -150,20 +196,20 @@
     function downloadReport() {
         const rows = getRowsFromRoster().map((row) => {
             const status = getRowStatus(row);
+            const student = String(row.student || '').replace(/"/g, '""');
             const lessons = String(row.lessonsUrl || '').replace(/"/g, '""');
             const workbook = String(row.workbookUrl || '').replace(/"/g, '""');
-            const student = String(row.student || '').replace(/"/g, '""');
             return `"${student}","${lessons}","${workbook}","${status}"`;
         });
         const csv = ['Student,Lessons Link,Workbook Link,Status', ...rows].join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'miro-links-report.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'miro-links-report.csv';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
         URL.revokeObjectURL(url);
         showContextMessage('Report downloaded.');
     }
@@ -171,101 +217,72 @@
     function ensureRendered() {
         const host = document.querySelector('.link-miro-board');
         if (!host || host.querySelector(`#${LAYER_ID}`)) return;
+        ensureStyles();
         host.innerHTML = `
-            <div id="${LAYER_ID}" class="google-meet-links-layer" hidden aria-hidden="true">
-                <div class="google-meet-links-layer-backdrop" data-miro-role="backdrop" aria-hidden="true"></div>
-                <div class="google-meet-popup" role="dialog" aria-modal="true" aria-labelledby="miroLinksHeadline">
-                    <div class="header">
-                        <div class="header-title">
-                            <h1 id="miroLinksHeadline" class="headline">Miro Board Links</h1>
-                            <p class="guideline">Add, edit and manage your students' Miro board links.</p>
+            <div id="${LAYER_ID}" class="miro-links-layer" hidden aria-hidden="true">
+                <div class="miro-links-layer-backdrop" data-miro-role="backdrop" aria-hidden="true"></div>
+                <div class="miro-popup" role="dialog" aria-modal="true" aria-labelledby="miroLinksHeadline">
+                    <div class="miro-header">
+                        <div class="miro-header-title">
+                            <h1 id="miroLinksHeadline" class="miro-headline">Miro Board Links</h1>
+                            <p class="miro-guideline">Add, edit and manage your students' Miro board links.</p>
                         </div>
-                        <div class="header-actions">
-                            <div class="import-link-action">
-                                <button type="button" class="import-link-btn" disabled>
-                                    <span class="import-link-btn-icon" aria-hidden="true">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                    </span>
-                                    <span>Import Links</span>
-                                </button>
-                            </div>
-                            <div class="add-link-action">
-                                <button type="button" class="add-link-btn" data-miro-role="close">
-                                    <span class="add-link-btn-icon" aria-hidden="true">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                                    </span>
-                                    <span>Close</span>
-                                </button>
-                            </div>
+                        <div class="miro-header-actions">
+                            <button type="button" class="miro-import-btn" disabled>
+                                <span class="miro-import-btn-icon" aria-hidden="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                </span>
+                                <span>Import Links</span>
+                            </button>
+                            <button type="button" class="miro-close-btn" data-miro-role="close">
+                                <span class="miro-close-btn-icon" aria-hidden="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                                </span>
+                                <span>Close</span>
+                            </button>
                         </div>
                     </div>
-                    <div class="cards">
-                        <div class="meet-stat-card card-total-students">
-                            <div class="icon meet-stat-card-icon meet-stat-card-icon--total" aria-hidden="true">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM17.25 19.128l-.001.144a2.25 2.25 0 0 1-.233.96 10.088 10.088 0 0 0 5.06-1.01.75.75 0 0 0 .42-.643 4.875 4.875 0 0 0-6.957-4.611 8.586 8.586 0 0 1 1.71 5.157v.003Z"/></svg>
-                            </div>
-                            <div class="info"><p id="miroTotalStudents" class="meet-stat-value">0</p><div class="meet-stat-value-text"><h5 class="meet-stat-label">Total students</h5><h6 id="miroTotalStudentsSub" class="meet-stat-sub">All students</h6></div></div>
+                    <div class="miro-cards">
+                        <div class="miro-card miro-card--total">
+                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122Z"/></svg></span>
+                            <div><p id="miroTotalStudents" class="miro-card-value">0</p><p class="miro-card-label">Total students</p><p id="miroTotalStudentsSub" class="miro-card-sub">No students yet.</p></div>
                         </div>
-                        <div class="meet-stat-card card-links-saved">
-                            <div class="icon meet-stat-card-icon meet-stat-card-icon--saved" aria-hidden="true">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" /></svg>
-                            </div>
-                            <div class="info"><p id="miroFullySaved" class="meet-stat-value">0</p><div class="meet-stat-value-text"><h5 class="meet-stat-label">Valid links</h5><h6 id="miroFullySavedSub" class="meet-stat-sub">Lessons + Workbook</h6></div></div>
+                        <div class="miro-card miro-card--valid">
+                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" /></svg></span>
+                            <div><p id="miroValidLinks" class="miro-card-value">0</p><p class="miro-card-label">Valid links</p><p id="miroValidLinksSub" class="miro-card-sub">No links added yet.</p></div>
                         </div>
-                        <div class="meet-stat-card card-links-missing">
-                            <div class="icon meet-stat-card-icon meet-stat-card-icon--missing" aria-hidden="true">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd" /></svg>
-                            </div>
-                            <div class="info"><p id="miroMissingAny" class="meet-stat-value">0</p><div class="meet-stat-value-text"><h5 class="meet-stat-label">Missing links</h5><h6 id="miroMissingAnySub" class="meet-stat-sub">At least one missing</h6></div></div>
+                        <div class="miro-card miro-card--missing">
+                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Z" clip-rule="evenodd" /></svg></span>
+                            <div><p id="miroMissingLinks" class="miro-card-value">0</p><p class="miro-card-label">Missing links</p><p id="miroMissingLinksSub" class="miro-card-sub">No missing links.</p></div>
                         </div>
-                        <div class="meet-stat-card card-invalid-links">
-                            <div class="icon meet-stat-card-icon meet-stat-card-icon--invalid" aria-hidden="true">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304ZM5.846 11.773a.75.75 0 0 1 0 1.06l-1.757 1.758a3.75 3.75 0 0 0 5.303 5.304l3.129-3.13a.75.75 0 1 1 1.06 1.061l-3.128 3.13a5.25 5.25 0 1 1-7.425-7.426l1.757-1.757a.75.75 0 0 1 1.061 0Zm2.401.26a.75.75 0 0 1 .957.458c.18.512.474.992.885 1.403.31.311.661.555 1.035.733a.75.75 0 0 1-.647 1.354 5.244 5.244 0 0 1-1.449-1.026 5.232 5.232 0 0 1-1.24-1.965.75.75 0 0 1 .46-.957Z" clip-rule="evenodd" /></svg>
-                            </div>
-                            <div class="info"><p id="miroInvalidAny" class="meet-stat-value">0</p><div class="meet-stat-value-text"><h5 class="meet-stat-label">Invalid links</h5><h6 id="miroInvalidAnySub" class="meet-stat-sub">Fix formatting</h6></div></div>
+                        <div class="miro-card miro-card--invalid">
+                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304Z" clip-rule="evenodd" /></svg></span>
+                            <div><p id="miroInvalidLinks" class="miro-card-value">0</p><p class="miro-card-label">Invalid links</p><p id="miroInvalidLinksSub" class="miro-card-sub">No invalid links.</p></div>
                         </div>
-                        <button type="button" id="miroDownloadReport" class="meet-stat-card card-download-report" aria-label="Download Miro links report">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-                                <path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Zm-9 13.5a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" />
-                            </svg>
+                        <button type="button" id="miroDownloadReport" class="miro-card miro-download-card" aria-label="Download Miro links report">
+                            <span class="miro-card-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg></span>
+                            <div><p class="miro-card-label">Download</p><p class="miro-card-sub">Report CSV</p></div>
                         </button>
                     </div>
-                    <div id="miroContextMessage" class="google-meet-context-message" hidden aria-hidden="true" role="status" aria-live="polite"></div>
-                    <div class="students-list">
-                        <div class="search-and-filter">
-                            <div class="search-bar">
-                                <span class="search-bar-icon" aria-hidden="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                                </span>
-                                <input type="search" id="miroLinksSearch" class="meet-links-search-input" placeholder="Search students..." autocomplete="off" aria-label="Search students" />
+                    <p id="miroLinksContextMessage" class="miro-context-message" hidden aria-hidden="true" role="status" aria-live="polite"></p>
+                    <div class="miro-students">
+                        <div class="miro-search-filter">
+                            <div class="miro-search-box">
+                                <input type="search" id="miroLinksSearchInput" class="miro-search-input" placeholder="Search students..." autocomplete="off" aria-label="Search students" />
                             </div>
-                            <div class="filter-options">
-                                <div class="status-filter-bar">
-                                    <span class="status-filter-icon" aria-hidden="true">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" /></svg>
-                                    </span>
-                                    <select id="miroLinksStatus" class="meet-links-status-select" aria-label="Filter by status">
-                                        <option value="">All status</option>
-                                        <option value="saved">Saved</option>
-                                        <option value="missing">Missing</option>
-                                        <option value="invalid">Invalid</option>
-                                    </select>
-                                </div>
+                            <div class="miro-filter-wrap">
+                                <select id="miroLinksStatusFilter" class="miro-filter-select" aria-label="Filter by status">
+                                    <option value="">All status</option>
+                                    <option value="saved">Saved</option>
+                                    <option value="missing">Missing</option>
+                                    <option value="invalid">Invalid</option>
+                                </select>
                             </div>
                         </div>
-                        <div class="students-list-header" role="row">
-                            <div class="select-all-students-checkbox">
-                                <label class="meet-links-checkbox-label">
-                                    <input type="checkbox" class="meet-links-checkbox" id="miroLinksSelectAll" aria-label="Select all students" />
-                                    <span class="meet-links-checkbox-ui" aria-hidden="true"></span>
-                                </label>
-                            </div>
-                            <p class="student-title">Student</p>
-                            <p class="link-title">Miro links (Lessons + Workbook)</p>
-                            <p class="status-title">Status</p>
-                            <div class="actions meet-links-header-actions" aria-hidden="true"><span class="meet-links-actions-placeholder"></span></div>
+                        <div class="miro-table-head" role="row">
+                            <div></div><p>Student</p><p>Miro links</p><p>Status</p><div></div>
                         </div>
-                        <div class="students-list-body" id="miroLinksStudentsBody"></div>
+                        <div class="miro-table-body" id="miroLinksTableBody"></div>
                     </div>
                 </div>
             </div>
@@ -273,13 +290,10 @@
     }
 
     function renderRows() {
-        const layer = document.getElementById(LAYER_ID);
-        if (!layer) return;
-        const body = document.getElementById('miroLinksStudentsBody');
-        const searchValue = String(document.getElementById('miroLinksSearch')?.value || '').trim().toLowerCase();
-        const statusValue = String(document.getElementById('miroLinksStatus')?.value || '').trim();
+        const body = document.getElementById('miroLinksTableBody');
+        const searchValue = String(document.getElementById('miroLinksSearchInput')?.value || '').trim().toLowerCase();
+        const statusValue = String(document.getElementById('miroLinksStatusFilter')?.value || '').trim();
         if (!body) return;
-
         const rosterRows = getRowsFromRoster();
         const rows = rosterRows.filter((row) => {
             const rowStatus = getRowStatus(row);
@@ -289,46 +303,32 @@
                 || String(row.lessonsUrl || '').toLowerCase().includes(searchValue)
                 || String(row.workbookUrl || '').toLowerCase().includes(searchValue);
         });
-
         body.innerHTML = rows.map((row) => {
             const rowStatus = getRowStatus(row);
-            const lessons = String(row.lessonsUrl || '').trim();
-            const workbook = String(row.workbookUrl || '').trim();
-            const lessonsValid = isValidMiroUrl(lessons);
-            const workbookValid = isValidMiroUrl(workbook);
-            const lessonsDisplay = lessons || 'No lessons board';
-            const workbookDisplay = workbook || 'No workbook board';
+            const lessonsDisplay = String(row.lessonsUrl || '').trim() || 'No lessons board';
+            const workbookDisplay = String(row.workbookUrl || '').trim() || 'No workbook board';
             return `
-                <div class="meet-links-row ${rowStatus === 'missing' ? 'meet-links-row--missing' : ''}" data-row-id="${row.id}" role="row">
-                    <div class="meet-links-cell meet-links-cell--check">
-                        <label class="meet-links-checkbox-label">
-                            <input type="checkbox" class="meet-links-checkbox" aria-label="Select student" />
-                            <span class="meet-links-checkbox-ui" aria-hidden="true"></span>
-                        </label>
+                <div class="miro-row" data-row-id="${row.id}" role="row">
+                    <div></div>
+                    <div class="miro-student-cell">
+                        <span class="miro-avatar" aria-hidden="true">${row.initials}</span>
+                        <span class="miro-student-name">${row.student}</span>
                     </div>
-                    <div class="meet-links-cell meet-links-cell--student">
-                        <span class="meet-links-avatar" aria-hidden="true">${row.initials}</span>
-                        <span class="meet-links-student-name">${row.student}</span>
-                    </div>
-                    <div class="meet-links-cell meet-links-cell--link">
-                        <span class="meet-links-link-icon" aria-hidden="true"><img src="icon/miro.jpeg" alt="Miro"></span>
-                        <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
-                            <span class="meet-links-url">Lessons: ${lessonsDisplay}</span>
-                            <span class="meet-links-url">Workbook: ${workbookDisplay}</span>
-                            <button type="button" class="meet-links-add-link-btn" data-miro-action="add-link" aria-label="Add link for ${row.student}">Add Link</button>
+                    <div class="miro-link-cell">
+                        <span class="miro-link-icon" aria-hidden="true"><img src="icon/miro.jpeg" alt="Miro"></span>
+                        <div class="miro-link-lines">
+                            <span class="miro-link-text">Lessons: ${lessonsDisplay}</span>
+                            <span class="miro-link-text">Workbook: ${workbookDisplay}</span>
+                            <button type="button" class="miro-add-link-btn" data-miro-action="add-link" aria-label="Add link for ${row.student}">Add Link</button>
                         </div>
                     </div>
-                    <div class="meet-links-cell meet-links-cell--status">
-                        <span class="meet-links-status meet-links-status--${rowStatus}"><span class="meet-links-status-dot"></span>${statusLabel(rowStatus)}</span>
-                    </div>
-                    <div class="meet-links-cell meet-links-cell--actions">
-                        <button type="button" class="meet-links-icon-btn meet-links-icon-btn--edit" data-miro-action="edit" aria-label="Edit links">
+                    <div><span class="miro-status miro-status--${rowStatus}"><span class="miro-status-dot"></span>${statusLabel(rowStatus)}</span></div>
+                    <div class="miro-actions">
+                        <button type="button" class="miro-icon-btn" data-miro-action="edit" aria-label="Edit links for ${row.student}">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                         </button>
-                        <button type="button" class="meet-links-icon-btn meet-links-icon-btn--more" data-miro-action="delete" aria-label="Delete links">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-                                <path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304ZM5.846 11.773a.75.75 0 0 1 0 1.06l-1.757 1.758a3.75 3.75 0 0 0 5.303 5.304l3.129-3.13a.75.75 0 1 1 1.06 1.061l-3.128 3.13a5.25 5.25 0 1 1-7.425-7.426l1.757-1.757a.75.75 0 0 1 1.061 0Zm2.401.26a.75.75 0 0 1 .957.458c.18.512.474.992.885 1.403.31.311.661.555 1.035.733a.75.75 0 0 1-.647 1.354 5.244 5.244 0 0 1-1.449-1.026 5.232 5.232 0 0 1-1.24-1.965.75.75 0 0 1 .46-.957Z" clip-rule="evenodd"></path>
-                            </svg>
+                        <button type="button" class="miro-icon-btn" data-miro-action="delete" aria-label="Delete links for ${row.student}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304Z" clip-rule="evenodd"></path></svg>
                         </button>
                     </div>
                 </div>
@@ -336,28 +336,29 @@
         }).join('');
 
         const total = rosterRows.length;
-        const saved = rosterRows.filter((r) => getRowStatus(r) === 'saved').length;
-        const invalid = rosterRows.filter((r) => getRowStatus(r) === 'invalid').length;
-        const missing = rosterRows.filter((r) => getRowStatus(r) === 'missing').length;
-        const validPct = toPercent(saved, total);
+        const valid = rosterRows.filter((row) => getRowStatus(row) === 'saved').length;
+        const missing = rosterRows.filter((row) => getRowStatus(row) === 'missing').length;
+        const invalid = rosterRows.filter((row) => getRowStatus(row) === 'invalid').length;
+        const validPct = toPercent(valid, total);
         const missingPct = toPercent(missing, total);
         const invalidPct = toPercent(invalid, total);
+
         const totalEl = document.getElementById('miroTotalStudents');
-        const savedEl = document.getElementById('miroFullySaved');
-        const missingEl = document.getElementById('miroMissingAny');
-        const invalidEl = document.getElementById('miroInvalidAny');
-        const totalSubEl = document.getElementById('miroTotalStudentsSub');
-        const savedSubEl = document.getElementById('miroFullySavedSub');
-        const missingSubEl = document.getElementById('miroMissingAnySub');
-        const invalidSubEl = document.getElementById('miroInvalidAnySub');
+        const validEl = document.getElementById('miroValidLinks');
+        const missingEl = document.getElementById('miroMissingLinks');
+        const invalidEl = document.getElementById('miroInvalidLinks');
+        const totalSub = document.getElementById('miroTotalStudentsSub');
+        const validSub = document.getElementById('miroValidLinksSub');
+        const missingSub = document.getElementById('miroMissingLinksSub');
+        const invalidSub = document.getElementById('miroInvalidLinksSub');
         if (totalEl) totalEl.textContent = String(total);
-        if (savedEl) savedEl.textContent = String(saved);
+        if (validEl) validEl.textContent = String(valid);
         if (missingEl) missingEl.textContent = String(missing);
         if (invalidEl) invalidEl.textContent = String(invalid);
-        if (totalSubEl) totalSubEl.textContent = total > 0 ? 'All Roster loaded.' : 'No students yet.';
-        if (savedSubEl) savedSubEl.textContent = getValidLinksMessage(validPct);
-        if (missingSubEl) missingSubEl.textContent = getIssueMessage(missingPct, 'missing');
-        if (invalidSubEl) invalidSubEl.textContent = getIssueMessage(invalidPct, 'invalid');
+        if (totalSub) totalSub.textContent = total > 0 ? 'All roster loaded.' : 'No students yet.';
+        if (validSub) validSub.textContent = getValidLinksMessage(validPct);
+        if (missingSub) missingSub.textContent = getIssueMessage(missingPct, 'missing');
+        if (invalidSub) invalidSub.textContent = getIssueMessage(invalidPct, 'invalid');
     }
 
     function openLayer() {
@@ -392,7 +393,6 @@
     function bindEvents() {
         if (eventsBound) return;
         eventsBound = true;
-
         document.addEventListener('click', (e) => {
             const target = e.target;
             if (!(target instanceof Element)) return;
@@ -410,28 +410,9 @@
             }
             const rowEl = target.closest('[data-row-id]');
             if (!rowEl) return;
-            const rowId = String(rowEl.getAttribute('data-row-id') || '');
-            const row = getRowsFromRoster().find((item) => item.id === rowId);
+            const row = getRowsFromRoster().find((item) => item.id === String(rowEl.getAttribute('data-row-id') || ''));
             if (!row) return;
-
-            if (target.closest('[data-miro-action="open-lessons"]')) {
-                if (isValidMiroUrl(row.lessonsUrl)) window.open(String(row.lessonsUrl), '_blank', 'noopener,noreferrer');
-                return;
-            }
-            if (target.closest('[data-miro-action="open-workbook"]')) {
-                if (isValidMiroUrl(row.workbookUrl)) window.open(String(row.workbookUrl), '_blank', 'noopener,noreferrer');
-                return;
-            }
-            if (target.closest('[data-miro-action="edit"]')) {
-                const nextLessons = window.prompt(`Paste Lessons board URL for ${row.student}:`, String(row.lessonsUrl || ''));
-                if (nextLessons === null) return;
-                const nextWorkbook = window.prompt(`Paste Workbook board URL for ${row.student}:`, String(row.workbookUrl || ''));
-                if (nextWorkbook === null) return;
-                upsertStudentLinks(row.student, nextLessons, nextWorkbook);
-                renderRows();
-                return;
-            }
-            if (target.closest('[data-miro-action="add-link"]')) {
+            if (target.closest('[data-miro-action="edit"]') || target.closest('[data-miro-action="add-link"]')) {
                 const nextLessons = window.prompt(`Paste Lessons board URL for ${row.student}:`, String(row.lessonsUrl || ''));
                 if (nextLessons === null) return;
                 const nextWorkbook = window.prompt(`Paste Workbook board URL for ${row.student}:`, String(row.workbookUrl || ''));
@@ -445,20 +426,17 @@
                 renderRows();
             }
         });
-
         document.addEventListener('input', (e) => {
             const target = e.target;
             if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
-            if (target.id === 'miroLinksSearch' || target.id === 'miroLinksStatus') {
+            if (target.id === 'miroLinksSearchInput' || target.id === 'miroLinksStatusFilter') {
                 renderRows();
             }
         });
-
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
             const layer = document.getElementById(LAYER_ID);
-            if (!layer || layer.hidden) return;
-            closeLayer();
+            if (layer && !layer.hidden) closeLayer();
         });
     }
 
