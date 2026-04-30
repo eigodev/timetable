@@ -8839,6 +8839,19 @@ function getVisibleMeetLinksRowCheckboxes() {
     return Array.from(document.querySelectorAll('#meetLinksStudentsBody .meet-links-checkbox'));
 }
 
+function getSelectedGoogleMeetStudentIds() {
+    return getVisibleMeetLinksRowCheckboxes()
+        .filter((cb) => cb.checked)
+        .map((cb) => String(cb.closest('.meet-links-row')?.dataset.studentId || '').trim())
+        .filter(Boolean);
+}
+
+function syncMeetLinksBulkRemoveButton() {
+    const removeBtn = document.getElementById('meetLinksRemoveSelected');
+    if (!removeBtn) return;
+    removeBtn.disabled = getSelectedGoogleMeetStudentIds().length === 0;
+}
+
 function syncMeetLinksSelectAllCheckbox() {
     const selectAll = document.getElementById('meetLinksSelectAll');
     if (!selectAll) return;
@@ -8847,6 +8860,7 @@ function syncMeetLinksSelectAllCheckbox() {
     const checked = rowCheckboxes.filter((cb) => cb.checked).length;
     selectAll.indeterminate = checked > 0 && checked < total;
     selectAll.checked = total > 0 && checked === total;
+    syncMeetLinksBulkRemoveButton();
 }
 
 function setAllVisibleMeetLinksRowsSelected(checked) {
@@ -8854,6 +8868,25 @@ function setAllVisibleMeetLinksRowsSelected(checked) {
         cb.checked = !!checked;
     });
     syncMeetLinksSelectAllCheckbox();
+}
+
+function removeGoogleMeetLinksForSelectedStudents() {
+    const selectedIds = getSelectedGoogleMeetStudentIds();
+    if (selectedIds.length === 0) return 0;
+    let removed = 0;
+    selectedIds.forEach((studentId) => {
+        const studentName = getGoogleMeetStudentNameFromId(studentId);
+        if (!studentName) return;
+        const hadLink = !!getGoogleMeetLinkForStudent(studentName);
+        if (!hadLink) return;
+        removeGoogleMeetLinkForStudent(studentName);
+        removed += 1;
+    });
+    if (removed > 0) {
+        saveRoster();
+        refreshClassReportAfterMeetLinkChange();
+    }
+    return removed;
 }
 
 function renderGoogleMeetLinksStudentsRows() {
@@ -8983,6 +9016,7 @@ function setupGoogleMeetModal() {
     const meetLinksStatus = meetLinksLayer?.querySelector('.meet-links-status-select');
     const meetLinksStatusIcon = meetLinksLayer?.querySelector('.status-filter-icon');
     const meetLinksSelectAll = meetLinksLayer?.querySelector('#meetLinksSelectAll');
+    const meetLinksRemoveSelected = meetLinksLayer?.querySelector('#meetLinksRemoveSelected');
 
     if (!modal || !form || !schoolToggle || !listWrap) {
         return;
@@ -8996,6 +9030,21 @@ function setupGoogleMeetModal() {
         meetLinksStatus?.addEventListener('change', () => renderGoogleMeetLinksStudentsRows());
         meetLinksSelectAll?.addEventListener('change', () => {
             setAllVisibleMeetLinksRowsSelected(meetLinksSelectAll.checked);
+        });
+        meetLinksRemoveSelected?.addEventListener('click', () => {
+            const selectedCount = getSelectedGoogleMeetStudentIds().length;
+            if (selectedCount === 0) return;
+            const ok = window.confirm(`Remove Google Meet link from ${selectedCount} selected student(s)?`);
+            if (!ok) return;
+            const removed = removeGoogleMeetLinksForSelectedStudents();
+            renderGoogleMeetLinksStudentsRows();
+            updateGoogleMeetLinksPopupStats();
+            if (removed > 0) {
+                showGoogleMeetContextMessage(
+                    removed === 1 ? 'Meet link removed.' : `${removed} Meet links removed.`,
+                    meetLinksRemoveSelected
+                );
+            }
         });
         meetLinksStatusIcon?.addEventListener('click', () => {
             if (!meetLinksStatus) return;
