@@ -4,65 +4,9 @@
     const LAYER_ID = 'miroLinksLayer';
     const CLOSE_ANIMATION_MS = 220;
     const MIRO_LINKS_STORAGE_KEY = 'timetable_miro_board_links_by_student';
-    const STYLE_TAG_ID = 'miroLinksPopupStyles';
     let hideTimer = null;
     let eventsBound = false;
     let miroLinksByStudent = {};
-
-    function ensureStyles() {
-        if (document.getElementById(STYLE_TAG_ID)) return;
-        const style = document.createElement('style');
-        style.id = STYLE_TAG_ID;
-        style.textContent = `
-.miro-links-layer{position:fixed;inset:0;z-index:2200;display:flex;align-items:center;justify-content:center;padding:28px;box-sizing:border-box}
-.miro-links-layer-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(2px)}
-.miro-popup{position:relative;width:min(1220px,96vw);max-height:min(88vh,900px);display:flex;flex-direction:column;background:#fff;border-radius:22px;box-shadow:0 30px 90px rgba(2,8,23,.3);overflow:hidden}
-.miro-header{display:flex;justify-content:space-between;align-items:flex-start;padding:22px 24px 12px;border-bottom:1px solid #eceff7}
-.miro-header-title{display:flex;flex-direction:column;gap:4px}
-.miro-headline{margin:0;font-size:1.45rem;font-weight:800;color:#1f2a44}
-.miro-guideline{margin:0;font-size:.9rem;color:#6d768f}
-.miro-header-actions{display:flex;gap:10px;align-items:center}
-.miro-import-btn,.miro-close-btn{border:1px solid #d7def1;background:#fff;color:#334155;border-radius:12px;padding:8px 12px;display:inline-flex;align-items:center;gap:8px;font-weight:700;cursor:pointer}
-.miro-close-btn{background:#4f46e5;color:#fff;border-color:#4f46e5}
-.miro-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:14px 16px}
-.miro-card{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #e7ebf7;border-radius:14px;background:#fff}
-.miro-card-icon{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:#eef2ff;color:#4f46e5}
-.miro-card-value{margin:0;font-size:1.25rem;font-weight:800;color:#1f2a44;line-height:1}
-.miro-card-label{margin:0;font-size:.75rem;font-weight:700;color:#55607a;text-transform:uppercase;letter-spacing:.04em}
-.miro-card-sub{margin:2px 0 0;font-size:.72rem;color:#6d768f}
-.miro-download-card{justify-content:center;cursor:pointer;background:#f8faff}
-.miro-context-message{margin:0 16px 10px;padding:8px 12px;border-radius:10px;background:#eef2ff;color:#1f2a44;font-weight:600;font-size:.82rem}
-.miro-students{display:flex;flex-direction:column;min-height:0;flex:1}
-.miro-search-filter{display:flex;gap:10px;align-items:center;padding:0 16px 12px}
-.miro-search-box{position:relative;flex:1}
-.miro-search-input,.miro-filter-select{width:100%;height:42px;border:1px solid #d7def1;border-radius:12px;padding:0 12px;font-size:.9rem}
-.miro-filter-wrap{min-width:180px}
-.miro-table-head,.miro-row{display:grid;grid-template-columns:40px minmax(140px,1.1fr) minmax(220px,2fr) minmax(110px,.9fr) 92px;gap:8px 12px;align-items:center;padding:10px 16px}
-.miro-table-head{background:#f7f8fc;border-top:1px solid #eceff7;border-bottom:1px solid #eceff7}
-.miro-table-head p{margin:0;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6d768f}
-.miro-table-body{overflow:auto;min-height:0;flex:1}
-.miro-row{border-bottom:1px solid #f0f2f8}
-.miro-row:hover{background:#fafbff}
-.miro-student-cell{display:flex;align-items:center;gap:10px}
-.miro-avatar{display:inline-flex;width:30px;height:30px;border-radius:999px;background:#e8ecfb;color:#374151;align-items:center;justify-content:center;font-weight:800;font-size:.73rem}
-.miro-student-name{font-weight:600;color:#1f2a44}
-.miro-link-cell{display:flex;align-items:flex-start;gap:10px}
-.miro-link-icon{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center}
-.miro-link-icon img{width:20px;height:20px;border-radius:4px;object-fit:cover}
-.miro-link-lines{display:flex;flex-direction:column;gap:4px;min-width:0}
-.miro-link-text{font-size:.78rem;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.miro-add-link-btn{border:1px solid #d7def1;background:#fff;color:#4f46e5;border-radius:8px;padding:4px 8px;font-size:.72rem;font-weight:700;cursor:pointer;width:max-content}
-.miro-status{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;font-size:.72rem;font-weight:700}
-.miro-status-dot{width:7px;height:7px;border-radius:999px;background:currentColor}
-.miro-status--saved{color:#0f766e;background:#ecfdf5}
-.miro-status--missing{color:#9a3412;background:#fff7ed}
-.miro-status--invalid{color:#991b1b;background:#fef2f2}
-.miro-actions{display:flex;justify-content:flex-end;gap:6px}
-.miro-icon-btn{width:32px;height:32px;border-radius:10px;border:1px solid #e2e8f0;background:#fff;color:#334155;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-.miro-icon-btn svg{width:16px;height:16px}
-        `;
-        document.head.appendChild(style);
-    }
 
     function loadMiroLinksStorage() {
         try {
@@ -165,24 +109,36 @@
         return 0;
     }
 
-    function getValidLinksMessage(percentage) {
+    function ShowMessage(cardKey, percentage) {
         const band = percentBand(percentage);
-        if (band === 100) return 'All links valid.';
-        if (band === 80) return 'A few links missing.';
-        if (band === 60) return 'Missing links!';
-        if (band === 40) return 'Needs attention.';
-        if (band === 20) return 'A few links added.';
-        return 'No links added yet.';
-    }
-
-    function getIssueMessage(percentage, kind) {
-        const band = percentBand(percentage);
-        if (band === 0) return kind === 'missing' ? 'No missing links.' : 'No invalid links.';
-        if (band === 20) return `A few ${kind} links.`;
-        if (band === 40) return `Moderate ${kind} links.`;
-        if (band === 60) return 'Review soon.';
-        if (band === 80) return 'Action needed.';
-        return `All links are ${kind}.`;
+        if (cardKey === 'valid') {
+            if (band === 100) return 'All links valid.';
+            if (band === 80) return 'A few links missing.';
+            if (band === 60) return 'Missing links!';
+            if (band === 40) return 'Needs attention.';
+            if (band === 20) return 'A few links added.';
+            return 'No links added yet.';
+        }
+        if (cardKey === 'missing') {
+            if (band === 0) return 'No missing links.';
+            if (band === 20) return 'A few missing links.';
+            if (band === 40) return 'Moderate missing links.';
+            if (band === 60) return 'Missing links need review.';
+            if (band === 80) return 'Action needed: many missing links.';
+            return 'All links are missing.';
+        }
+        if (cardKey === 'invalid') {
+            if (band === 0) return 'No invalid links.';
+            if (band === 20) return 'A few invalid links.';
+            if (band === 40) return 'Moderate invalid links.';
+            if (band === 60) return 'Invalid links need review.';
+            if (band === 80) return 'Action needed: many invalid links.';
+            return 'All links are invalid.';
+        }
+        if (cardKey === 'total') {
+            return percentage > 0 ? 'All roster loaded.' : 'No students yet.';
+        }
+        return '';
     }
 
     function showContextMessage(message) {
@@ -217,7 +173,6 @@
     function ensureRendered() {
         const host = document.querySelector('.link-miro-board');
         if (!host || host.querySelector(`#${LAYER_ID}`)) return;
-        ensureStyles();
         host.innerHTML = `
             <div id="${LAYER_ID}" class="miro-links-layer" hidden aria-hidden="true">
                 <div class="miro-links-layer-backdrop" data-miro-role="backdrop" aria-hidden="true"></div>
@@ -355,10 +310,10 @@
         if (validEl) validEl.textContent = String(valid);
         if (missingEl) missingEl.textContent = String(missing);
         if (invalidEl) invalidEl.textContent = String(invalid);
-        if (totalSub) totalSub.textContent = total > 0 ? 'All roster loaded.' : 'No students yet.';
-        if (validSub) validSub.textContent = getValidLinksMessage(validPct);
-        if (missingSub) missingSub.textContent = getIssueMessage(missingPct, 'missing');
-        if (invalidSub) invalidSub.textContent = getIssueMessage(invalidPct, 'invalid');
+        if (totalSub) totalSub.textContent = ShowMessage('total', total);
+        if (validSub) validSub.textContent = ShowMessage('valid', validPct);
+        if (missingSub) missingSub.textContent = ShowMessage('missing', missingPct);
+        if (invalidSub) invalidSub.textContent = ShowMessage('invalid', invalidPct);
     }
 
     function openLayer() {
