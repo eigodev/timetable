@@ -200,14 +200,19 @@
                             <span class="meet-links-url">Lessons: ${lessonsDisplay}</span>
                             <span class="meet-links-url">Workbook: ${workbookDisplay}</span>
                         </div>
-                        <button type="button" class="meet-links-open-external" data-miro-action="open-lessons" aria-label="Open lessons board in new tab" ${lessonsValid ? '' : 'disabled'}>↗</button>
-                        <button type="button" class="meet-links-open-external" data-miro-action="open-workbook" aria-label="Open workbook board in new tab" ${workbookValid ? '' : 'disabled'}>↗</button>
                     </div>
                     <div class="meet-links-cell meet-links-cell--status">
                         <span class="meet-links-status meet-links-status--${rowStatus}"><span class="meet-links-status-dot"></span>${statusLabel(rowStatus)}</span>
                     </div>
                     <div class="meet-links-cell meet-links-cell--actions">
-                        <button type="button" class="meet-links-icon-btn meet-links-icon-btn--edit" data-miro-action="edit" aria-label="Edit links">Edit</button>
+                        <button type="button" class="meet-links-icon-btn meet-links-icon-btn--edit" data-miro-action="edit" aria-label="Edit links">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button type="button" class="meet-links-icon-btn meet-links-icon-btn--more" data-miro-action="delete" aria-label="Delete links">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                <path fill-rule="evenodd" d="M19.892 4.09a3.75 3.75 0 0 0-5.303 0l-4.5 4.5c-.074.074-.144.15-.21.229l4.965 4.966a3.75 3.75 0 0 0-1.986-4.428.75.75 0 0 1 .646-1.353 5.253 5.253 0 0 1 2.502 6.944l5.515 5.515a.75.75 0 0 1-1.061 1.06l-18-18.001A.75.75 0 0 1 3.521 2.46l5.294 5.295a5.31 5.31 0 0 1 .213-.227l4.5-4.5a5.25 5.25 0 1 1 7.425 7.425l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.756-1.757a3.75 3.75 0 0 0 0-5.304ZM5.846 11.773a.75.75 0 0 1 0 1.06l-1.757 1.758a3.75 3.75 0 0 0 5.303 5.304l3.129-3.13a.75.75 0 1 1 1.06 1.061l-3.128 3.13a5.25 5.25 0 1 1-7.425-7.426l1.757-1.757a.75.75 0 0 1 1.061 0Zm2.401.26a.75.75 0 0 1 .957.458c.18.512.474.992.885 1.403.31.311.661.555 1.035.733a.75.75 0 0 1-.647 1.354 5.244 5.244 0 0 1-1.449-1.026 5.232 5.232 0 0 1-1.24-1.965.75.75 0 0 1 .46-.957Z" clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             `;
@@ -292,6 +297,12 @@
                 if (nextWorkbook === null) return;
                 row.lessonsUrl = String(nextLessons || '').trim();
                 row.workbookUrl = String(nextWorkbook || '').trim();
+                renderRows();
+                return;
+            }
+            if (target.closest('[data-miro-action="delete"]')) {
+                row.lessonsUrl = '';
+                row.workbookUrl = '';
                 renderRows();
             }
         });
