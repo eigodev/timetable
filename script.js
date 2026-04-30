@@ -7905,6 +7905,7 @@ function updateAddStudentPassportFieldVisibility() {
 
 function openAddStudentModal(mode = 'school') {
     ensureAddPopupProvidersRendered();
+    populateAddStudentPhoneCountrySelect();
     const modal = document.getElementById('addModal');
     const teacherFirstInput = document.getElementById('addTeacherFirst');
     const teacherLastInput = document.getElementById('addTeacherLast');
@@ -7955,6 +7956,8 @@ function openAddStudentModal(mode = 'school') {
     if (teacherPhoneInput) teacherPhoneInput.value = '';
     if (phoneCountrySelect) phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
     if (teacherPhoneCountrySelect) teacherPhoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
+    updateAddStudentPhonePlaceholder();
+    updateAddTeacherPhonePlaceholder();
     const addTeacherSelect = document.getElementById('addStudentMentor');
     if (addTeacherSelect) {
         refreshAddStudentTeacherSelect('');
