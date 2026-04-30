@@ -308,6 +308,7 @@
                     </div>
                     <div class="meet-links-cell meet-links-cell--student">
                         <span class="meet-links-avatar" aria-hidden="true">${row.initials}</span>
+                        <button type="button" class="meet-links-add-link-btn" data-miro-action="add-link" aria-label="Add link for ${row.student}">Add Link</button>
                         <span class="meet-links-student-name">${row.student}</span>
                     </div>
                     <div class="meet-links-cell meet-links-cell--link">
@@ -422,6 +423,15 @@
                 return;
             }
             if (target.closest('[data-miro-action="edit"]')) {
+                const nextLessons = window.prompt(`Paste Lessons board URL for ${row.student}:`, String(row.lessonsUrl || ''));
+                if (nextLessons === null) return;
+                const nextWorkbook = window.prompt(`Paste Workbook board URL for ${row.student}:`, String(row.workbookUrl || ''));
+                if (nextWorkbook === null) return;
+                upsertStudentLinks(row.student, nextLessons, nextWorkbook);
+                renderRows();
+                return;
+            }
+            if (target.closest('[data-miro-action="add-link"]')) {
                 const nextLessons = window.prompt(`Paste Lessons board URL for ${row.student}:`, String(row.lessonsUrl || ''));
                 if (nextLessons === null) return;
                 const nextWorkbook = window.prompt(`Paste Workbook board URL for ${row.student}:`, String(row.workbookUrl || ''));
