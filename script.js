@@ -1082,7 +1082,7 @@ function normalizeUsername(value) {
 function buildDefaultStudentUsername(firstRaw, lastRaw) {
     const first = normalizeUsername(firstRaw);
     const last = normalizeUsername(lastRaw);
-    const combined = `${first}${last}`;
+    const combined = first && last ? `${first}_${last}` : `${first}${last}`;
     if (!combined) return '';
     return `${combined}_`;
 }
@@ -1105,6 +1105,22 @@ function findStudentNameByLoginUsername(usernameRaw) {
 function syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput) {
     if (!firstInput || !lastInput || !usernameInput) return;
     usernameInput.value = buildDefaultStudentUsername(firstInput.value, lastInput.value);
+}
+
+function bindAddStudentUsernameAutoSync(firstInput, lastInput, usernameInput) {
+    if (!firstInput || !lastInput || !usernameInput) return;
+    if (firstInput.dataset.usernameSyncBound !== '1') {
+        firstInput.dataset.usernameSyncBound = '1';
+        firstInput.addEventListener('input', () =>
+            syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput)
+        );
+    }
+    if (lastInput.dataset.usernameSyncBound !== '1') {
+        lastInput.dataset.usernameSyncBound = '1';
+        lastInput.addEventListener('input', () =>
+            syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput)
+        );
+    }
 }
 
 function isStudentPasswordHashed(storedPasswordRaw) {
@@ -7842,6 +7858,7 @@ function openAddStudentModal(mode = 'school') {
     const teacherEmailInput = document.getElementById('addTeacherEmail');
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
     const teacherPasswordToggleBtn = document.getElementById('addTeacherPasswordToggle');
+    const studentUsernameInput = document.getElementById('addStudentUsername');
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
@@ -7851,6 +7868,7 @@ function openAddStudentModal(mode = 'school') {
     if (!modal || !schoolInput || !passportLinkInput) {
         return;
     }
+    bindAddStudentUsernameAutoSync(studentFirstInput, studentLastInput, studentUsernameInput);
 
     const normalizedMode = getCanonicalAddModalMode(mode);
     const preservedEntrySchool = normalizedMode === 'student-entry' ? String(addStudentTargetSchool || '').trim() : '';
@@ -7878,7 +7896,6 @@ function openAddStudentModal(mode = 'school') {
     if (cityInput) cityInput.value = '';
     if (countryInput) countryInput.value = '';
     const studentEmailInput = document.getElementById('addStudentEmail');
-    const studentUsernameInput = document.getElementById('addStudentUsername');
     if (studentEmailInput) studentEmailInput.value = '';
     if (studentUsernameInput) studentUsernameInput.value = buildDefaultStudentUsername('', '');
     if (studentPasswordInput) {
@@ -9162,10 +9179,7 @@ function setupAddStudentModal() {
         backdrop.addEventListener('click', () => closeAddStudentModal());
     }
     schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
-    const syncAddStudentUsername = () =>
-        syncStudentUsernameFromNameFields(studentFirstInput, studentLastInput, studentUsernameInput);
-    studentFirstInput?.addEventListener('input', syncAddStudentUsername);
-    studentLastInput?.addEventListener('input', syncAddStudentUsername);
+    bindAddStudentUsernameAutoSync(studentFirstInput, studentLastInput, studentUsernameInput);
     phoneCountrySelect?.addEventListener('change', handleAddStudentPhoneCountryChanged);
     teacherPhoneCountrySelect?.addEventListener('change', handleAddTeacherPhoneCountryChanged);
     if (modal.dataset.teacherUiBound !== '1') {
