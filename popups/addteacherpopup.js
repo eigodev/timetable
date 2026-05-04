@@ -68,7 +68,7 @@
                                     </label>
                                     <label class="add-student-label add-student-contact-country-wrap">
                                         <span>Country</span>
-                                        <input type="text" id="addTeacherCountry" name="teacherCountry" readonly autocomplete="off" maxlength="120" title="Filled automatically from the phone country code" aria-label="Country (from phone country code)">
+                                        <input type="text" id="addTeacherCountry" name="teacherCountry" list="phoneResidenceCountryNames" autocomplete="country-name" maxlength="120" title="Defaults to the country for the selected calling code; change or type if the person lives elsewhere." aria-label="Country (defaults to calling code; editable)">
                                     </label>
                                     <label class="add-student-label add-student-contact-phone-wrap add-teacher-phone-wrap">
                                         <span>Phone Number</span>

@@ -202,7 +202,7 @@
                         </label>
                         <label class="add-student-label add-student-contact-country-wrap">
                             <span>Country</span>
-                            <input type="text" id="editStudentCountry" name="country" readonly autocomplete="off" maxlength="120" aria-label="Country (from phone country code)">
+                            <input type="text" id="editStudentCountry" name="country" list="phoneResidenceCountryNames" autocomplete="country-name" maxlength="120" title="Defaults to the country for the selected calling code; change or type if the person lives elsewhere." aria-label="Country (defaults to calling code; editable)">
                         </label>
                         <label class="add-student-label add-student-contact-phone-wrap">
                             <span>Phone number</span>
@@ -230,29 +230,6 @@
                         </div>
                     </div>
                 </div>
-                <section class="add-student-redesign-miro-card">
-                    <div class="add-student-redesign-miro-header">
-                        <img src="icon/miro.jpeg" class="add-student-redesign-miro-logo" alt="" aria-hidden="true">
-                        <div>
-                            <h5 class="add-student-redesign-miro-title">Miro Boards (Optional)</h5>
-                            <p class="add-student-redesign-miro-subtitle">Update the links to the student's Miro boards.</p>
-                        </div>
-                    </div>
-                    <div class="add-student-redesign-miro-links-row">
-                        <div class="add-student-redesign-miro-inline">
-                            <label class="add-student-redesign-miro-inline-title" for="editStudentPassportLink">Lessons</label>
-                            <label class="add-student-redesign-miro-input-wrap add-student-label add-student-passport-link-wrap is-visible" id="editStudentPassportLinkWrap" aria-hidden="false">
-                                <input type="url" id="editStudentPassportLink" name="editPassportLink" autocomplete="url" placeholder="https://miro.com/app/board/...">
-                            </label>
-                        </div>
-                        <div class="add-student-redesign-miro-inline">
-                            <label class="add-student-redesign-miro-inline-title" for="editStudentWorkbookBoardLink">Workbook</label>
-                            <label class="add-student-redesign-miro-input-wrap add-student-label">
-                                <input type="url" id="editStudentWorkbookBoardLink" name="editStudentWorkbookBoardLink" autocomplete="url" placeholder="https://miro.com/app/board/...">
-                            </label>
-                        </div>
-                    </div>
-                </section>
                 <div class="add-student-account-wrap">
                     <div class="email-and-password">
                         <label class="add-student-label" for="editStudentEmail">
@@ -376,37 +353,14 @@
         </div>
     </div>
 
-    <!-- Teacher login modal -->
-    <div id="teacherLoginModal" class="teacher-login-modal" aria-hidden="true">
-        <div class="teacher-login-modal-backdrop" id="teacherLoginModalBackdrop"></div>
-        <div class="teacher-login-dialog" role="dialog" aria-modal="true" aria-labelledby="teacherLoginModalTitle">
-            <h3 id="teacherLoginModalTitle" class="teacher-login-title">Log in</h3>
-            <form id="teacherLoginForm" class="teacher-login-form">
-                <label class="teacher-login-label" for="teacherLoginEmail">
-                    <span>Admin username, teacher email, or student username</span>
-                    <input type="text" id="teacherLoginEmail" autocomplete="username" required maxlength="120" placeholder="@Admin, teacher@email.com, or studentname_">
-                </label>
-                <label class="teacher-login-label" for="teacherLoginPassword">
-                    <span>Password</span>
-                    <div class="password-input-wrap">
-                        <input type="password" id="teacherLoginPassword" autocomplete="current-password" required maxlength="120" placeholder="Enter your account password">
-                        <button type="button" id="teacherLoginPasswordToggle" class="password-toggle-btn" aria-label="Show password" title="Show password" aria-pressed="false">
-                            <span class="password-toggle-btn-icon" aria-hidden="true"></span>
-                        </button>
-                    </div>
-                </label>
-                <label class="teacher-login-save-row" for="teacherLoginSaveCredentials">
-                    <input type="checkbox" id="teacherLoginSaveCredentials">
-                    <span>Keep me logged in on this device</span>
-                </label>
-                <p id="teacherLoginError" class="teacher-login-error" aria-live="polite"></p>
-                <div class="teacher-login-actions">
-                    <button type="button" class="btn-teacher-login-cancel" id="teacherLoginCancel">Cancel</button>
-                    <button type="submit" class="btn-teacher-login-submit">Log In</button>
-                </div>
-            </form>
+    <!-- Login Popup -->
+    <!--
+    <div id="loginModal" class="login-modal" aria-hidden="true">
+        <div class="login-popup">
+
         </div>
     </div>
+    -->
 
     <!-- Student: reposition from teacher open (green) slot -->
     <div id="studentRepositionModal" class="app-message-modal student-reposition-modal" aria-hidden="true">

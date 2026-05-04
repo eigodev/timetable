@@ -6,25 +6,27 @@
 	<title>Document</title>
 </head>
 <body>
-	<div class="container-teacher">
-		<p class="title">Title</p>
-		<hr>
-		<div class="container-teacher-info">
-			<div class="container-teacher-fields">
-				<div class="info-container">
-					<p class="name">Name</p>
-					<p class="email">Email</p>
-					<p class="password">Password</p>
-				</div>
-			</div>
-			<div class="container-teacher-actions">
+	<div id="loginModal" class="login-modal" aria-hidden="true">
+		<div class="login-popup">
+			<div class="header">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-					<path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+					<path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd" />
 				</svg>
+				<h1><!-- Greeting -->, <!-- very short welcome text -->.</h1>
+				<p>Let's get you logged in. User your info to continue to your account.</p>
+			</div>
+			<div class="fields">
+				<div class="field-email">
+					<label for="email" class="email">Email or Username</label>
+					<input class="input-email" type="text" value="login" required >
+				</div>
+				<div class="field-password">
+					<label for="password" class="password">Password</label>
+					<input class="input-password" type="password" value="password" required >
+				</div>
 			</div>
 		</div>
 	</div>
-
 
 	<!-- CSS | Cascade Style Sheet -->
 	<style>
@@ -32,23 +34,32 @@
 			padding: 0;
 			margin: 0;
 			box-sizing: border-box;
-			font-family: 'Poppins', sans-serif;
+			font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif
 		}
 
-		.container-teacher {
-			height: auto;
-			width: 400px;
-			padding: 20px;
-		}
-		.container-teacher-info {
+		body {
 			display: flex;
-		}
-		.container-teacher-actions {
-			height: 50px;
-			width: 50px;
+			justify-content: center;
+			align-items: center;
 
-			background-color: #cacaca;
-			border-radius: 10px;
+			height: 100vh;
+			width: 100vw;
+
+			background-color: #e8edf2;
+		}
+
+		div.login-modal div.login-popup {
+			height: auto;
+			width: auto;
+			padding: 20px;
+
+			border-radius: 20px;
+			background-color: #ffffff;
+		}
+
+		div.login-modal div.login-popup div.header svg {
+			height: 20px;
+			width: 20px;
 		}
 	</style>
 

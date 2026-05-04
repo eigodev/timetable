@@ -57,7 +57,7 @@
                         </label>
                         <label class="add-student-label add-student-contact-country-wrap" id="addStudentContactCountryWrap">
                             <span>Country</span>
-                            <input type="text" id="addStudentCountry" name="country" readonly autocomplete="off" maxlength="120" title="Filled automatically from the phone country code" aria-label="Country (from phone country code)">
+                            <input type="text" id="addStudentCountry" name="country" list="phoneResidenceCountryNames" autocomplete="country-name" maxlength="120" title="Defaults to the country for the selected calling code; change or type if the person lives elsewhere." aria-label="Country (defaults to calling code; editable)">
                         </label>
                         <label class="add-student-label add-student-contact-phone-wrap" id="addStudentContactPhoneWrap">
                             <span>Phone number</span>
@@ -90,31 +90,6 @@
                         </div>
                     </div>
                 </div>
-
-                <section class="add-student-redesign-miro-card">
-                    <div class="add-student-redesign-miro-header">
-                        <img src="icon/miro.jpeg" class="add-student-redesign-miro-logo" alt="" aria-hidden="true">
-                        <div>
-                            <h5 class="add-student-redesign-miro-title">Miro Boards (Optional)</h5>
-                            <p class="add-student-redesign-miro-subtitle">Add the links to the student's Miro boards.</p>
-                        </div>
-                    </div>
-                    <div class="add-student-redesign-miro-links-row">
-                        <div class="add-student-redesign-miro-inline">
-                            <label class="add-student-redesign-miro-inline-title" for="addStudentPassportLink">Lessons</label>
-                            <label class="add-student-redesign-miro-input-wrap add-student-label add-student-passport-link-wrap" id="addStudentPassportLinkWrap" aria-hidden="true">
-                                <input type="url" id="addStudentPassportLink" name="passportLink" autocomplete="url" placeholder="https://miro.com/app/board/...">
-                            </label>
-                        </div>
-                        <div class="add-student-redesign-miro-inline">
-                            <label class="add-student-redesign-miro-inline-title" for="addStudentWorkbookBoardLink">Workbook</label>
-                            <label class="add-student-redesign-miro-input-wrap add-student-label">
-                                <input type="url" id="addStudentWorkbookBoardLink" name="studentWorkbookBoardLink" autocomplete="url" placeholder="https://miro.com/app/board/...">
-                            </label>
-                        </div>
-                    </div>
-                </section>
-
                 <div id="addStudentAccountWrap" class="add-student-account-wrap is-hidden" aria-hidden="true">
                     <div class="email-and-password">
                         <label class="add-student-label" for="addStudentEmail">

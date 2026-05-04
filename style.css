@@ -1380,6 +1380,23 @@ body {
     }
 }
 
+/* Popups */
+/* Login Popup */
+div.login-modal div.login-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000;
+
+    display: flex;
+    
+    height: 50%;
+    width: 50%;
+
+    background-color: #fff;
+}
+
 .add-modal.is-open .add-modal-backdrop,
 .edit-student-modal.is-open .edit-student-modal-backdrop,
 .school-settings-modal.is-open .school-settings-modal-backdrop,
@@ -2418,11 +2435,10 @@ input.student-reposition-modal-day {
     box-sizing: content-box;
     width: 770.125px;
     height: 551px;
-    max-width: 770.125px;
-    max-height: 551px;
-    margin: 0;
-    border: 0;
     padding: 20px;
+    margin: 0;
+    
+    border: 0;
     background: white;
     border-radius: 20px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -2872,13 +2888,6 @@ input.student-reposition-modal-day {
     gap: 8px;
 }
 
-@media (max-width: 760px) {
-    .add-school-primary-row {
-        flex-direction: column;
-        gap: 8px;
-    }
-}
-
 .add-school-color-checkbox {
     appearance: none;
     -webkit-appearance: none;
@@ -3057,11 +3066,6 @@ input.student-reposition-modal-day {
     gap: 8px;
 }
 
-@media (max-width: 760px) {
-    .add-school-billing-fields--package {
-        grid-template-columns: 1fr;
-    }
-}
 
 .add-modal-form-section,
 .add-student-form-section {
@@ -3458,16 +3462,12 @@ input.student-reposition-modal-day {
     color: #333;
 }
 
-#addStudentCountry {
+#addStudentCountry,
+#editStudentCountry,
+#addTeacherCountry {
     width: 135px;
     text-align: center;
     box-sizing: border-box;
-}
-
-#addStudentCountry[readonly] {
-    cursor: default;
-    background: #f5f6f8;
-    color: #333;
 }
 
 .add-student-password-hint {
@@ -3914,31 +3914,6 @@ tr td.add-teacher-availability-table-day {
 
 .add-modal.add-modal--teacher .add-modal-actions {
     display: none;
-}
-
-@media (min-width: 1900px) and (min-height: 1000px) {
-    .add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
-        top: 3%;
-        left: 19%;
-    }
-}
-
-@media (max-width: 1366px) and (max-height: 768px) {
-    .add-modal.add-modal--teacher .add-modal-dialog.add-modal-dialog--expanded {
-        top: 3%;
-        left: 21%;
-    }
-}
-
-@media (max-width: 1060px) {
-    .add-teacher-fields-container {
-        grid-template-columns: 1fr;
-    }
-    .add-teacher-two-col,
-    .add-teacher-three-col,
-    .add-teacher-password-options {
-        grid-template-columns: 1fr;
-    }
 }
 
 .add-student-subtitle {
@@ -4573,27 +4548,6 @@ tr td.add-teacher-availability-table-day {
 
 .add-student-redesign-miro-input-wrap input {
     width: 100%;
-}
-
-@media (max-width: 760px) {
-    .add-student-redesign-miro-row {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .add-student-redesign-miro-links-row {
-        grid-template-columns: 1fr;
-    }
-
-    .add-student-redesign-miro-inline {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .add-student-redesign-miro-inline-title {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
 }
 
 .add-school-external-wrap.is-hidden {
@@ -5891,7 +5845,7 @@ tr td.add-teacher-availability-table-day {
     padding: 0;
 
     border: 1px solid #334461;
-    border-radius: 10px;
+    border-radius: 5px;
     background: #fff;
     color: #334461;
     line-height: 0;
@@ -7613,29 +7567,6 @@ header h1 {
     filter: brightness(1.04);
 }
 
-@media (max-width: 900px) {
-    .calendar-prompt-popover {
-        width: min(96vw, 920px);
-        left: 2vw;
-        height: min(94vh, 920px);
-    }
-
-    .calendar-prompt-lower-row-content {
-        flex-direction: column;
-    }
-
-    .calendar-prompt-popover-footer {
-        border-left: none;
-        border-top: 1px solid #eceff7;
-        padding: 14px 0 0;
-        min-width: 0;
-        flex-basis: auto;
-    }
-
-    .calendar-prompt-popover-actions {
-        justify-content: flex-end;
-    }
-}
 
 .time-slot:hover {
     background: #fff5e6;
@@ -8334,18 +8265,6 @@ header h1 {
     padding: 20px;
 }
 
-@media (max-width: 960px) {
-    .google-meet-popup .cards {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 520px) {
-    .google-meet-popup .cards {
-        grid-template-columns: 1fr;
-    }
-}
-
 .google-meet-popup .meet-stat-card {
     display: flex;
     align-items: center;
@@ -8977,31 +8896,6 @@ header h1 {
     height: 16px;
 }
 
-
-@media (max-width: 720px) {
-    .google-meet-popup .students-list-header,
-    .google-meet-popup .meet-links-row {
-        grid-template-columns: 36px 1fr;
-        grid-template-rows: auto auto;
-    }
-
-    .google-meet-popup .students-list-header .link-title,
-    .google-meet-popup .students-list-header .status-title,
-    .google-meet-popup .students-list-header .meet-links-header-actions {
-        display: none;
-    }
-
-    .google-meet-popup .meet-links-cell--link,
-    .google-meet-popup .meet-links-cell--status,
-    .google-meet-popup .meet-links-cell--actions {
-        grid-column: 2;
-    }
-
-    .google-meet-popup .meet-links-cell--link {
-        margin-top: -4px;
-    }
-}
-
 @media (prefers-reduced-motion: reduce) {
     .google-meet-popup .meet-links-checkbox-ui::before,
     .google-meet-popup .meet-links-checkbox-ui::after,
@@ -9135,138 +9029,14 @@ header h1 {
     }
 }
 
-@media (max-width: 1024px) {
-    .main-content {
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
+/* Media Queries */
+@media (min-width: 1366px) {
+    .add-modal-dialog,
+    .edit-student-dialog {
+        top: 2.5%;
+        left: 19%;
 
-    .main-content,
-    .main-content:has(.summary-panel.summary-panel--has-slots:not([hidden])) {
-        grid-template-columns: 1fr;
-        gap: 20px;
-    }
-
-    .main-content .summary-panel.summary-panel--has-slots {
-        justify-self: end;
-    }
-
-    .main-content .summary-panel,
-    .main-content .summary-panel.summary-panel--has-slots {
-        flex-basis: auto;
-        width: 100%;
-        max-width: 100%;
-    }
-
-    .summary-panel.summary-panel--has-slots .summary-content {
-        width: 100%;
-    }
-
-    .summary-content {
-        max-height: min(70vh, 560px);
+        height: 647px;
+        width: 902px;
     }
 }
-
-@media (max-width: 1200px) {
-    .calendar-grid,
-    .time-slots-container {
-        --calendar-time-col-width: 80px;
-    }
-    
-    .time-header,
-    .time-label {
-        font-size: 0.8em;
-        padding: 7px 3px;
-    }
-    
-    .day-header {
-        font-size: 0.9em;
-        padding: 7px 3px;
-    }
-    
-    .time-slot {
-        padding: 7px;
-        min-height: 0;
-    }
-}
-
-@media (max-width: 768px) {
-    .app-container {
-        flex-direction: column;
-        height: auto;
-    }
-    
-    .sidebar {
-        width: 100%;
-        max-height: 200px;
-    }
-    
-    .teacher-list {
-        display: flex;
-        flex-direction: column;
-        flex-wrap: nowrap;
-        overflow-x: hidden;
-        overflow-y: auto;
-    }
-
-    .sidebar-pane {
-        flex: 0 0 auto;
-        width: 100%;
-    }
-    
-    .teacher-item {
-        min-width: 120px;
-        border-bottom: 1px solid #f0f0f0;
-        border-left: none;
-        border-top: 4px solid transparent;
-    }
-    
-    .teacher-item:hover,
-    .teacher-item.active {
-        border-left: none;
-        border-top-color: #334461;
-    }
-    
-    .main-content {
-        padding: 15px;
-    }
-    
-    header h1 {
-        font-size: 1.8em;
-    }
-    
-    .calendar-grid,
-    .time-slots-container {
-        --calendar-time-col-width: 60px;
-    }
-    
-    .time-label,
-    .day-header {
-        font-size: 0.7em;
-        padding: 5px 2px;
-    }
-    
-    .time-slot {
-        padding: 5px;
-        min-height: 0;
-    }
-
-    .time-slot.time-slot--with-student-names {
-        padding: 1px 2px;
-    }
-
-    .time-slot-student-names {
-        font-size: clamp(0.46rem, 0.22rem + 6.2cqi, 0.62rem);
-    }
-
-    @supports not (font-size: 1cqi) {
-        .time-slot-student-names {
-            font-size: clamp(0.48rem, 0.32rem + 0.65vw, 0.62rem);
-        }
-    }
-    
-    .time-slot.selected::after {
-        font-size: 1em;
-    }
-}
-
