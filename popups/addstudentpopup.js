@@ -66,6 +66,7 @@
                                     <img id="addStudentPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
                                     <select id="addStudentPhoneCountry" name="phoneCountry" aria-hidden="true" tabindex="-1" aria-label="Country code (automatic)"></select>
                                 </div>
+                                <span id="addStudentPhoneDialCode" class="add-student-phone-dial-code" aria-hidden="true">+55</span>
                                 <input type="tel" id="addStudentPhone" name="phone" autocomplete="tel-national" inputmode="numeric" maxlength="30" placeholder="(__) ____-____" aria-label="Local phone number">
                             </div>
                         </label>

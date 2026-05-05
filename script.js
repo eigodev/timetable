@@ -67,6 +67,12 @@ function isPhoneCountrySelectorAlwaysInteractive(countrySelect) {
     return id === 'addStudentPhoneCountry' || id === 'addTeacherPhoneCountry' || id === 'editStudentPhoneCountry';
 }
 
+function getPreferredStudentPhoneCountryOptions() {
+    const preferred = new Set(['BR', 'IE', 'GB', 'US', 'CA']);
+    const filtered = PHONE_COUNTRY_OPTIONS.filter((country) => preferred.has(String(country.iso || '').toUpperCase()));
+    return filtered.length > 0 ? filtered : PHONE_COUNTRY_OPTIONS;
+}
+
 function ensurePhoneResidenceCountryDatalist() {
     if (document.getElementById(PHONE_RESIDENCE_COUNTRY_DATALIST_ID)) return;
     const dl = document.createElement('datalist');
@@ -272,6 +278,20 @@ function setupGlobalEscapeToDismissOverlays() {
         (e) => {
             if (e.key !== 'Escape') return;
 
+            const addTeacherCountryMenu = document.getElementById('addTeacherCountryPickerMenu');
+            if (addTeacherCountryMenu && !addTeacherCountryMenu.hidden) {
+                e.preventDefault();
+                closeAddTeacherCountryPickerMenu();
+                return;
+            }
+
+            const editStudentCountryMenu = document.getElementById('editStudentCountryPickerMenu');
+            if (editStudentCountryMenu && !editStudentCountryMenu.hidden) {
+                e.preventDefault();
+                closeEditStudentCountryPickerMenu();
+                return;
+            }
+
             const schoolColorPopup = document.getElementById('schoolSettingsColorPopup');
             if (schoolColorPopup && !schoolColorPopup.hidden && schoolColorPopup.classList.contains('is-open')) {
                 e.preventDefault();
@@ -413,6 +433,22 @@ function setupGlobalPointerDownToDismissOverlays() {
         (e) => {
             const target = e.target;
             if (!target) return;
+
+            const addTeacherCountryMenu = document.getElementById('addTeacherCountryPickerMenu');
+            if (addTeacherCountryMenu && !addTeacherCountryMenu.hidden) {
+                if (!(target instanceof Element) || (!target.closest('#addTeacherCountryDisplay') && !target.closest('#addTeacherCountryPickerMenu'))) {
+                    closeAddTeacherCountryPickerMenu();
+                }
+                return;
+            }
+
+            const editStudentCountryMenu = document.getElementById('editStudentCountryPickerMenu');
+            if (editStudentCountryMenu && !editStudentCountryMenu.hidden) {
+                if (!(target instanceof Element) || (!target.closest('#editStudentCountryDisplay') && !target.closest('#editStudentCountryPickerMenu'))) {
+                    closeEditStudentCountryPickerMenu();
+                }
+                return;
+            }
 
             const schoolColorPopup = document.getElementById('schoolSettingsColorPopup');
             if (schoolColorPopup && !schoolColorPopup.hidden && schoolColorPopup.classList.contains('is-open')) {
@@ -4728,6 +4764,10 @@ function renderSidebar() {
     addStudentEntryBtn.setAttribute('aria-label', 'Add student');
     addStudentEntryBtn.innerHTML = ADD_STUDENT_SVG;
     addStudentEntryBtn.addEventListener('click', () => {
+        if (typeof window.openNewAddStudentModal === 'function') {
+            window.openNewAddStudentModal();
+            return;
+        }
         window.openAddStudentPopup?.();
     });
     bindSidebarCursorTooltip(addStudentEntryBtn, 'Add a student');
@@ -6945,6 +6985,8 @@ function openEditStudentModal(studentName, rosterKey) {
     const cityInput = document.getElementById('editStudentCity');
     const countryInput = document.getElementById('editStudentCountry');
     const emailInput = document.getElementById('editStudentEmail');
+    const birthDateInput = document.getElementById('editStudentBirthDate');
+    const ageInput = document.getElementById('editStudentAge');
     const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
     const passportLinkInput = document.getElementById('editStudentPassportLink');
@@ -6970,6 +7012,9 @@ function openEditStudentModal(studentName, rosterKey) {
         countryInput.dataset.phoneDialIsoForCountry = String(phoneCountrySelect.value || '').trim().toUpperCase();
     }
     if (emailInput) emailInput.value = String(studentEmailsByName[studentName] || '');
+    if (birthDateInput) birthDateInput.value = '';
+    if (ageInput) ageInput.value = '';
+    syncEditStudentAgeFromBirthDate();
     if (usernameInput) usernameInput.value = String(studentUsernamesByName[studentName] || buildDefaultStudentUsernameFromFullName(studentName));
     if (passwordInput) passwordInput.value = '';
     if (passportLinkInput) passportLinkInput.value = String(passportFollowupLinks[studentName] || '');
@@ -6986,6 +7031,28 @@ function closeEditStudentModal() {
     const modal = document.getElementById('editStudentModal');
     if (!modal) return;
     closeModalWithAnimation(modal);
+}
+
+function calculateStudentAgeFromBirthDate(value) {
+    if (!value) return '';
+    const birth = new Date(value);
+    if (Number.isNaN(birth.getTime())) return '';
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    const dayDiff = today.getDate() - birth.getDate();
+    if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+        age -= 1;
+    }
+    if (age < 0) return '';
+    return age > 60 ? '60+' : String(age);
+}
+
+function syncEditStudentAgeFromBirthDate() {
+    const birthDateInput = document.getElementById('editStudentBirthDate');
+    const ageInput = document.getElementById('editStudentAge');
+    if (!ageInput) return;
+    ageInput.value = calculateStudentAgeFromBirthDate(birthDateInput?.value || '');
 }
 
 function refreshClassReportAfterMeetLinkChange() {
@@ -7011,6 +7078,9 @@ async function upsertStudentFromEditForm(action = 'save') {
     const passportLink = String(document.getElementById('editStudentPassportLink')?.value || '').trim();
     const nextSchool = String(schoolName || '').trim();
     const nextKind = rosterKindFromSchoolName(nextSchool);
+    const birthDateValue = String(document.getElementById('editStudentBirthDate')?.value || '').trim();
+    const ageRaw = String(document.getElementById('editStudentAge')?.value || '').trim();
+    const levelValue = String(document.getElementById('editStudentLevel')?.value || '').trim();
 
     if (!originalName || !originalKind) {
         return;
@@ -7030,6 +7100,19 @@ async function upsertStudentFromEditForm(action = 'save') {
     if (!nextSchool) {
         alert("Please select the school's name.");
         return;
+    }
+    if (!levelValue) {
+        alert('Please select the student level.');
+        document.getElementById('editStudentLevel')?.focus();
+        return;
+    }
+    if (birthDateValue) {
+        const numericAge = ageRaw === '60+' ? 61 : Number(ageRaw);
+        if (!Number.isFinite(numericAge) || numericAge < 18) {
+            alert('Student age must be 18 or older.');
+            document.getElementById('editStudentBirthDate')?.focus();
+            return;
+        }
     }
     if (!username) {
         alert('Student username is required for account login.');
@@ -7284,6 +7367,7 @@ function setupEditStudentModal() {
     const modal = document.getElementById('editStudentModal');
     const form = document.getElementById('editStudentForm');
     const cancelBtn = document.getElementById('editStudentCancel');
+    const closeBtn = document.getElementById('editStudentCloseBtn');
     const deleteBtn = document.getElementById('editStudentDelete');
     const backdrop = document.getElementById('editStudentModalBackdrop');
     const phoneCountrySelect = document.getElementById('editStudentPhoneCountry');
@@ -7292,11 +7376,13 @@ function setupEditStudentModal() {
     const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
     const passwordGenerateBtn = document.getElementById('editStudentPasswordGenerate');
+    const birthDateInput = document.getElementById('editStudentBirthDate');
     if (!modal || !form) {
         return;
     }
     populateEditStudentPhoneCountrySelect();
     updateEditStudentPhonePlaceholder();
+    bindEditStudentCountryPicker();
     bindPhoneInputAutoCountry(
         document.getElementById('editStudentPhone'),
         phoneCountrySelect,
@@ -7305,6 +7391,9 @@ function setupEditStudentModal() {
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeEditStudentModal());
+    }
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => closeEditStudentModal());
     }
     if (backdrop) {
         backdrop.addEventListener('click', () => closeEditStudentModal());
@@ -7321,6 +7410,8 @@ function setupEditStudentModal() {
     if (passwordGenerateBtn && passwordInput && passwordGenerateBtn.dataset.bound !== '1') {
         bindPlatePasswordGenerateButton(passwordGenerateBtn, passwordInput);
     }
+    birthDateInput?.addEventListener('input', syncEditStudentAgeFromBirthDate);
+    syncEditStudentAgeFromBirthDate();
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -7609,6 +7700,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
 
 function populateAddStudentPhoneCountrySelect() {
     ensurePhoneResidenceCountryDatalist();
+    const countryOptions = getPreferredStudentPhoneCountryOptions();
     const selects = [
         document.getElementById('addStudentPhoneCountry'),
         document.getElementById('addTeacherPhoneCountry')
@@ -7617,7 +7709,7 @@ function populateAddStudentPhoneCountrySelect() {
 
     selects.forEach((countrySelect) => {
         if (countrySelect.options.length > 0) return;
-        PHONE_COUNTRY_OPTIONS.forEach((country) => {
+        countryOptions.forEach((country) => {
             const option = document.createElement('option');
             option.value = country.iso;
             option.textContent = country.flag;
@@ -7627,7 +7719,7 @@ function populateAddStudentPhoneCountrySelect() {
             countrySelect.appendChild(option);
         });
         countrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
-        setPhoneCountrySelectInteraction(countrySelect);
+        setPhoneCountrySelectInteraction(countrySelect, true);
     });
 }
 
@@ -7635,6 +7727,7 @@ function updateAddStudentPhonePlaceholder() {
     const countrySelect = document.getElementById('addStudentPhoneCountry');
     const phoneInput = document.getElementById('addStudentPhone');
     const flagImg = document.getElementById('addStudentPhoneCountryFlag');
+    const dialCodeEl = document.getElementById('addStudentPhoneDialCode');
     if (!countrySelect || !phoneInput) return;
 
     const selected = getPhoneCountryByIso(countrySelect.value);
@@ -7646,30 +7739,38 @@ function updateAddStudentPhonePlaceholder() {
         flagImg.alt = `${selected.name} flag`;
         flagImg.onerror = null;
     }
+    if (dialCodeEl) {
+        dialCodeEl.textContent = selected.dialCode;
+    }
     syncResidenceCountryInputToDialCode(document.getElementById('addStudentCountry'), countrySelect);
 }
 
 function populateEditStudentPhoneCountrySelect() {
     ensurePhoneResidenceCountryDatalist();
+    const countryOptions = getPreferredStudentPhoneCountryOptions();
     const countrySelect = document.getElementById('editStudentPhoneCountry');
     if (!countrySelect) return;
     if (countrySelect.options.length > 0) return;
 
-    PHONE_COUNTRY_OPTIONS.forEach((country) => {
+    countryOptions.forEach((country) => {
         const option = document.createElement('option');
         option.value = country.iso;
         option.textContent = country.flag;
+        option.dataset.dialCode = country.dialCode;
+        option.dataset.sample = country.sample;
+        option.dataset.flagUrl = getPhoneCountryFlagImageSrc(country.iso);
         countrySelect.appendChild(option);
     });
 
     countrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
-    setPhoneCountrySelectInteraction(countrySelect);
+    setPhoneCountrySelectInteraction(countrySelect, true);
 }
 
 function updateEditStudentPhonePlaceholder() {
     const countrySelect = document.getElementById('editStudentPhoneCountry');
     const phoneInput = document.getElementById('editStudentPhone');
     const flagImg = document.getElementById('editStudentPhoneCountryFlag');
+    const dialCodeEl = document.getElementById('editStudentPhoneDialCode');
     const countryInput = document.getElementById('editStudentCountry');
     if (!countrySelect || !phoneInput) return;
 
@@ -7682,7 +7783,49 @@ function updateEditStudentPhonePlaceholder() {
         flagImg.alt = `${selected.name} flag`;
         flagImg.onerror = null;
     }
+    if (dialCodeEl) {
+        dialCodeEl.textContent = selected.dialCode;
+    }
     syncResidenceCountryInputToDialCode(countryInput, countrySelect);
+}
+
+function closeEditStudentCountryPickerMenu() {
+    const menu = document.getElementById('editStudentCountryPickerMenu');
+    const trigger = document.getElementById('editStudentCountryDisplay');
+    if (menu) menu.hidden = true;
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
+function bindEditStudentCountryPicker() {
+    const trigger = document.getElementById('editStudentCountryDisplay');
+    const menu = document.getElementById('editStudentCountryPickerMenu');
+    const countrySelect = document.getElementById('editStudentPhoneCountry');
+    const phoneInput = document.getElementById('editStudentPhone');
+    if (!trigger || !menu || !countrySelect || !phoneInput) return;
+    if (trigger.dataset.countryPickerBound === '1') return;
+    trigger.dataset.countryPickerBound = '1';
+
+    trigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        const willOpen = menu.hidden;
+        closeEditStudentCountryPickerMenu();
+        if (willOpen) {
+            menu.hidden = false;
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+    });
+
+    menu.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target.closest('.country-picker-option') : null;
+        if (!target) return;
+        const iso = String(target.getAttribute('data-country-iso') || '').trim().toUpperCase();
+        if (!iso || !PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso)) return;
+        countrySelect.value = iso;
+        phoneInput.dataset.phoneAllowNanpChoice = (iso === 'US' || iso === 'CA') ? '1' : '0';
+        handleEditStudentPhoneCountryChanged();
+        closeEditStudentCountryPickerMenu();
+        phoneInput.focus();
+    });
 }
 
 function handleAddStudentPhoneCountryChanged() {
@@ -7697,6 +7840,7 @@ function updateAddTeacherPhonePlaceholder() {
     const countrySelect = document.getElementById('addTeacherPhoneCountry');
     const phoneInput = document.getElementById('addTeacherPhone');
     const flagImg = document.getElementById('addTeacherPhoneCountryFlag');
+    const dialCodeEl = document.getElementById('addTeacherPhoneDialCode');
     if (!countrySelect || !phoneInput) return;
 
     const selected = getPhoneCountryByIso(countrySelect.value);
@@ -7708,7 +7852,48 @@ function updateAddTeacherPhonePlaceholder() {
         flagImg.alt = `${selected.name} flag`;
         flagImg.onerror = null;
     }
-    syncResidenceCountryInputToDialCode(document.getElementById('addTeacherCountry'), countrySelect);
+    if (dialCodeEl) {
+        dialCodeEl.textContent = selected.dialCode;
+    }
+}
+
+function closeAddTeacherCountryPickerMenu() {
+    const menu = document.getElementById('addTeacherCountryPickerMenu');
+    const trigger = document.getElementById('addTeacherCountryDisplay');
+    if (menu) menu.hidden = true;
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
+function bindAddTeacherCountryPicker() {
+    const trigger = document.getElementById('addTeacherCountryDisplay');
+    const menu = document.getElementById('addTeacherCountryPickerMenu');
+    const countrySelect = document.getElementById('addTeacherPhoneCountry');
+    const phoneInput = document.getElementById('addTeacherPhone');
+    if (!trigger || !menu || !countrySelect || !phoneInput) return;
+    if (trigger.dataset.countryPickerBound === '1') return;
+    trigger.dataset.countryPickerBound = '1';
+
+    trigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        const willOpen = menu.hidden;
+        closeAddTeacherCountryPickerMenu();
+        if (willOpen) {
+            menu.hidden = false;
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+    });
+
+    menu.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target.closest('.add-teacher-country-picker-option') : null;
+        if (!target) return;
+        const iso = String(target.getAttribute('data-country-iso') || '').trim().toUpperCase();
+        if (!iso || !PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso)) return;
+        countrySelect.value = iso;
+        phoneInput.dataset.phoneAllowNanpChoice = (iso === 'US' || iso === 'CA') ? '1' : '0';
+        handleAddTeacherPhoneCountryChanged();
+        closeAddTeacherCountryPickerMenu();
+        phoneInput.focus();
+    });
 }
 
 function handleAddTeacherPhoneCountryChanged() {
@@ -8031,6 +8216,7 @@ function openAddStudentModal(mode = 'school') {
     bindAddStudentUsernameAutoSync(studentFirstInput, studentLastInput, studentUsernameInput);
     bindPhoneInputAutoCountry(studentPhoneInput, phoneCountrySelect, updateAddStudentPhonePlaceholder);
     bindPhoneInputAutoCountry(teacherPhoneInput, teacherPhoneCountrySelect, updateAddTeacherPhonePlaceholder);
+    bindAddTeacherCountryPicker();
     bindPlatePasswordGenerateButton(teacherPasswordGenerateBtn, teacherPasswordInput);
     bindPlatePasswordGenerateButton(studentPasswordGenerateBtn, studentPasswordInput);
 
@@ -8056,7 +8242,12 @@ function openAddStudentModal(mode = 'school') {
     updateAddTeacherPhonePlaceholder();
     const addTeacherSelect = document.getElementById('addStudentMentor');
     if (addTeacherSelect) {
-        refreshAddStudentTeacherSelect('');
+        const shouldPrefillLoggedTeacher = (addModalMode === 'student-entry' || addModalMode === 'student-global')
+            && isTeacherLoggedIn
+            && !isAdminLoggedIn
+            && !String(loggedInStudentFullName || '').trim();
+        const defaultMentor = shouldPrefillLoggedTeacher ? String(loggedInTeacherName || '').trim() : '';
+        refreshAddStudentTeacherSelect(defaultMentor);
     }
     schoolInput.value = '';
     if (cityInput) cityInput.value = '';
@@ -8065,12 +8256,7 @@ function openAddStudentModal(mode = 'school') {
         resetPhoneCountryDialSyncState(countryInput);
     }
     const addTeacherCityInput = document.getElementById('addTeacherCity');
-    const addTeacherCountryInput = document.getElementById('addTeacherCountry');
     if (addTeacherCityInput) addTeacherCityInput.value = '';
-    if (addTeacherCountryInput) {
-        addTeacherCountryInput.value = '';
-        resetPhoneCountryDialSyncState(addTeacherCountryInput);
-    }
     const studentEmailInput = document.getElementById('addStudentEmail');
     if (studentEmailInput) studentEmailInput.value = '';
     if (studentUsernameInput) studentUsernameInput.value = buildDefaultStudentUsername('', '');

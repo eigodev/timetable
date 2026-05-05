@@ -1504,7 +1504,9 @@ div.login-modal div.login-popup {
 .class-topic-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .class-topic-dialog {
@@ -1765,26 +1767,34 @@ div.login-modal div.login-popup {
 .edit-student-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .delete-school-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .school-settings-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .teacher-login-modal-backdrop,
 .app-message-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .teacher-login-dialog,
@@ -2430,18 +2440,18 @@ input.student-reposition-modal-day {
 
 .edit-student-dialog {
     position: fixed;
-    left: 21%;
+    left: auto;
     z-index: 1;
-    box-sizing: content-box;
-    width: 770.125px;
-    height: 551px;
-    padding: 20px;
+    box-sizing: border-box;
+    width: min(980px, 100%);
+    max-height: min(94vh, 980px);
+    height: auto;
+    padding: 18px 20px;
     margin: 0;
-    
     border: 0;
-    background: white;
-    border-radius: 20px;
-    box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(8, 16, 36, 0.28);
     overflow: auto;
 }
 
@@ -2454,7 +2464,7 @@ input.student-reposition-modal-day {
 .edit-student-form {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 10px;
 }
 
 .edit-student-name-row {
@@ -2607,26 +2617,19 @@ input.student-reposition-modal-day {
 
 .edit-student-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     gap: 10px;
-    margin-top: 8px;
+    margin-top: 12px;
 }
 
 .btn-edit-student-delete,
 .btn-edit-student-cancel,
 .btn-edit-student-submit {
-    padding: 5px 10px;
-    border-radius: 10px;
-    font-size: 0.90rem;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    border: none;
+    min-width: 92px;
 }
 
 .btn-edit-student-delete {
-    margin-right: auto;
     background: #fbe9e7;
     color: #b71c1c;
 }
@@ -2779,11 +2782,28 @@ input.student-reposition-modal-day {
     width: 100%;
     height: 100%;
     transform: none;
-    border-radius: 10px;
+    border-radius: 20px;
     object-fit: cover;
     box-shadow: none;
     pointer-events: none;
     background: #f3f4f8;
+}
+
+.add-student-phone-dial-code {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    height: 30px;
+    padding: 0 6px;
+    border: 1px solid #d8e0ee;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 #addStudentPhone {
@@ -2799,6 +2819,13 @@ input.student-reposition-modal-day {
     font-size: 0.85rem;
     font-weight: 600;
     color: #444444;
+}
+
+input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563eb;
+    cursor: pointer;
 }
 
 .add-school-label {
@@ -3468,6 +3495,8 @@ input.student-reposition-modal-day {
     width: 135px;
     text-align: center;
     box-sizing: border-box;
+    outline: none;
+    appearance: none;
 }
 
 .add-student-password-hint {
@@ -3482,6 +3511,7 @@ input.student-reposition-modal-day {
 
 .add-student-heading-block {
     display: flex;
+    align-items: center;
     flex-direction: column;
     margin-bottom: 10px;
 }
@@ -3565,9 +3595,12 @@ input.student-reposition-modal-day {
     gap: 10px;
 }
 
+.add-teacher-redesign-main-col {
+    width: 60%;
+}
 .add-teacher-redesign-side-col {
     min-height: 100%;
-    min-width: 35%;
+    min-width: 40%;
     padding: 0 0 0 20px;
     border-left: 1px solid #0e1d381c;
 }
@@ -3611,8 +3644,47 @@ input.student-reposition-modal-day {
 
 .add-teacher-three-col {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 135px) minmax(0, 150px);
     gap: 8px;
+}
+
+.add-teacher-contact-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.add-teacher-contact-row .add-student-contact-city-wrap {
+    width: 100%;
+    min-width: 0;
+}
+
+.add-teacher-contact-row .add-student-contact-phone-wrap {
+    width: 220px;
+    justify-self: start;
+}
+
+.add-teacher-three-col .add-student-contact-city-wrap {
+    min-width: 0;
+}
+
+.add-teacher-three-col .add-student-contact-country-wrap {
+    width: 100%;
+    max-width: 135px;
+}
+
+.add-teacher-three-col .add-student-contact-country-wrap select {
+    width: 100%;
+}
+
+.add-teacher-three-col .add-student-contact-phone-wrap {
+    width: 100%;
+    max-width: 150px;
+}
+
+.add-teacher-three-col .add-student-contact-phone-wrap #addTeacherPhone {
+    width: 100%;
+    max-width: 150px;
 }
 
 .add-teacher-two-col.is-hidden {
@@ -3625,27 +3697,110 @@ input.student-reposition-modal-day {
     gap: 8px;
 }
 
+.add-teacher-email-password-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.add-teacher-email-password-row .add-student-contact-email-wrap {
+    min-width: 0;
+}
+
 .add-teacher-contact-stack.is-hidden {
     display: none;
 }
 
 .add-teacher-phone-wrap {
     min-width: 0;
+    position: relative;
 }
 
 .add-teacher-phone-row {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-columns: 40px auto minmax(0, 1fr);
     gap: 6px;
     align-items: center;
 }
 
-.add-teacher-phone-row #addTeacherDialCodeWrap {
-    width: 34px;
-    min-width: 34px;
+.add-teacher-phone-row #addTeacherPhone {
+    width: 100%;
+    min-width: 0;
+}
+
+.add-teacher-country-display {
+    width: 40px;
+    min-width: 40px;
     height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     border-radius: 999px;
     border: 1px solid #d8e0ee;
+    background: #f8fafc;
+    cursor: pointer;
+    padding: 0 4px;
+    position: relative;
+}
+
+.add-teacher-country-display .add-student-phone-country-flag {
+    position: static;
+    inset: auto;
+    width: 20px;
+    height: 14px;
+    border-radius: 20px;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+}
+
+.add-teacher-country-arrow svg {
+    width: 12px;
+    height: 12px;
+    color: #64748b;
+}
+
+.add-teacher-phone-country-select-hidden {
+    display: none;
+}
+
+.add-teacher-country-picker-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 20;
+    min-width: 210px;
+    border: 1px solid #d5dbe7;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+    padding: 4px;
+}
+
+.add-teacher-country-picker-option {
+    width: 100%;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    cursor: pointer;
+    color: #2f3f5f;
+    font-size: 0.8rem;
+}
+
+.add-teacher-country-picker-option:hover {
+    background: #f4f8ff;
+}
+
+.add-teacher-country-picker-option img {
+    width: 20px;
+    height: 14px;
+    border-radius: 20px;
+    object-fit: cover;
 }
 
 .add-teacher-password-wrap {
@@ -4058,6 +4213,8 @@ tr td.add-teacher-availability-table-day {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 .miro-container-layer {
     position: fixed;
@@ -4074,6 +4231,22 @@ tr td.add-teacher-availability-table-day {
     box-sizing: border-box;
     box-shadow: 2.5px 2.5px 5px 0 rgba(30, 40, 55, 0.75);
     overflow: hidden;
+}
+
+.miro-board-content.is-open .miro-backdrop-layer {
+    animation: modal-backdrop-in 0.28s ease-out both;
+}
+
+.miro-board-content.is-open .miro-container-layer {
+    animation: modal-popup-in 220ms ease both;
+}
+
+.miro-board-content.is-closing .miro-backdrop-layer {
+    animation: modal-backdrop-out 0.22s ease-in both;
+}
+
+.miro-board-content.is-closing .miro-container-layer {
+    animation: modal-popup-out 220ms ease both;
 }
 .miro-header {
     display: flex;
@@ -9031,8 +9204,7 @@ header h1 {
 
 /* Media Queries */
 @media (min-width: 1366px) {
-    .add-modal-dialog,
-    .edit-student-dialog {
+    .add-modal-dialog {
         top: 2.5%;
         left: 19%;
 

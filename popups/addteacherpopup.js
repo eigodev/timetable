@@ -61,23 +61,32 @@
                                 </label>
                             </div>
                             <div id="addTeacherContactRow" class="add-teacher-contact-stack is-hidden" aria-hidden="true">
-                                <div class="add-teacher-three-col">
+                                <div class="add-teacher-contact-row">
                                     <label class="add-student-label add-student-contact-city-wrap">
                                         <span>City</span>
                                         <input type="text" id="addTeacherCity" name="teacherCity" autocomplete="address-level2" maxlength="120" placeholder="Enter city">
                                     </label>
-                                    <label class="add-student-label add-student-contact-country-wrap">
-                                        <span>Country</span>
-                                        <input type="text" id="addTeacherCountry" name="teacherCountry" list="phoneResidenceCountryNames" autocomplete="country-name" maxlength="120" title="Defaults to the country for the selected calling code; change or type if the person lives elsewhere." aria-label="Country (defaults to calling code; editable)">
-                                    </label>
                                     <label class="add-student-label add-student-contact-phone-wrap add-teacher-phone-wrap">
                                         <span>Phone Number</span>
                                         <div class="add-teacher-phone-row">
-                                            <div class="add-student-phone-country-wrap" id="addTeacherDialCodeWrap">
-                                                <img id="addTeacherPhoneCountryFlag" class="add-student-phone-country-flag" alt="" aria-hidden="true">
-                                                <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" aria-hidden="true" tabindex="-1" aria-label="Country code (automatic)"></select>
-                                            </div>
+                                            <button type="button" id="addTeacherCountryDisplay" class="add-teacher-country-display" aria-label="Country selector" aria-expanded="false">
+                                                <img id="addTeacherPhoneCountryFlag" class="add-student-phone-country-flag" alt="Brazil flag" aria-hidden="true">
+                                                <span class="add-teacher-country-arrow" aria-hidden="true">
+                                                    <svg viewBox="0 0 24 24" fill="none">
+                                                        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                                    </svg>
+                                                </span>
+                                            </button>
+                                            <select id="addTeacherPhoneCountry" name="teacherPhoneCountry" class="add-teacher-phone-country-select-hidden" aria-hidden="true" tabindex="-1" aria-label="Country code (automatic)"></select>
+                                            <span id="addTeacherPhoneDialCode" class="add-student-phone-dial-code" aria-hidden="true">+55</span>
                                             <input type="tel" id="addTeacherPhone" name="teacherPhone" autocomplete="tel-national" inputmode="numeric" maxlength="30" placeholder="Enter phone number" aria-label="Local phone number">
+                                        </div>
+                                        <div class="add-teacher-country-picker-menu" id="addTeacherCountryPickerMenu" hidden>
+                                            <button type="button" class="add-teacher-country-picker-option" data-country-iso="BR"><img src="https://flagcdn.com/w40/br.png" alt="" aria-hidden="true"><span>Brazil (+55)</span></button>
+                                            <button type="button" class="add-teacher-country-picker-option" data-country-iso="IE"><img src="https://flagcdn.com/w40/ie.png" alt="" aria-hidden="true"><span>Ireland (+353)</span></button>
+                                            <button type="button" class="add-teacher-country-picker-option" data-country-iso="GB"><img src="https://flagcdn.com/w40/gb.png" alt="" aria-hidden="true"><span>United Kingdom (+44)</span></button>
+                                            <button type="button" class="add-teacher-country-picker-option" data-country-iso="US"><img src="https://flagcdn.com/w40/us.png" alt="" aria-hidden="true"><span>United States (+1)</span></button>
+                                            <button type="button" class="add-teacher-country-picker-option" data-country-iso="CA"><img src="https://flagcdn.com/w40/ca.png" alt="" aria-hidden="true"><span>Canada (+1)</span></button>
                                         </div>
                                     </label>
                                 </div>
@@ -109,20 +118,29 @@
                             </div>
                         </section>
                         <section class="add-teacher-card add-teacher-card--professional">
-                            <h3 class="add-teacher-card-title">Professional Settings</h3>
+                            <h3 class="add-teacher-card-title">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M4.125 3C3.089 3 2.25 3.84 2.25 4.875V18a3 3 0 0 0 3 3h15a3 3 0 0 1-3-3V4.875C17.25 3.839 16.41 3 15.375 3H4.125ZM12 9.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5H12Zm-.75-2.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H12a.75.75 0 0 1-.75-.75ZM6 12.75a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5H6Zm-.75 3.75a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75ZM6 6.75a.75.75 0 0 0-.75.75v3c0 .414.336.75.75.75h3a.75.75 0 0 0 .75-.75v-3A.75.75 0 0 0 9 6.75H6Z" clip-rule="evenodd" />
+                                    <path d="M18.75 6.75h1.875c.621 0 1.125.504 1.125 1.125V18a1.5 1.5 0 0 1-3 0V6.75Z" />
+                                </svg>
+                                <span>Professional Settings</span>
+                            </h3>
                             <div class="add-teacher-two-col">
                                 <label class="add-student-label">
-                                    <span>Teacher Color Tag</span>
-                                    <select>
-                                        <option selected>Purple</option>
-                                        <option>Blue</option>
-                                        <option>Green</option>
+                                    <span>Position/Role</span>
+                                    <select id="addTeacherRole" name="teacherRole">
+                                        <option selected>Teacher</option>
+                                        <option>Teacher (A1•A2)</option>
+                                        <option>Teacher (B1•B2)</option>
+                                        <option>Coordinator</option>
+                                        <option>Director</option>
                                     </select>
                                 </label>
                                 <label class="add-student-label">
                                     <span>Time Zone</span>
-                                    <select>
-                                        <option selected>(GMT-05:00) Eastern Time</option>
+                                    <select id="addTeacherTimezone" name="teacherTimezone">
+                                        <option selected>(UTC-03:00) Brasília</option>
+                                        <option>(GMT-05:00) Eastern Time</option>
                                         <option>(GMT+00:00) UTC</option>
                                     </select>
                                 </label>
@@ -130,11 +148,11 @@
                             <div class="add-teacher-two-col">
                                 <label class="add-student-label">
                                     <span>Hourly Rate (Optional)</span>
-                                    <input type="number" min="0" step="0.01" placeholder="e.g. 50.00">
+                                    <input type="number" id="addTeacherHourlyRate" name="teacherHourlyRate" min="0" step="0.01" placeholder="e.g. 50.00">
                                 </label>
                                 <label class="add-student-label">
                                     <span>Status</span>
-                                    <select>
+                                    <select id="addTeacherStatus" name="teacherStatus">
                                         <option selected>Active</option>
                                         <option>Inactive</option>
                                     </select>
@@ -145,7 +163,13 @@
 
                     <div class="add-teacher-redesign-side-col">
                         <section class="add-teacher-card add-teacher-card--teaching-type">
-                            <h3 class="add-teacher-card-title">Teaching Type</h3>
+                            <h3 class="add-teacher-card-title">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M4.125 3C3.089 3 2.25 3.84 2.25 4.875V18a3 3 0 0 0 3 3h15a3 3 0 0 1-3-3V4.875C17.25 3.839 16.41 3 15.375 3H4.125ZM12 9.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5H12Zm-.75-2.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H12a.75.75 0 0 1-.75-.75ZM6 12.75a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5H6Zm-.75 3.75a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75ZM6 6.75a.75.75 0 0 0-.75.75v3c0 .414.336.75.75.75h3a.75.75 0 0 0 .75-.75v-3A.75.75 0 0 0 9 6.75H6Z" clip-rule="evenodd" />
+                                    <path d="M18.75 6.75h1.875c.621 0 1.125.504 1.125 1.125V18a1.5 1.5 0 0 1-3 0V6.75Z" />
+                                </svg>
+                                <span>Teaching Type</span>
+                            </h3>
                             <input type="hidden" id="addTeacherTeachingType" name="teacherTeachingType" value="both">
                             <div class="add-teacher-segmented" role="group" aria-label="Teaching type">
                                 <button type="button" class="add-teacher-segmented-btn" data-teaching-type="private" aria-pressed="false">
