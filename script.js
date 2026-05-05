@@ -830,6 +830,8 @@ function normalizeSchoolBillingModel(modelRaw) {
 function updateAddSchoolBillingExplainer() {
     const input = document.getElementById('addSchoolBillingModel');
     const optionsWrap = document.getElementById('addSchoolBillingOptions');
+    const billingLayout = document.getElementById('addSchoolBillingLayout');
+    const settingsPanel = document.getElementById('addSchoolBillingSettings');
     if (!input || !optionsWrap) return;
     const value = normalizeSchoolBillingModel(input.value);
     if (input.value !== value) {
@@ -841,6 +843,13 @@ function updateAddSchoolBillingExplainer() {
         option.classList.toggle('is-selected', isSelected);
         option.setAttribute('aria-checked', isSelected ? 'true' : 'false');
     });
+    const hasActiveModel = !!value;
+    if (billingLayout) {
+        billingLayout.classList.toggle('settings-visible', hasActiveModel);
+    }
+    if (settingsPanel) {
+        settingsPanel.setAttribute('aria-hidden', hasActiveModel ? 'false' : 'true');
+    }
     updateAddSchoolBillingFieldsVisibility(value);
 }
 
@@ -852,13 +861,11 @@ function updateAddSchoolBillingFieldsVisibility(modelRaw) {
         const isActive = !!model && blockModel === model;
         block.classList.toggle('is-hidden', !isActive);
         block.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-        block.querySelectorAll('input').forEach((input) => {
-            const shouldRequire = isActive;
-            input.disabled = !isActive;
-            input.required = shouldRequire;
-            if (!isActive) {
-                input.value = '';
-            }
+        block.querySelectorAll('input, select').forEach((fieldEl) => {
+            if (!(fieldEl instanceof HTMLInputElement || fieldEl instanceof HTMLSelectElement)) return;
+            const isRequiredField = fieldEl instanceof HTMLInputElement && fieldEl.dataset.billingRequired === 'true';
+            fieldEl.disabled = !isActive;
+            fieldEl.required = isActive && isRequiredField;
         });
     });
 }
@@ -2357,6 +2364,7 @@ let calendarStudentPopoverOpen = false;
 let calendarStudentNamesInCellsVisible = false;
 let calendarLinkPopoverOpen = false;
 let calendarNameVisibleSchoolKeys = new Set();
+let calendarSchoolFilterDefaulted = false;
 let calendarStudentPopoverHideTimer = null;
 let calendarPromptPopoverOpen = false;
 let calendarPromptSelectedDays = new Set();
@@ -2376,13 +2384,36 @@ function getStudentSchoolKey(name) {
 }
 
 function isStudentNameVisibleBySchoolFilter(name) {
+    ensureCalendarSchoolFilterSelection();
     if (!calendarStudentNamesInCellsVisible) return false;
     if (calendarNameVisibleSchoolKeys.size === 0) return false;
     return calendarNameVisibleSchoolKeys.has(getStudentSchoolKey(name));
 }
 
+function syncCalendarStudentNamesButtonState() {
+    const btn = document.getElementById('calendarToolbarStudentsBtn');
+    if (!btn) return;
+    btn.classList.toggle('is-active', calendarStudentNamesInCellsVisible);
+    btn.setAttribute('aria-pressed', calendarStudentNamesInCellsVisible ? 'true' : 'false');
+}
+
 function ensureCalendarSchoolFilterSelection() {
-    // Keep current manual selection only; default remains all options OFF.
+    if (calendarSchoolFilterDefaulted) {
+        syncCalendarStudentNamesButtonState();
+        return;
+    }
+    const schoolKeys = getAvailableSchoolNames()
+        .map((schoolName) => schoolThemeKey(schoolName))
+        .filter(Boolean);
+    if (schoolKeys.length === 0) {
+        calendarStudentNamesInCellsVisible = false;
+        syncCalendarStudentNamesButtonState();
+        return;
+    }
+    calendarNameVisibleSchoolKeys = new Set(schoolKeys);
+    calendarStudentNamesInCellsVisible = true;
+    calendarSchoolFilterDefaulted = true;
+    syncCalendarStudentNamesButtonState();
 }
 
 function getStudentNamesForTeacherSlot(day, hour, state) {
@@ -2446,6 +2477,7 @@ function isSchoolManagedTeacherSlotLocked(day, hour) {
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
     if (!slotEl) return;
+    ensureCalendarSchoolFilterSelection();
     const assignedUnavailableName = getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state);
     if (!calendarStudentNamesInCellsVisible && !assignedUnavailableName) {
         slotEl.textContent = '';
@@ -2473,17 +2505,12 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
             wrap.appendChild(chip);
         });
         slotEl.appendChild(wrap);
-        const chips = wrap.querySelectorAll('.time-slot-student-chip');
-        chips.forEach((chip) => {
-            const fullName = String(chip.title || '').trim();
-            if (!fullName) return;
-            if (isElementTextHorizontallyOverflowing(chip)) {
-                chip.textContent = formatStudentDisplayNameForCalendarChip(fullName);
-            }
-        });
     }
     slotEl.title = label;
     slotEl.classList.toggle('time-slot--with-student-names', names.length > 0);
+    if (names.length > 0) {
+        queueCalendarStudentChipFitCheck(slotEl);
+    }
 }
 
 /** Expand a collapsed Class Report school group (keeps `classReportCollapsedBySchool` in sync). */
@@ -6775,6 +6802,13 @@ function isElementTextHorizontallyOverflowing(el) {
     return Math.ceil(el.scrollWidth) > Math.ceil(el.clientWidth) + 1;
 }
 
+function isCalendarChipOutsideSlotBounds(chip, slotEl) {
+    if (!chip || !slotEl) return false;
+    const chipRect = chip.getBoundingClientRect();
+    const slotRect = slotEl.getBoundingClientRect();
+    return chipRect.left < slotRect.left - 1 || chipRect.right > slotRect.right + 1;
+}
+
 /** Short label for calendar chips when full name does not fit. */
 function formatStudentDisplayNameForCalendarChip(fullName) {
     const cleaned = normalizeStudentDisplayName(fullName);
@@ -6786,6 +6820,24 @@ function formatStudentDisplayNameForCalendarChip(fullName) {
     if (!initial) return cleaned;
     const first = parts.slice(0, -1).join(' ');
     return `${first} ${initial}.`;
+}
+
+function abbreviateOverflowingCalendarStudentChips(slotEl) {
+    if (!slotEl) return;
+    const chips = slotEl.querySelectorAll('.time-slot-student-chip');
+    chips.forEach((chip) => {
+        const fullName = String(chip.title || '').trim();
+        if (!fullName) return;
+        chip.textContent = normalizeStudentDisplayName(fullName);
+        if (isElementTextHorizontallyOverflowing(chip) || isCalendarChipOutsideSlotBounds(chip, slotEl)) {
+            chip.textContent = formatStudentDisplayNameForCalendarChip(fullName);
+        }
+    });
+}
+
+function queueCalendarStudentChipFitCheck(slotEl) {
+    abbreviateOverflowingCalendarStudentChips(slotEl);
+    requestAnimationFrame(() => abbreviateOverflowingCalendarStudentChips(slotEl));
 }
 
 function getStudentPhoneInfo(studentName) {
@@ -9604,6 +9656,19 @@ function setupAddStudentModal() {
         modal.addEventListener('click', (e) => {
             const target = e.target;
             if (!(target instanceof Element)) return;
+            const billingOption = target.closest('.add-school-billing-option');
+            if (billingOption) {
+                const billingOptsWrap = document.getElementById('addSchoolBillingOptions');
+                if (billingOptsWrap?.contains(billingOption)) {
+                    e.stopPropagation();
+                    const value = String(billingOption.getAttribute('data-billing-model') || '').trim();
+                    const modelInput = document.getElementById('addSchoolBillingModel');
+                    if (modelInput) modelInput.value = value;
+                    updateAddSchoolBillingExplainer();
+                    billingOption.focus();
+                    return;
+                }
+            }
             const teachBtn = target.closest('.add-teacher-segmented-btn');
             if (teachBtn) {
                 const wrap = teachBtn.closest('.add-teacher-segmented');
@@ -9623,6 +9688,21 @@ function setupAddStudentModal() {
                 const fileInput = document.getElementById('addTeacherPhotoInput');
                 fileInput?.click();
             }
+        });
+        modal.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            const kdTarget = e.target;
+            if (!(kdTarget instanceof Element)) return;
+            const billingOption = kdTarget.closest('.add-school-billing-option');
+            if (!billingOption) return;
+            const billingOptsWrap = document.getElementById('addSchoolBillingOptions');
+            if (!billingOptsWrap?.contains(billingOption)) return;
+            e.preventDefault();
+            const value = String(billingOption.getAttribute('data-billing-model') || '').trim();
+            const modelInput = document.getElementById('addSchoolBillingModel');
+            if (modelInput) modelInput.value = value;
+            updateAddSchoolBillingExplainer();
+            billingOption.focus();
         });
         modal.addEventListener('change', (e) => {
             const target = e.target;
@@ -9648,8 +9728,6 @@ function setupAddStudentModal() {
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
-    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
-    const addSchoolBillingOptions = document.getElementById('addSchoolBillingOptions');
     const addSchoolExternalOffsite = document.getElementById('addSchoolExternalOffsite');
     const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
     const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
@@ -9683,23 +9761,6 @@ function setupAddStudentModal() {
             return;
         }
         window.open(parsed.url, '_blank', 'noopener,noreferrer');
-    });
-    addSchoolBillingOptions?.querySelectorAll('.add-school-billing-option').forEach((option) => {
-        option.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const value = String(option.getAttribute('data-billing-model') || '').trim();
-            if (addSchoolBillingModel) {
-                addSchoolBillingModel.value = value;
-            }
-            updateAddSchoolBillingExplainer();
-            option.focus();
-        });
-        option.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                option.click();
-            }
-        });
     });
     addSchoolPrimaryColorCheckbox?.addEventListener('change', () => {
         addSchoolPrimaryColorCheckbox.checked = true;

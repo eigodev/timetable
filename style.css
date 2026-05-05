@@ -3044,7 +3044,6 @@ input[type="checkbox"] {
     font-size: 0.68rem;
     color: #667085;
     line-height: 1.35;
-    padding: 0 0 0 25px
 }
 
 .add-school-billing-option:hover,
@@ -3127,6 +3126,389 @@ input[type="checkbox"] {
 
 .add-school-form-section.is-hidden {
     display: none;
+}
+
+/* Add School redesign to match Add/Edit Student visual style */
+.add-modal.add-modal--school .add-modal-dialog {
+    top: 3%;
+    left: 21%;
+    border: 1px solid #e2e8f0;
+    overflow: auto;
+}
+
+.add-modal.add-modal--school #addSchoolFields {
+    gap: 14px;
+}
+
+.add-modal.add-modal--school .add-school-heading {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-height: 44px;
+    padding-left: 56px;
+    margin-bottom: 2px;
+}
+
+.add-modal.add-modal--school .add-school-heading::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid #dbe6f5;
+    background: #f8fbff;
+}
+
+.add-modal.add-modal--school .add-school-heading::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    width: 24px;
+    height: 24px;
+    background: #36517a;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z'/%3E%3Cpath fill-rule='evenodd' d='M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Zm3-.75a.75.75 0 0 1 .75.75v6.75a.75.75 0 0 1-1.5 0v-6.75a.75.75 0 0 1 .75-.75ZM9 12.75a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Z' clip-rule='evenodd'/%3E%3Cpath d='M12 7.875a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z'/%3E%3Cpath fill-rule='evenodd' d='M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Zm3-.75a.75.75 0 0 1 .75.75v6.75a.75.75 0 0 1-1.5 0v-6.75a.75.75 0 0 1 .75-.75ZM9 12.75a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Z' clip-rule='evenodd'/%3E%3Cpath d='M12 7.875a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.add-modal.add-modal--school .add-school-title {
+    font-family: "Inter", "Segoe UI", sans-serif;
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.add-modal.add-modal--school .add-school-subtitle {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.add-modal.add-modal--school .add-school-primary-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 180px;
+}
+
+.add-modal.add-modal--school .add-school-label {
+    gap: 6px;
+    color: #334155;
+    font-size: 0.82rem;
+}
+
+.add-modal.add-modal--school .add-school-label > span {
+    padding-left: 2px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.add-modal.add-modal--school .add-school-label input,
+.add-modal.add-modal--school .add-school-label select {
+    margin-top: 0;
+    height: 40px;
+    padding: 9px 12px;
+    border: 1px solid #d8e0ee;
+    border-radius: 12px;
+    background: #fff;
+    font-size: 0.86rem;
+    color: #0f172a;
+}
+
+.add-modal.add-modal--school .add-school-label input::placeholder {
+    color: #94a3b8;
+    font-size: 0.82rem;
+}
+
+.add-modal.add-modal--school .add-school-label input:focus,
+.add-modal.add-modal--school .add-school-label select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.add-modal.add-modal--school .add-school-theme-title {
+    margin: 0;
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.add-modal.add-modal--school .add-school-theme-column {
+    gap: 10px;
+}
+
+.add-modal.add-modal--school .add-school-color-code {
+    height: 40px;
+    border: none;
+    border-radius: 10px;
+    background: #f5f6f8;
+}
+
+.add-modal.add-modal--school .add-school-billing-guideline {
+    padding-left: 2px;
+    font-size: 0.76rem;
+    color: #64748b;
+}
+
+.add-modal.add-modal--school .add-school-billing-layout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.add-modal.add-modal--school .add-school-billing-layout.settings-visible {
+    display: grid;
+    grid-template-columns: minmax(50%, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.add-modal.add-modal--school .add-school-billing-options {
+    flex: 1 1 auto;
+    margin-top: 8px;
+    border: 1px solid #d8e0ee;
+    border-radius: 14px;
+    background: #fff;
+    transition: flex-basis 0.3s ease, width 0.3s ease, grid-template-columns 0.3s ease;
+    min-width: 0;
+}
+
+.add-modal.add-modal--school .add-school-billing-layout.settings-visible .add-school-billing-options {
+    flex: unset;
+    width: auto;
+    max-width: none;
+}
+
+.add-modal.add-modal--school .add-school-billing-option {
+    padding: 12px 14px;
+    border-bottom: 1px solid #eef2f7;
+}
+
+.add-modal.add-modal--school .add-school-billing-option-title {
+    font-size: 0.9rem;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.add-modal.add-modal--school .add-school-billing-option-desc {
+    padding-left: 0;
+    font-size: 0.78rem;
+    color: #64748b;
+    padding: 0px 0px 0px 25px;
+}
+
+.add-modal.add-modal--school .add-school-billing-option:hover,
+.add-modal.add-modal--school .add-school-billing-option:focus-visible {
+    background: #f8fbff;
+}
+
+.add-modal.add-modal--school .add-school-billing-option.is-selected {
+    background: #eaf2ff;
+}
+
+.add-modal.add-modal--school .add-school-billing-settings {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: none;
+    margin-top: 0;
+    border: none;
+    border-radius: 14px;
+    background: #fff;
+    padding: 0;
+    overflow: hidden;
+}
+
+.add-modal.add-modal--school .add-school-billing-layout.settings-visible .add-school-billing-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    margin-top: 8px;
+    border: 1px solid #d8e0ee;
+    padding: 12px;
+    box-sizing: border-box;
+    animation: add-school-billing-settings-in 0.28s ease;
+}
+
+@keyframes add-school-billing-settings-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.add-modal.add-modal--school .add-school-billing-settings-title {
+    margin: 0 0 10px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #0f172a;
+}
+
+.add-modal.add-modal--school .add-school-billing-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.add-modal.add-modal--school .add-school-billing-settings-grid--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.add-modal.add-modal--school .add-school-currency-input-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 84px;
+    gap: 8px;
+}
+
+.add-modal.add-modal--school .add-school-currency-input-wrap select {
+    text-align: center;
+}
+
+.add-modal.add-modal--school .add-school-toggle-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #e5eaf2;
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 8px 10px;
+}
+
+.add-modal.add-modal--school .add-school-toggle-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.add-modal.add-modal--school .add-school-toggle-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.add-modal.add-modal--school .add-school-toggle-copy small {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.add-modal.add-modal--school .add-school-toggle-row input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.add-modal.add-modal--school .add-school-switch {
+    width: 40px;
+    height: 22px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    position: relative;
+    transition: background-color 0.2s ease;
+}
+
+.add-modal.add-modal--school .add-school-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.add-modal.add-modal--school .add-school-toggle-row input:checked + .add-school-switch {
+    background: #2563eb;
+}
+
+.add-modal.add-modal--school .add-school-toggle-row input:checked + .add-school-switch::after {
+    transform: translateX(18px);
+}
+
+.add-modal.add-modal--school .add-school-external-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 10px 12px;
+}
+
+.add-modal.add-modal--school .add-school-external-checkbox-row {
+    color: #334155;
+    font-size: 0.82rem;
+}
+
+.add-modal.add-modal--school .add-school-external-panel {
+    margin-top: 8px;
+    border: 1px solid #d8e0ee;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.add-modal.add-modal--school .add-modal-actions {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+}
+
+@media (max-width: 800px) {
+    .add-modal.add-modal--school .add-modal-dialog {
+        left: 50%;
+        top: 50%;
+        width: min(94vw, 640px);
+        height: auto;
+        max-height: 92vh;
+        transform: translate(-50%, -50%);
+        padding: 16px 16px 84px;
+    }
+
+    .add-modal.add-modal--school .add-school-primary-row {
+        grid-template-columns: 1fr;
+    }
+
+    .add-modal.add-modal--school .add-school-billing-layout {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .add-modal.add-modal--school .add-school-billing-layout.settings-visible {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .add-modal.add-modal--school .add-school-billing-layout.settings-visible .add-school-billing-options {
+        flex: 1 1 auto;
+        width: 100%;
+    }
+
+    .add-modal.add-modal--school .add-school-billing-settings {
+        width: 100%;
+    }
+
+    .add-modal.add-modal--school .add-school-billing-settings-grid--two,
+    .add-modal.add-modal--school .add-school-billing-fields--package {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (min-width: 1440px) {
+    .add-modal.add-modal--school .add-modal-dialog {
+        left: 19%;
+        width: 940px;
+        height: 685px;
+        max-height: 685px;
+    }
 }
 
 #addStudentSchoolSelect.is-hidden,
@@ -7063,7 +7445,7 @@ header h1 {
 
 .time-slot-student-chip {
     display: inline-block;
-    max-width: 100%;
+    max-width: calc(100% - 2px);
     min-width: 0;
     margin: 0;
     padding: 0;
