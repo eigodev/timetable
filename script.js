@@ -4884,54 +4884,9 @@ function renderSidebar() {
     paneClassReport.appendChild(classReportHeader);
     paneClassReport.appendChild(classReportInner);
 
-    const paneRepositionClasses = document.createElement('div');
-    paneRepositionClasses.className = 'sidebar-pane sidebar-pane-reposition-classes';
-    const repositionHeader = document.createElement('div');
-    repositionHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
-    const repositionHeaderTitle = document.createElement('span');
-    repositionHeaderTitle.className = 'sidebar-section-header-label';
-    repositionHeaderTitle.textContent = 'Reposition Classes';
-    repositionHeader.appendChild(repositionHeaderTitle);
-    const repositionInner = document.createElement('div');
-    repositionInner.className = 'sidebar-pane-reposition-classes-inner';
-    repositionInner.setAttribute('aria-label', 'Reposition classes');
-    paneRepositionClasses.appendChild(repositionHeader);
-    paneRepositionClasses.appendChild(repositionInner);
-
-    const paneFinances = document.createElement('div');
-    paneFinances.className = 'sidebar-pane sidebar-pane-finances';
-    const financesHeader = document.createElement('div');
-    financesHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
-    const financesHeaderTitle = document.createElement('span');
-    financesHeaderTitle.className = 'sidebar-section-header-label';
-    financesHeaderTitle.textContent = 'Finances';
-    const financesDownloadBtn = document.createElement('button');
-    financesDownloadBtn.type = 'button';
-    financesDownloadBtn.className = 'sidebar-finances-download-btn';
-    financesDownloadBtn.setAttribute('aria-label', 'Download finances as PDF');
-    financesDownloadBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>';
-    const financesHeaderActions = document.createElement('div');
-    financesHeaderActions.className = 'sidebar-section-actions';
-    financesHeaderActions.appendChild(financesDownloadBtn);
-    bindSidebarCursorTooltip(financesDownloadBtn, 'Download finances (PDF)');
-    financesHeader.appendChild(financesHeaderTitle);
-    financesHeader.appendChild(financesHeaderActions);
-    const financesInner = document.createElement('div');
-    financesInner.className = 'sidebar-pane-finances-inner';
-    financesInner.setAttribute('aria-label', 'Finances');
-    const financesPlaceholder = document.createElement('p');
-    financesPlaceholder.className = 'finances-placeholder';
-    financesPlaceholder.textContent = 'No finance items yet.';
-    financesInner.appendChild(financesPlaceholder);
-    paneFinances.appendChild(financesHeader);
-    paneFinances.appendChild(financesInner);
-
     teacherList.appendChild(paneTeachers);
     teacherList.appendChild(paneStudents);
     teacherList.appendChild(paneClassReport);
-    teacherList.appendChild(paneRepositionClasses);
-    teacherList.appendChild(paneFinances);
     const googleMeetSchoolToggle = document.getElementById('googleMeetSchoolToggle');
     if (googleMeetSchoolToggle) {
         refreshGoogleMeetSchoolSelect(googleMeetSelectedSchool);
@@ -4953,17 +4908,8 @@ function renderSidebar() {
         classReportEmpty.textContent = "No student's info to show.";
         classReportInner.appendChild(classReportEmpty);
 
-        const repositionEmpty = document.createElement('p');
-        repositionEmpty.className = 'class-report-empty';
-        repositionEmpty.textContent = 'Log in to manage class positions.';
-        repositionInner.appendChild(repositionEmpty);
         return;
     }
-
-    const repositionPlaceholder = document.createElement('p');
-    repositionPlaceholder.className = 'reposition-classes-placeholder';
-    repositionPlaceholder.textContent = 'No tools here yet.';
-    repositionInner.appendChild(repositionPlaceholder);
 
     const studentGroups = new Map();
     const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
