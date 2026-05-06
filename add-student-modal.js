@@ -17,7 +17,7 @@
         firstName: document.getElementById('firstName'),
         lastName: document.getElementById('lastName'),
         phoneNumber: document.getElementById('phoneNumber'),
-        email: document.getElementById('email'),
+        school: document.getElementById('school'),
         birthDate: document.getElementById('birthDate'),
         age: document.getElementById('age'),
         level: document.getElementById('level'),
@@ -207,18 +207,13 @@
         fields.username.value = buildUsername(fields.firstName.value, fields.lastName.value);
     }
 
-    function isValidEmail(value) {
-        if (!value) return true;
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-    }
-
     function validateForm() {
         clearAllErrors();
 
         const firstName = fields.firstName.value.trim();
         const lastName = fields.lastName.value.trim();
         const phoneDigits = fields.phoneNumber.value.replace(/\D/g, '');
-        const email = fields.email.value.trim();
+        const school = fields.school.value.trim();
         const ageRaw = fields.age.value.trim();
         const numericAge = ageRaw === '60+' ? 61 : Number(ageRaw);
         const level = fields.level.value;
@@ -258,9 +253,9 @@
             }
         }
 
-        if (email && !isValidEmail(email)) {
-            fields.email.setAttribute('aria-invalid', 'true');
-            validationErrors.push('Enter a valid email address.');
+        if (!school) {
+            fields.school.setAttribute('aria-invalid', 'true');
+            validationErrors.push("School's name is required.");
             hasError = true;
         }
 
@@ -288,7 +283,7 @@
                 dialCode: phoneCfg.dialCode
             },
             phoneNumber: fields.phoneNumber.value.trim(),
-            email: fields.email.value.trim(),
+            school: fields.school.value.trim(),
             birthDate: fields.birthDate?.value || '',
             age: fields.age.value,
             level: fields.level.value,
@@ -361,7 +356,7 @@
         closeCountryPicker();
     });
 
-    fields.email.addEventListener('input', () => fields.email.removeAttribute('aria-invalid'));
+    fields.school.addEventListener('input', () => fields.school.removeAttribute('aria-invalid'));
     fields.firstName.addEventListener('input', () => {
         fields.firstName.removeAttribute('aria-invalid');
         syncUsernameFromNameFields();

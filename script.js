@@ -1,3 +1,6 @@
+/* Set test.html as the default page */
+//window.location.href = 'test.html';
+
 // Configuration
 const START_HOUR = 7; // 7 AM
 const END_HOUR = 23; // 11 PM (exclusive, includes 10 PM slot)
@@ -1367,7 +1370,21 @@ function saveAdminAccountToStorage(account) {
     }
 }
 
+function loadAdminAccountFromRoster(roster) {
+    if (!roster || typeof roster !== 'object' || Array.isArray(roster)) return null;
+    const raw = roster.adminAccount;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const username = String(raw.username || '').trim();
+    const passwordHash = String(raw.passwordHash || '').trim();
+    if (!username || !passwordHash) return null;
+    return { username, passwordHash };
+}
+
 async function ensureAdminAccountReady() {
+    if (String(adminAccount?.username || '').trim() && String(adminAccount?.passwordHash || '').trim()) {
+        saveAdminAccountToStorage(adminAccount);
+        return;
+    }
     const fromStorage = loadAdminAccountFromStorage();
     if (fromStorage) {
         adminAccount = {
@@ -1431,7 +1448,6 @@ async function tryRestoreSessionFromSavedCredentials() {
     try {
         if (sessionStorage.getItem(LOGIN_SESSION_SUPPRESS_KEY) === '1') return null;
         if (sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) === 'true') {
-            sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
             isAdminLoggedIn = true;
             loggedInStudentFullName = '';
             loggedInTeacherName = '';
@@ -1576,6 +1592,11 @@ function setProfileAvatarDataUrl(profileKey, dataUrl) {
 async function initRoster(preloadedRoster = null) {
     const cloudRoster = preloadedRoster || await loadRosterFromCloud();
     const saved = cloudRoster || loadRosterFromStorage();
+    const savedAdminAccount = loadAdminAccountFromRoster(saved);
+    if (savedAdminAccount) {
+        adminAccount = savedAdminAccount;
+        saveAdminAccountToStorage(adminAccount);
+    }
     if (!preloadedRoster && !cloudRoster && saved) {
         queueSaveRosterToCloud(saved);
     }
@@ -4564,7 +4585,11 @@ function saveRoster() {
         studentCities: studentCityByName,
         studentCountries: studentCountryByName,
         studentGoogleMeetLinks: studentGoogleMeetLinksByName,
-        googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey
+        googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey,
+        adminAccount: {
+            username: String(adminAccount?.username || DEFAULT_ADMIN_USERNAME).trim(),
+            passwordHash: String(adminAccount?.passwordHash || '').trim()
+        }
     };
     try {
         localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(rosterPayload));
@@ -5182,6 +5207,7 @@ function performTeacherSessionLogout() {
     notifyUpcomingClasses();
     try {
         sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
+        sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
     } catch {
         /* ignore */
     }
@@ -5353,13 +5379,13 @@ function renderSidebar() {
         });
     } else {
         loginTeacherBtn.classList.add('sidebar-auth-btn--login');
-        loginTeacherBtn.setAttribute('aria-label', 'Teacher login');
+        loginTeacherBtn.setAttribute('aria-label', 'Admin login');
         loginTeacherBtn.innerHTML = `<span class="sidebar-add-btn-label">Log In</span>${SIDEBAR_LOGIN_TEACHER_SVG}`;
         loginTeacherBtn.addEventListener('click', () => {
-            openTeacherLoginModal();
+            window.location.href = 'test.html';
         });
     }
-    bindSidebarCursorTooltip(loginTeacherBtn, isTeacherLoggedIn ? 'Log out' : 'Log in');
+    bindSidebarCursorTooltip(loginTeacherBtn, isTeacherLoggedIn ? 'Log out' : 'Admin login');
     const teachersHeaderActions = document.createElement('div');
     teachersHeaderActions.className = 'sidebar-section-actions';
     teachersHeaderActions.appendChild(loginTeacherBtn);
@@ -6157,6 +6183,7 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
         if (isAdminLoggedIn) {
             saveLoginCredentials(email, password);
         }
+        saveRoster();
         showAppMessage('Admin credentials updated.');
         return true;
     }
@@ -6888,10 +6915,6 @@ function setupPasswordToggles() {
     const addStudentPwdInput = document.getElementById('addStudentPassword');
     const addStudentPwdGen = document.getElementById('addStudentPasswordGenerate');
     bindPlatePasswordGenerateButton(addStudentPwdGen, addStudentPwdInput);
-}
-
-function openTeacherLoginModal() {
-    window.location.href = 'admin.html';
 }
 
 // Initialize teachers sidebar
@@ -8004,7 +8027,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
         return;
     }
     if (!schoolName) {
-        alert("Please enter the school's name.");
+        alert("Please select the school's name.");
         return;
     }
 
@@ -8016,11 +8039,6 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     const password = String(passwordEl?.value || '').trim();
     const city = String(document.getElementById('addStudentCity')?.value || '').trim();
     const country = String(document.getElementById('addStudentCountry')?.value || '').trim();
-    if (!email) {
-        alert('Student email is required for account login.');
-        emailEl?.focus();
-        return;
-    }
     if (!username) {
         alert('Student username is required for account login.');
         usernameEl?.focus();
@@ -8041,26 +8059,28 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
         passwordEl?.focus();
         return;
     }
-    if (emailEl && typeof emailEl.checkValidity === 'function' && !emailEl.checkValidity()) {
+    if (email && emailEl && typeof emailEl.checkValidity === 'function' && !emailEl.checkValidity()) {
         if (typeof emailEl.reportValidity === 'function') emailEl.reportValidity();
         return;
     }
-    const emailLc = email.toLowerCase();
-    const studentEmailTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
-        return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
-    });
-    if (studentEmailTaken) {
-        alert('This student email is already in use.');
-        emailEl?.focus();
-        return;
-    }
-    const teacherEmailTaken = teachersList.some((name) => {
-        return String(teacherEmailsByName[name] || '').trim().toLowerCase() === emailLc;
-    });
-    if (teacherEmailTaken) {
-        alert('This email is already used by a teacher account.');
-        emailEl?.focus();
-        return;
+    if (email) {
+        const emailLc = email.toLowerCase();
+        const studentEmailTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+            return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+        });
+        if (studentEmailTaken) {
+            alert('This student email is already in use.');
+            emailEl?.focus();
+            return;
+        }
+        const teacherEmailTaken = teachersList.some((name) => {
+            return String(teacherEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+        });
+        if (teacherEmailTaken) {
+            alert('This email is already used by a teacher account.');
+            emailEl?.focus();
+            return;
+        }
     }
     const usernameLc = username.toLowerCase();
     const studentUsernameTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
@@ -8513,8 +8533,10 @@ function updateAddStudentPassportFieldVisibility() {
         }
     }
     const showLocationRow = isStudentGlobalMode;
-    schoolWrap.classList.toggle('is-hidden', !showLocationRow);
-    schoolWrap.setAttribute('aria-hidden', showLocationRow ? 'false' : 'true');
+    if (schoolWrap) {
+        schoolWrap.classList.toggle('is-hidden', !showLocationRow);
+        schoolWrap.setAttribute('aria-hidden', showLocationRow ? 'false' : 'true');
+    }
     if (!showLocationRow) {
         if (schoolReadonlyWrap) {
             schoolReadonlyWrap.classList.add('is-hidden');
@@ -11733,6 +11755,28 @@ function setupAdminControlPanel() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const isAdminPage = document.body?.dataset.page === 'admin';
+    if (isAdminPage) {
+        try {
+            if (sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) !== 'true') {
+                window.location.href = 'test.html';
+                return;
+            }
+        } catch {
+            window.location.href = 'test.html';
+            return;
+        }
+
+        await initTeachers();
+        setupAppMessageModal();
+        setupAdminControlPanel();
+        document.getElementById('adminPageLogoff')?.addEventListener('click', () => {
+            performTeacherSessionLogout();
+            window.location.href = 'test.html';
+        });
+        return;
+    }
+
     await initTeachers();
     setupAppMessageModal();
     setupStudentRepositionModal();

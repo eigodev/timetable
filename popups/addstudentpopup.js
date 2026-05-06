@@ -73,14 +73,6 @@
                     </div>
 
                     <div id="addStudentPlacementRow" class="add-student-placement-row">
-                        <div id="addStudentGroupWrap" class="add-student-group-wrap-cell" aria-hidden="true">
-                            <label class="add-student-label add-student-group-field-label" for="addStudentGroupSelect">
-                                <span>School's Name</span>
-                                <select id="addStudentGroupSelect" name="schoolSelect" class="is-hidden" aria-hidden="true">
-                                    <option value="" disabled selected hidden>Select a school</option>
-                                </select>
-                            </label>
-                        </div>
                         <div id="addStudentMentorRow" class="add-student-row-mentor-theme is-hidden" aria-hidden="true">
                             <div class="add-student-mentor-wrap is-hidden" id="addStudentMentorWrap" aria-hidden="true">
                                 <label class="add-student-label" for="addStudentMentor">
@@ -93,9 +85,11 @@
                 </div>
                 <div id="addStudentAccountWrap" class="add-student-account-wrap is-hidden" aria-hidden="true">
                     <div class="email-and-password">
-                        <label class="add-student-label" for="addStudentEmail">
-                            <span>Email</span>
-                            <input type="email" id="addStudentEmail" name="studentEmail" autocomplete="email" maxlength="120" placeholder="student@example.com">
+                        <label class="add-student-label add-student-group-field-label" for="addStudentGroupSelect">
+                            <span>School's Name</span>
+                            <select id="addStudentGroupSelect" name="schoolSelect" class="is-hidden" aria-hidden="true">
+                                <option value="" disabled selected hidden>Select a school</option>
+                            </select>
                         </label>
                         <label class="add-student-label" for="addStudentUsername">
                             <span>Username</span>

@@ -265,16 +265,102 @@
 		})
 
 		/* Admin Login */
-		const defaultAccount = {
-			username: 'admin_',
-			password: '@Admin'
-		}
+		const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
+		const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
+		const ROSTER_STORAGE_KEY = 'timetable_roster';
+		const DEFAULT_ADMIN_USERNAME = 'admin_';
+		const DEFAULT_ADMIN_PASSWORD = '@Admin';
+		const PASSWORD_HASH_PREFIX = 'sha256$';
 
 		const usernameInput = document.getElementById('email');
 		const passwordInput = document.getElementById('password');
 
+		async function hashPassword(password) {
+			const hasCrypto = window.crypto && window.crypto.subtle && typeof TextEncoder !== 'undefined';
+			if (!hasCrypto) return String(password || '');
+			const encoded = new TextEncoder().encode(String(password || ''));
+			const digestBuffer = await window.crypto.subtle.digest('SHA-256', encoded);
+			const digestBytes = Array.from(new Uint8Array(digestBuffer));
+			const digestHex = digestBytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+			return `${PASSWORD_HASH_PREFIX}${digestHex}`;
+		}
+
+		function normalizeAdminAccount(account) {
+			if (!account || typeof account !== 'object' || Array.isArray(account)) return null;
+			const username = String(account.username || '').trim();
+			const passwordHash = String(account.passwordHash || '').trim();
+			if (!username || !passwordHash) return null;
+			return { username, passwordHash };
+		}
+
+		function loadStoredAdminAccount() {
+			try {
+				return normalizeAdminAccount(JSON.parse(localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY) || 'null'));
+			} catch {
+				return null;
+			}
+		}
+
+		function loadCachedRosterAdminAccount() {
+			try {
+				const roster = JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null');
+				return normalizeAdminAccount(roster?.adminAccount);
+			} catch {
+				return null;
+			}
+		}
+
+		async function loadHostedRosterAdminAccount() {
+			try {
+				const response = await fetch('/api/roster?t=' + Date.now(), {
+					method: 'GET',
+					headers: { 'Content-Type': 'application/json' },
+					cache: 'no-cache'
+				});
+				if (!response.ok) return null;
+				const data = await response.json();
+				const account = normalizeAdminAccount(data?.roster?.adminAccount);
+				if (!account) return null;
+				localStorage.setItem(ADMIN_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
+				if (data?.roster && typeof data.roster === 'object') {
+					localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(data.roster));
+				}
+				return account;
+			} catch {
+				return null;
+			}
+		}
+
+		async function verifyPassword(storedPasswordRaw, passwordRaw) {
+			const storedPassword = String(storedPasswordRaw || '').trim();
+			const typedPassword = String(passwordRaw || '');
+			if (!storedPassword || !typedPassword) return false;
+			if (!storedPassword.startsWith(PASSWORD_HASH_PREFIX)) {
+				return typedPassword === storedPassword;
+			}
+			return await hashPassword(typedPassword) === storedPassword;
+		}
+
+		async function verifyAdminLogin(usernameRaw, passwordRaw) {
+			const username = String(usernameRaw || '').trim();
+			const password = String(passwordRaw || '');
+			if (!username || !password) return false;
+
+			const storedAccount =
+				await loadHostedRosterAdminAccount()
+				|| loadCachedRosterAdminAccount()
+				|| loadStoredAdminAccount();
+
+			if (storedAccount) {
+				if (username.toLowerCase() !== storedAccount.username.toLowerCase()) return false;
+				return await verifyPassword(storedAccount.passwordHash, password);
+			}
+
+			return username === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD;
+		}
+
 		/* Form */
-		loginBtn.addEventListener('click', function(event){
+		loginBtn.addEventListener('click', async function(event){
 			event.preventDefault(); // Prevent the form from submitting
 
 			const username = usernameInput.value.trim();
@@ -292,16 +378,25 @@
 				return;
 			}
 
-			if (
-				username === defaultAccount.username &&
-				password === defaultAccount.password
-			) {
-				alert('Admin Login Successful!');
+			if (await verifyAdminLogin(username, password)) {
+				sessionStorage.setItem(ADMIN_LOGIN_SESSION_KEY, 'true');
 				window.location.href = 'admin.html';
 			} else {
 				alert('Invalid username or password.')
 			}
 		})
+
+	// Listen for Enter key on both inputs to trigger login
+	usernameInput.addEventListener('keydown', function(event) {
+		if (event.key === 'Enter') {
+			loginBtn.click();
+		}
+	});
+	passwordInput.addEventListener('keydown', function(event) {
+		if (event.key === 'Enter') {
+			loginBtn.click();
+		}
+	});
 	</script>
 </body>
 </html>
