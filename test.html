@@ -9,32 +9,50 @@
 	<div id="loginModal" class="login-modal" aria-hidden="true">
 		<div class="login-popup">
 			<div class="header">
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
-					<path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd" />
-				</svg>
-				<h1><!-- Greeting -->, <!-- very short welcome text -->.</h1>
-				<p>Let's get you logged in. User your info to continue to your account.</p>
+				<div class="header-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+						<path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd" />
+					</svg>
+				</div>
+				<h1></h1>
+				<h5></h5>
 			</div>
 			<div class="fields">
 				<div class="field-email">
-					<label for="email" class="email">Email or Username</label>
-					<input class="input-email" type="text" value="login" required >
+					<label for="email" class="label">Email or Username</label>
+					<input id="email" name="email" class="input-email" type="text" placeholder="Enter your email or username." autocomplete="username"  spellcheck="false" autocapitalize="none" required>
 				</div>
 				<div class="field-password">
-					<label for="password" class="password">Password</label>
-					<input class="input-password" type="password" value="password" required >
+					<label for="password" class="label">Password</label>
+					<input id="password" name="password" class="input-password" type="password" placeholder="Enter your password." autocomplete="current-password" inputmode="password" spellcheck="false" autocapitalize="none" required>
 				</div>
 			</div>
+			<button class="login-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+					<path fill-rule="evenodd" d="M16.5 3.75a1.5 1.5 0 0 1 1.5 1.5v13.5a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5V15a.75.75 0 0 0-1.5 0v3.75a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V5.25a3 3 0 0 0-3-3h-6a3 3 0 0 0-3 3V9A.75.75 0 1 0 9 9V5.25a1.5 1.5 0 0 1 1.5-1.5h6Zm-5.03 4.72a.75.75 0 0 0 0 1.06l1.72 1.72H2.25a.75.75 0 0 0 0 1.5h10.94l-1.72 1.72a.75.75 0 1 0 1.06 1.06l3-3a.75.75 0 0 0 0-1.06l-3-3a.75.75 0 0 0-1.06 0Z" clip-rule="evenodd" />
+				</svg>				   
+				<span>Login</span>
+			</button>
+			<p class="forgot-password">Forgot password?</p>
 		</div>
 	</div>
 
 	<!-- CSS | Cascade Style Sheet -->
 	<style>
+
+		/* Google Fonts */
+		@import url('https://fonts.googleapis.com/css2?family=Dongle&display=swap');
+		@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&display=swap');
+		@import url('https://fonts.googleapis.com/css2?family=Gluten:wght@100..900&display=swap');
+		@import url('https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap');
+		@import url('https://fonts.googleapis.com/css2?family=Titan+One&display=swap');
+
+		/* Global Settings */
 		* {
 			padding: 0;
 			margin: 0;
 			box-sizing: border-box;
-			font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif
+			font-family: 'Nunito', sans-serif;
 		}
 
 		body {
@@ -45,27 +63,245 @@
 			height: 100vh;
 			width: 100vw;
 
-			background-color: #e8edf2;
+			background: linear-gradient(135deg, #334461 0%, #000000 100%) ;
 		}
 
+		h1, h2, h3, h4, h5, h6, p, span {
+			line-height: 1;
+		}
+
+		/* Inputs */
+		label {
+			padding: 0px 0px 0px 10px;
+		}
+
+		input {
+			height: 50px;
+			width: 100%;
+			padding: 0px 20px;
+
+			border: none;
+			border-radius: 10px;
+			background-color: #e2e6ec;
+		}
+
+		input:focus {
+			outline: none;
+		}
+
+		input::placeholder {
+			color: #a9afb8;
+		}
+
+		/* Main Content */
 		div.login-modal div.login-popup {
+			display: flex;
+			align-items: center;
+			flex-direction: column;
+			gap: 10px;
+
 			height: auto;
 			width: auto;
-			padding: 20px;
+			min-width: 400px;
+			padding: 30px;
 
 			border-radius: 20px;
 			background-color: #ffffff;
 		}
 
+		/* Header */
+		div.login-modal div.login-popup div.header {
+			display: flex;
+			align-items: center;
+			flex-direction: column;
+		}
+
+		div.login-modal div.login-popup div.header div.header-icon {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+
+			height: 50px;
+			width: 50px;
+			margin: 0px 0px 20px 0px;
+	
+			border-radius: 10px;
+			border: 1px solid #334461;
+			background-color: #e2e6ec;
+			cursor: pointer;
+		}
+		
 		div.login-modal div.login-popup div.header svg {
+			height: 30px;
+			width: 30px;
+			fill: #334461;
+		}
+
+		div.login-modal div.login-popup div.header h1 {
+			font-family: 'Gluten', cursive;
+			font-size: 1.5rem;
+			font-weight: 300;
+			color: #334461;
+		}
+
+		div.login-modal div.login-popup div.header h5 {
+			font-family: 'Dongle', sans-serif;
+			font-size: 1.5rem;
+			font-weight: 100;
+			color: #101c30;
+		}
+
+		/* Fields */
+		div.login-modal div.login-popup div.fields {
+			display: flex;
+			flex-direction: column;
+			gap: 15px;
+			width: stretch;
+		}
+		
+		div.login-modal div.login-popup div.fields div.field-email,
+		div.login-modal div.login-popup div.fields div.field-password {
+			display: flex;
+			flex-direction: column;
+			gap: 5px;
+		}
+
+		/* Login Button */
+		div.login-modal div.login-popup button.login-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 10px;
+
+			height: 50px;
+			width: 50%;
+			margin: 20px 0px 0px 0px;
+
+			border: none;
+			border-radius: 10px;
+			background: linear-gradient(135deg, #334461, #071630);
+
+			font-family: 'Gluten', cursive;
+			font-size: 1.25rem;
+			color: #ffffff;
+			cursor: pointer;
+			outline: none;
+		}
+
+		div.login-modal div.login-popup button.login-btn svg {
 			height: 20px;
 			width: 20px;
+			fill: #ffffff;
 		}
 	</style>
 
 	<!-- JS | JavaScript -->
 	<script>
+		/* Greetings */
+		const greetingsA = [
+			"Hi,",
+			"Hi there,",
+			"Hello,",
+			"Hello there,",
+			"Hey,",
+			"Hey there,"
+		];
 
+		const greetingsB = [
+			"How are you?",
+			"How are you doing?",
+			"How's it going?",
+			"How have you been?",
+			"How's everything?",
+			"How are things going?",
+			"How's your day going?",
+			"How's your day been so far?",
+			"What's up?",
+			"What's going on?",
+			"How's it going so far?",
+			"How are things?",
+			"How are you today?",
+			"I hope you're doing well.",
+			"Hope you're having a great day."
+		]
+
+		/* Welcome text */
+		const welcomeText = [
+			"Let's get you logged in.",
+			"Welcome to HomeTeachers App!",
+			"Use your info to continue to your account.",
+			"Please enter your details to login.",
+			"Enter your credentials to access your account.",
+		];
+
+		/* Get the login container */
+		const greetingContainer = document.querySelector('.header h1')
+		const welcomeContainer = document.querySelector('.header h5')
+
+		/* Generate a random login message */
+		// Math.floor rounds down to the nearest integer
+		// Math.random generates a random number between 0 and 1
+		// * greetings.length or welcomeText.length to get a random index
+		const greetingsMessage = `${greetingsA[Math.floor(Math.random() * greetingsA.length)]} ${greetingsB[Math.floor(Math.random() * greetingsB.length)]}`
+		const welcomeMessage = `${welcomeText[Math.floor(Math.random() * welcomeText.length)]}`
+
+		/* Set the login message to the login container */
+		greetingContainer.textContent = greetingsMessage
+		welcomeContainer.textContent = welcomeMessage
+
+		/* Login Button */
+		const loginBtn = document.querySelector('.login-btn')
+
+		/* MouseDown Event */
+		loginBtn.addEventListener('mousedown', ()=>{
+			loginBtn.style.transform = 'scale(0.75)' // Scale the button down to 75%
+			loginBtn.style.transition = 'transform 0.5s ease' // Transition the button down to 75% in 0.5 seconds
+		})
+
+		/* MouseUp Event */
+		loginBtn.addEventListener('mouseup', ()=>{
+			loginBtn.style.transform = 'scale(1)' // Scale the button back to 100%
+			loginBtn.style.transition = 'transform 0.5s ease' // Transition the button back to 100% in 0.2 seconds
+		})
+
+		/* Admin Login */
+		const defaultAccount = {
+			username: 'admin_',
+			password: '@Admin'
+		}
+
+		const usernameInput = document.getElementById('email');
+		const passwordInput = document.getElementById('password');
+
+		/* Form */
+		loginBtn.addEventListener('click', function(event){
+			event.preventDefault(); // Prevent the form from submitting
+
+			const username = usernameInput.value.trim();
+			const password = passwordInput.value;
+
+			if (!username) {
+				alert('Please enter your username.');
+				usernameInput.focus();
+				return;
+			}
+
+			if (!password) {
+				alert('Please enter your password.');
+				passwordInput.focus();
+				return;
+			}
+
+			if (
+				username === defaultAccount.username &&
+				password === defaultAccount.password
+			) {
+				alert('Admin Login Successful!');
+				window.location.href = 'admin.html';
+			} else {
+				alert('Invalid username or password.')
+			}
+		})
 	</script>
 </body>
 </html>

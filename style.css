@@ -1320,16 +1320,6 @@ body {
     padding: 20px;
 }
 
-.teacher-login-modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 2004;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
 .app-message-modal {
     display: none;
     position: fixed;
@@ -1380,29 +1370,11 @@ body {
     }
 }
 
-/* Popups */
-/* Login Popup */
-div.login-modal div.login-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 2000;
-
-    display: flex;
-    
-    height: 50%;
-    width: 50%;
-
-    background-color: #fff;
-}
-
 .add-modal.is-open .add-modal-backdrop,
 .edit-student-modal.is-open .edit-student-modal-backdrop,
 .school-settings-modal.is-open .school-settings-modal-backdrop,
 .delete-school-modal.is-open .delete-school-modal-backdrop,
 .class-topic-modal.is-open .class-topic-modal-backdrop,
-.teacher-login-modal.is-open .teacher-login-modal-backdrop,
 .app-message-modal.is-open .app-message-modal-backdrop,
 .student-reposition-modal.is-open .app-message-modal-backdrop {
     animation: modal-backdrop-in 0.28s ease-out both;
@@ -1413,7 +1385,6 @@ div.login-modal div.login-popup {
 .school-settings-modal.is-open .school-settings-dialog,
 .delete-school-modal.is-open .delete-school-dialog,
 .class-topic-modal.is-open .class-topic-dialog,
-.teacher-login-modal.is-open .teacher-login-dialog,
 .app-message-modal.is-open .app-message-dialog,
 .student-reposition-modal.is-open .app-message-dialog {
     animation: modal-popup-in 220ms ease both;
@@ -1425,7 +1396,6 @@ div.login-modal div.login-popup {
 .school-settings-modal.is-closing .school-settings-modal-backdrop,
 .delete-school-modal.is-closing .delete-school-modal-backdrop,
 .class-topic-modal.is-closing .class-topic-modal-backdrop,
-.teacher-login-modal.is-closing .teacher-login-modal-backdrop,
 .app-message-modal.is-closing .app-message-modal-backdrop,
 .student-reposition-modal.is-closing .app-message-modal-backdrop {
     animation: modal-backdrop-out 0.22s ease-in both;
@@ -1437,7 +1407,6 @@ div.login-modal div.login-popup {
 .school-settings-modal.is-closing .school-settings-dialog,
 .delete-school-modal.is-closing .delete-school-dialog,
 .class-topic-modal.is-closing .class-topic-dialog,
-.teacher-login-modal.is-closing .teacher-login-dialog,
 .app-message-modal.is-closing .app-message-dialog,
 .student-reposition-modal.is-closing .app-message-dialog {
     animation: modal-popup-out 220ms ease both;
@@ -1453,7 +1422,6 @@ div.login-modal div.login-popup {
 .delete-school-modal.is-closing,
 .school-settings-modal.is-closing,
 .class-topic-modal.is-closing,
-.teacher-login-modal.is-closing,
 .app-message-modal.is-closing,
 .student-reposition-modal.is-closing,
 .edit-student-modal.is-open {
@@ -1470,7 +1438,6 @@ div.login-modal div.login-popup {
     display: flex;
 }
 
-.teacher-login-modal.is-open,
 .app-message-modal.is-open,
 .student-reposition-modal.is-open {
     display: flex;
@@ -1788,7 +1755,6 @@ div.login-modal div.login-popup {
     -webkit-backdrop-filter: blur(4px);
 }
 
-.teacher-login-modal-backdrop,
 .app-message-modal-backdrop {
     position: absolute;
     inset: 0;
@@ -1797,7 +1763,6 @@ div.login-modal div.login-popup {
     -webkit-backdrop-filter: blur(4px);
 }
 
-.teacher-login-dialog,
 .app-message-dialog {
     position: relative;
     z-index: 2110;
@@ -1817,17 +1782,10 @@ input.student-reposition-modal-day {
     text-align: center;
 }
 
-.teacher-login-title,
 .app-message-title {
     margin: 0;
     font-size: 1.2rem;
     color: #334461;
-}
-
-.teacher-login-form {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
 }
 
 .teacher-login-label {
@@ -1952,75 +1910,6 @@ input.student-reposition-modal-day {
     box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.25);
 }
 
-.teacher-login-save-row {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 0px 0px 0px 20px;
-    font-size: 0.75rem;
-    color: #4a4a4a;
-    user-select: none;
-    cursor: pointer;
-}
-
-#teacherLoginSaveCredentials {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 1rem;
-    height: 1rem;
-    box-sizing: border-box;
-    position: relative;
-    display: inline-block;
-    vertical-align: middle;
-    background: #fff;
-    border: 1px solid #666666;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.teacher-login-save-row input {
-    margin: 0;
-}
-
-#teacherLoginSaveCredentials::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: 5px;
-    transform: translate(-50%, -50%) scale(0);
-    transform-origin: center;
-    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
-    background: #334461;
-}
-
-#teacherLoginSaveCredentials:checked {
-    border-color: #334461;
-}
-
-#teacherLoginSaveCredentials:checked::after {
-    transform: translate(-50%, -50%) scale(1);
-}
-
-#teacherLoginSaveCredentials:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.22);
-}
-
-.teacher-login-error {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    min-height: 1em;
-    font-size: 0.75rem;
-    color: #b71c1c;
-    font-weight: 600;
-}
-
-.teacher-login-actions,
 .app-message-actions {
     display: flex;
     justify-content: flex-end;
@@ -2028,8 +1917,6 @@ input.student-reposition-modal-day {
     margin-top: 6px;
 }
 
-.btn-teacher-login-cancel,
-.btn-teacher-login-submit,
 .btn-app-message-ok {
     padding: 10px 14px;
     border-radius: 10px;
@@ -2040,22 +1927,11 @@ input.student-reposition-modal-day {
     font-family: inherit;
 }
 
-.btn-teacher-login-cancel {
-    background: #eceff1;
-    color: #37474f;
-}
-
-.btn-teacher-login-cancel:hover {
-    background: #dfe3e6;
-}
-
-.btn-teacher-login-submit,
 .btn-app-message-ok {
     background: linear-gradient(135deg, #334461, #071630);
     color: #fff;
 }
 
-.btn-teacher-login-submit:hover,
 .btn-app-message-ok:hover {
     filter: brightness(1.06);
 }
@@ -6612,12 +6488,409 @@ tr td.add-teacher-availability-table-day {
 }
 
 .student-class-report-panel {
-    width: 100%;
-    min-width: 0;
+    position: relative;
+
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    overflow: visible;
+
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+
+    background: #e8edf2;
+    border-radius: 20px;
+    overflow: auto;
+    box-sizing: border-box;
+}
+
+.student-class-report-panel--with-file {
+    gap: 0;
+}
+
+.student-class-report-panel--with-file .student-class-report-upload-area {
+    display: none;
+}
+
+.student-class-report-upload-area {
+    width: min(520px, 100%);
+    min-height: 260px;
+    margin: auto;
+    border: 2px dashed #c9d3e8;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    color: #334461;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 34px;
+    box-sizing: border-box;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.student-class-report-upload-area:hover,
+.student-class-report-upload-area:focus-within {
+    border-color: #334461;
+    background: #f4f7ff;
+    box-shadow: 0 14px 34px rgba(51, 68, 97, 0.12);
+    transform: translateY(-1px);
+}
+
+.student-class-report-upload-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    background: #eef2ff;
+    color: #334461;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.student-class-report-upload-icon svg {
+    width: 30px;
+    height: 30px;
+}
+
+.student-class-report-upload-title {
+    font-size: 1.22rem;
+    font-weight: 700;
+    color: #1f2a44;
+}
+
+.student-class-report-upload-hint {
+    max-width: 320px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: #667085;
+}
+
+.student-class-report-upload-action {
+    margin-top: 8px;
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: #334461;
+    color: #ffffff;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.student-class-report-upload-selected {
+    min-height: 1.2em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    color: #788298;
+}
+
+.student-class-report-floating-actions {
+    position: absolute;
+    bottom: 14px;
+    right: 14px;
+    z-index: 2;
+    width: 42px;
+    height: 42px;
+}
+
+.student-class-report-change-file-btn,
+.student-class-report-add-question-btn {
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 999px;
+    background: #334461;
+    color: #ffffff;
+    box-shadow: 0 8px 22px rgba(51, 68, 97, 0.16);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.student-class-report-add-question-btn {
+    position: absolute;
+    right: 52px;
+    top: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(8px);
+}
+
+.student-class-report-floating-actions:hover .student-class-report-add-question-btn,
+.student-class-report-floating-actions:focus-within .student-class-report-add-question-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+.student-class-report-change-file-btn svg,
+.student-class-report-add-question-btn svg {
+    width: 21px;
+    height: 21px;
+}
+
+.student-class-report-change-file-btn:hover,
+.student-class-report-change-file-btn:focus-visible,
+.student-class-report-add-question-btn:hover,
+.student-class-report-add-question-btn:focus-visible {
+    background: #2a3852;
+    box-shadow: 0 10px 26px rgba(51, 68, 97, 0.22);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.student-class-report-change-file-btn[hidden] {
+    display: none !important;
+}
+
+.student-class-report-floating-actions:has(.student-class-report-change-file-btn[hidden]) {
+    display: none !important;
+}
+
+.student-class-report-file-preview {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    box-sizing: border-box;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.student-class-report-file-preview[hidden] {
+    display: none !important;
+}
+
+.student-class-report-file-preview::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+.student-class-report-file-card {
+    flex: 0 0 auto;
+    border: 1px solid #e3e6ef;
+    border-radius: 18px;
+    background: #f8fafc;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.student-class-report-file-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #e3e6ef;
+    background: #ffffff;
+    box-sizing: border-box;
+}
+
+.student-class-report-file-card-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #334461;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.student-class-report-file-card-actions {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.student-class-report-file-delete-btn,
+.student-class-report-file-add-btn {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 999px;
+    background: #334461;
+    color: #ffffff;
+    box-shadow: 2.5px 2.5px 5px rgba(30, 40, 55, 0.28);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.student-class-report-file-delete-btn svg,
+.student-class-report-file-add-btn svg {
+    width: 17px;
+    height: 17px;
+}
+
+.student-class-report-file-delete-btn:hover,
+.student-class-report-file-delete-btn:focus-visible,
+.student-class-report-file-add-btn:hover,
+.student-class-report-file-add-btn:focus-visible {
+    background: #2a3852;
+    box-shadow: 2.5px 2.5px 5px rgba(30, 40, 55, 0.3);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.student-class-report-file-preview-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    object-fit: contain;
+    background: #ffffff;
+}
+
+.student-class-report-file-preview-image--related {
+    max-height: 480px;
+}
+
+.student-class-report-file-preview-pdf {
+    display: block;
+    width: 100%;
+    height: 680px;
+    min-height: 680px;
+    border: 0;
+    background: #ffffff;
+}
+
+.student-class-report-file-preview-pdf--related {
+    height: 520px;
+    min-height: 520px;
+}
+
+.student-class-report-file-preview-audio {
+    display: block;
+    width: calc(100% - 28px);
+    margin: 18px 14px;
+}
+
+.student-class-report-card-related-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px 16px;
+    border-top: 1px solid #e3e6ef;
+    background: #ffffff;
+}
+
+.student-class-report-card-related-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.student-class-report-card-related-name {
+    color: #334461;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.student-class-report-card-related-item .student-class-report-file-preview-audio {
+    width: 100%;
+    margin: 0;
+}
+
+.student-class-report-card-question-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 20px 100px;
+    border-top: 1px solid #e3e6ef;
+    background: #ffffff;
+}
+
+.student-class-report-question-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.student-class-report-question-row--student {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.student-class-report-question-speaker {
+    color: #334461;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.student-class-report-question-input {
+    width: 100%;
+    border: 1px solid #e3e6ef;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #1f2a44;
+    font-family: inherit;
+    font-size: 0.88rem;
+    line-height: 1.3;
+    padding: 9px 13px;
+    box-sizing: border-box;
+}
+
+.student-class-report-question-input:focus {
+    outline: none;
+    border-color: #334461;
+    box-shadow: 0 0 0 2px rgba(51, 68, 97, 0.14);
+}
+
+.student-class-report-question-add-line-btn {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 999px;
+    background: #334461;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.student-class-report-question-add-line-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.student-class-report-question-add-line-btn:hover,
+.student-class-report-question-add-line-btn:focus-visible {
+    background: #2a3852;
+    box-shadow: 0 8px 20px rgba(51, 68, 97, 0.18);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.student-class-report-file-preview-empty {
+    margin: 0;
+    padding: 22px;
+    color: #667085;
+    font-size: 0.9rem;
 }
 
 .admin-control-panel {
@@ -6809,15 +7082,6 @@ tr td.add-teacher-availability-table-day {
     z-index: 0;
 }
 
-.student-class-report-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-}
-
 .student-class-report-title {
     margin: 0;
     font-size: 1.5em;
@@ -6838,15 +7102,6 @@ tr td.add-teacher-availability-table-day {
 
 .btn-student-class-report-add:hover {
     background: #32408f;
-}
-
-.student-class-report-table-scroll {
-    overflow-x: hidden;
-    min-width: 0;
-    max-width: 100%;
-    border: 1px solid #e3e6ef;
-    border-radius: 10px;
-    background: #fafafa;
 }
 
 .student-class-report-table {
@@ -7125,13 +7380,6 @@ tr td.add-teacher-availability-table-day {
 .student-class-report-remove-row:hover {
     background: #ffebee;
     color: #c62828;
-}
-
-.student-class-report-hint {
-    margin: 10px 0 0;
-    font-size: 0.88rem;
-    color: #888;
-    font-style: italic;
 }
 
 header {

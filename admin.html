@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Admin Login | TimeTable</title>
+	<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+	<style>
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+			font-family: "Nunito", Arial, sans-serif;
+		}
+
+		body {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 100vh;
+			padding: 20px;
+			background: linear-gradient(135deg, #334461 0%, #000000 100%);
+		}
+
+		.admin-login-card {
+			width: min(100%, 380px);
+			padding: 24px;
+			border-radius: 14px;
+			background: #ffffff;
+			box-shadow: 2.5px 2.5px 5px 0 rgba(30, 40, 55, 0.75);
+		}
+
+		.admin-login-header {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+			margin-bottom: 18px;
+			text-align: center;
+		}
+
+		.admin-login-title {
+			font-size: 1.35rem;
+			color: #334461;
+		}
+
+		.admin-login-subtitle {
+			font-size: 0.92rem;
+			font-weight: 500;
+			color: #546070;
+		}
+
+		.admin-login-form {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		.admin-login-label {
+			display: flex;
+			flex-direction: column;
+			gap: 5px;
+			font-size: 0.85rem;
+			font-weight: 600;
+			color: #444444;
+		}
+
+		.admin-login-label input {
+			width: 100%;
+			padding: 11px 14px;
+			border: 1px solid #c5cae9;
+			border-radius: 10px;
+			font-size: 1rem;
+		}
+
+		.admin-login-label input:focus {
+			outline: none;
+			border-color: #334461;
+			box-shadow: 0 0 0 2px rgba(63, 81, 181, 0.2);
+		}
+
+		.admin-login-save-row {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding-left: 2px;
+			font-size: 0.8rem;
+			color: #4a4a4a;
+			user-select: none;
+			cursor: pointer;
+		}
+
+		.admin-login-error {
+			min-height: 1em;
+			text-align: center;
+			font-size: 0.78rem;
+			font-weight: 700;
+			color: #b71c1c;
+		}
+
+		.admin-login-actions {
+			display: flex;
+			justify-content: flex-end;
+			gap: 10px;
+			margin-top: 4px;
+		}
+
+		.admin-login-button {
+			padding: 10px 16px;
+			border: none;
+			border-radius: 10px;
+			background: linear-gradient(135deg, #334461, #071630);
+			color: #ffffff;
+			font-size: 0.95rem;
+			font-weight: 700;
+			cursor: pointer;
+		}
+
+		.admin-login-button:hover {
+			filter: brightness(1.06);
+		}
+	</style>
+</head>
+<body>
+	<main class="admin-login-card">
+		<header class="admin-login-header">
+			<h1 class="admin-login-title">Admin Login</h1>
+			<p class="admin-login-subtitle">Use your admin credentials to continue.</p>
+		</header>
+
+		<form id="adminLoginForm" class="admin-login-form">
+			<label class="admin-login-label" for="adminLoginUsername">
+				<span>Username</span>
+				<input id="adminLoginUsername" name="username" type="text" placeholder="admin_" autocomplete="username" spellcheck="false" autocapitalize="none" required>
+			</label>
+
+			<label class="admin-login-label" for="adminLoginPassword">
+				<span>Password</span>
+				<input id="adminLoginPassword" name="password" type="password" placeholder="@Admin" autocomplete="current-password" spellcheck="false" autocapitalize="none" required>
+			</label>
+
+			<label class="admin-login-save-row" for="adminLoginSaveCredentials">
+				<input id="adminLoginSaveCredentials" type="checkbox">
+				<span>Remember this login</span>
+			</label>
+
+			<p id="adminLoginError" class="admin-login-error" role="alert" aria-live="polite"></p>
+
+			<div class="admin-login-actions">
+				<button class="admin-login-button" type="submit">Login</button>
+			</div>
+		</form>
+	</main>
+
+	<script>
+		const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
+		const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
+		const DEFAULT_ADMIN_USERNAME = 'admin_';
+		const DEFAULT_ADMIN_PASSWORD = '@Admin';
+
+		const form = document.getElementById('adminLoginForm');
+		const usernameInput = document.getElementById('adminLoginUsername');
+		const passwordInput = document.getElementById('adminLoginPassword');
+		const saveCredentialsInput = document.getElementById('adminLoginSaveCredentials');
+		const errorEl = document.getElementById('adminLoginError');
+
+		function setError(message) {
+			errorEl.textContent = String(message || '').trim();
+		}
+
+		function saveLoginCredentials(username, password) {
+			localStorage.setItem(LOGIN_CREDENTIALS_STORAGE_KEY, JSON.stringify({
+				email: username,
+				password
+			}));
+		}
+
+		function clearSavedLoginCredentials() {
+			localStorage.removeItem(LOGIN_CREDENTIALS_STORAGE_KEY);
+		}
+
+		function loadSavedLoginCredentials() {
+			try {
+				const saved = JSON.parse(localStorage.getItem(LOGIN_CREDENTIALS_STORAGE_KEY) || 'null');
+				if (!saved || typeof saved !== 'object') return null;
+				return saved;
+			} catch {
+				return null;
+			}
+		}
+
+		async function hashPassword(password) {
+			const bytes = new TextEncoder().encode(String(password || ''));
+			const digest = await crypto.subtle.digest('SHA-256', bytes);
+			return 'sha256$' + Array.from(new Uint8Array(digest))
+				.map((byte) => byte.toString(16).padStart(2, '0'))
+				.join('');
+		}
+
+		async function saveDefaultAdminAccount() {
+			localStorage.setItem(ADMIN_ACCOUNT_STORAGE_KEY, JSON.stringify({
+				username: DEFAULT_ADMIN_USERNAME,
+				passwordHash: await hashPassword(DEFAULT_ADMIN_PASSWORD)
+			}));
+		}
+
+		async function ensureDefaultAdminAccount() {
+			const existing = localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY);
+			if (existing) return;
+
+			await saveDefaultAdminAccount();
+		}
+
+		async function verifyAdminLogin(usernameRaw, passwordRaw) {
+			const username = String(usernameRaw || '').trim();
+			const password = String(passwordRaw || '');
+			if (
+				username.toLowerCase() === DEFAULT_ADMIN_USERNAME.toLowerCase()
+				&& password === DEFAULT_ADMIN_PASSWORD
+			) {
+				return true;
+			}
+
+			const stored = JSON.parse(localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY) || 'null');
+			const expectedUsername = String(stored?.username || DEFAULT_ADMIN_USERNAME).trim();
+			const expectedHash = String(stored?.passwordHash || await hashPassword(DEFAULT_ADMIN_PASSWORD));
+
+			if (username.toLowerCase() !== expectedUsername.toLowerCase()) return false;
+			return await hashPassword(password) === expectedHash;
+		}
+
+		document.addEventListener('DOMContentLoaded', async () => {
+			await ensureDefaultAdminAccount();
+			const saved = loadSavedLoginCredentials();
+			if (saved?.email) usernameInput.value = saved.email;
+			if (saved?.password) passwordInput.value = saved.password;
+			saveCredentialsInput.checked = !!saved;
+			(saved?.email ? passwordInput : usernameInput).focus();
+		});
+
+		form.addEventListener('submit', async (event) => {
+			event.preventDefault();
+			setError('');
+
+			const username = usernameInput.value.trim();
+			const password = passwordInput.value;
+
+			if (!username) {
+				setError('Enter your admin username.');
+				usernameInput.focus();
+				return;
+			}
+
+			if (!password) {
+				setError('Enter your admin password.');
+				passwordInput.focus();
+				return;
+			}
+
+			if (!(await verifyAdminLogin(username, password))) {
+				setError('Invalid username or password.');
+				passwordInput.focus();
+				return;
+			}
+
+			if (
+				username.toLowerCase() === DEFAULT_ADMIN_USERNAME.toLowerCase()
+				&& password === DEFAULT_ADMIN_PASSWORD
+			) {
+				await saveDefaultAdminAccount();
+			}
+
+			if (saveCredentialsInput.checked) {
+				saveLoginCredentials(username, password);
+			} else {
+				clearSavedLoginCredentials();
+			}
+
+			sessionStorage.setItem('timetable_admin_login_complete', 'true');
+			window.location.href = 'index.html';
+		});
+	</script>
+</body>
+</html>

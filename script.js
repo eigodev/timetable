@@ -7,12 +7,17 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const STORAGE_KEY = 'timetable_schedules';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
+const CLASS_REPORT_UPLOADS_KEY = 'timetable_student_class_report_uploads';
+const CLASS_REPORT_UPLOADS_DB_NAME = 'timetable_student_class_report_uploads_db';
+const CLASS_REPORT_UPLOADS_STORE_NAME = 'uploads';
+const CLASS_REPORT_UPLOADS_RECORD_KEY = 'all';
 const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
 /** When set in sessionStorage, skip auto-login until the next successful manual login (same tab). */
 const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
+const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
 const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-const DEFAULT_ADMIN_USERNAME = '@Admin';
-const DEFAULT_ADMIN_PASSWORD = 'admin';
+const DEFAULT_ADMIN_USERNAME = 'admin_';
+const DEFAULT_ADMIN_PASSWORD = '@Admin';
 const PROFILE_AVATARS_STORAGE_KEY = 'timetable_profile_avatars';
 const SCHOOL_THEME_COLORS = [
     '#c2185b','#f57c00','#fbc02d','#388e3c','#009688','#7b1fa2','#e91e63','#ef6c00','#afb42b','#26a69a','#5c6bc0','#6d4c41','#d32f2f','#7cb342','#9575cd','#757575','#e57373','#43a047','#42a5f5','#7986cb','#616161','#ef9a9a','#fdd835','#66bb6a','#1e88e5','#5e35b1','#bdbdbd'
@@ -157,6 +162,7 @@ let isAdminLoggedIn = false;
 let loggedInStudentFullName = '';
 let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
+let studentClassReportUploadsByName = {};
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
 let googleMeetSelectedSchool = '';
@@ -368,13 +374,6 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
-            const teacherLoginModal = document.getElementById('teacherLoginModal');
-            if (teacherLoginModal?.classList.contains('is-open')) {
-                e.preventDefault();
-                closeTeacherLoginModal();
-                return;
-            }
-
             const classTopicModal = document.getElementById('classTopicModal');
             if (classTopicModal?.classList.contains('is-open')) {
                 e.preventDefault();
@@ -516,7 +515,6 @@ function setupGlobalPointerDownToDismissOverlays() {
                 { id: 'googleMeetLinksLayer', close: closeGoogleMeetLinksLayer },
                 { id: 'studentRepositionModal', close: closeStudentRepositionModal },
                 { id: 'appMessageModal', close: closeAppMessageModal },
-                { id: 'teacherLoginModal', close: closeTeacherLoginModal },
                 { id: 'classTopicModal', close: closeClassTopicModal },
                 { id: 'deleteSchoolModal', close: closeDeleteSchoolModal },
                 { id: 'schoolSettingsModal', close: closeSchoolSettingsModal },
@@ -1432,6 +1430,14 @@ async function verifyStudentLogin(usernameRaw, passwordRaw) {
 async function tryRestoreSessionFromSavedCredentials() {
     try {
         if (sessionStorage.getItem(LOGIN_SESSION_SUPPRESS_KEY) === '1') return null;
+        if (sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) === 'true') {
+            sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
+            isAdminLoggedIn = true;
+            loggedInStudentFullName = '';
+            loggedInTeacherName = '';
+            isTeacherLoggedIn = true;
+            return DEFAULT_ADMIN_USERNAME;
+        }
     } catch {
         /* sessionStorage may be unavailable in some environments */
     }
@@ -1961,6 +1967,7 @@ function loadStudentClassReportRows() {
     } catch {
         studentClassReportRows = {};
     }
+    loadStudentClassReportUploads();
 }
 
 function saveStudentClassReportRows() {
@@ -1969,6 +1976,170 @@ function saveStudentClassReportRows() {
     } catch (error) {
         console.error('Error saving class report rows:', error);
     }
+}
+
+function normalizePersistedClassReportFile(file) {
+    if (!file || typeof file !== 'object') return null;
+    const dataUrl = String(file.dataUrl || '').trim();
+    if (!dataUrl) return null;
+    return {
+        id: String(file.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+        name: String(file.name || 'Uploaded file'),
+        type: String(file.type || '').toLowerCase(),
+        dataUrl,
+        questions: Array.isArray(file.questions)
+            ? file.questions.map((question, index) => ({
+                id: String(question?.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+                speaker: question?.speaker === 'student' ? 'student' : (index % 2 === 1 ? 'student' : 'teacher'),
+                text: String(question?.text || question?.question || '')
+            }))
+            : [],
+        relatedFiles: Array.isArray(file.relatedFiles)
+            ? file.relatedFiles.map(normalizePersistedClassReportFile).filter(Boolean)
+            : []
+    };
+}
+
+function normalizePersistedClassReportUploads(rawUploads) {
+    const next = {};
+    if (rawUploads && typeof rawUploads === 'object' && !Array.isArray(rawUploads)) {
+        Object.entries(rawUploads).forEach(([studentName, uploads]) => {
+            if (!Array.isArray(uploads)) return;
+            const cleaned = [];
+            uploads.forEach((upload) => {
+                if (upload?.kind === 'question') {
+                    const lastUpload = cleaned[cleaned.length - 1];
+                    if (!lastUpload) return;
+                    if (!Array.isArray(lastUpload.questions)) {
+                        lastUpload.questions = [];
+                    }
+                    lastUpload.questions.push({
+                        id: String(upload.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+                        speaker: 'teacher',
+                        text: String(upload.question || upload.text || '')
+                    });
+                    return;
+                }
+                const normalizedUpload = normalizePersistedClassReportFile(upload);
+                if (normalizedUpload) cleaned.push(normalizedUpload);
+            });
+            if (cleaned.length > 0) {
+                next[String(studentName || '').trim()] = cleaned;
+            }
+        });
+    }
+    return next;
+}
+
+function refreshVisibleStudentClassReportUploadFeed() {
+    const panel = document.getElementById('studentClassReportPanel');
+    if (!panel || panel.hidden) return;
+    const studentName = String(panel.dataset.studentName || currentTeacher || '').trim();
+    if (!studentName) return;
+    renderStudentClassReportUploadFeed(panel, studentName);
+}
+
+function openClassReportUploadsDb() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            reject(new Error('IndexedDB is not available.'));
+            return;
+        }
+        const request = indexedDB.open(CLASS_REPORT_UPLOADS_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(CLASS_REPORT_UPLOADS_STORE_NAME)) {
+                db.createObjectStore(CLASS_REPORT_UPLOADS_STORE_NAME, { keyPath: 'key' });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Could not open uploads database.'));
+    });
+}
+
+function readClassReportUploadsFromLocalStorage() {
+    try {
+        const raw = localStorage.getItem(CLASS_REPORT_UPLOADS_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return normalizePersistedClassReportUploads(parsed);
+    } catch {
+        return {};
+    }
+}
+
+function loadStudentClassReportUploads() {
+    if (!window.indexedDB) {
+        studentClassReportUploadsByName = readClassReportUploadsFromLocalStorage();
+        return Promise.resolve(studentClassReportUploadsByName);
+    }
+    return openClassReportUploadsDb()
+        .then((db) => {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(CLASS_REPORT_UPLOADS_STORE_NAME, 'readonly');
+                const store = tx.objectStore(CLASS_REPORT_UPLOADS_STORE_NAME);
+                const request = store.get(CLASS_REPORT_UPLOADS_RECORD_KEY);
+                request.onsuccess = () => {
+                    const value = request.result?.value;
+                    const fromDb = normalizePersistedClassReportUploads(value);
+                    const hasDbUploads = Object.keys(fromDb).length > 0;
+                    studentClassReportUploadsByName = hasDbUploads
+                        ? fromDb
+                        : readClassReportUploadsFromLocalStorage();
+                    refreshVisibleStudentClassReportUploadFeed();
+                    resolve(studentClassReportUploadsByName);
+                };
+                request.onerror = () => reject(request.error || new Error('Could not read uploads database.'));
+                tx.oncomplete = () => db.close();
+            });
+        })
+        .then((uploads) => {
+            if (Object.keys(uploads || {}).length > 0) {
+                return saveStudentClassReportUploads();
+            }
+            return uploads;
+        })
+        .catch((error) => {
+            console.error('Error loading class report uploads:', error);
+            studentClassReportUploadsByName = readClassReportUploadsFromLocalStorage();
+            refreshVisibleStudentClassReportUploadFeed();
+            return studentClassReportUploadsByName;
+        });
+}
+
+function saveStudentClassReportUploads() {
+    if (!window.indexedDB) {
+        try {
+            localStorage.setItem(CLASS_REPORT_UPLOADS_KEY, JSON.stringify(studentClassReportUploadsByName));
+        } catch (error) {
+            console.error('Error saving class report uploads:', error);
+        }
+        return Promise.resolve();
+    }
+    return openClassReportUploadsDb()
+        .then((db) => {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(CLASS_REPORT_UPLOADS_STORE_NAME, 'readwrite');
+                const store = tx.objectStore(CLASS_REPORT_UPLOADS_STORE_NAME);
+                const request = store.put({
+                    key: CLASS_REPORT_UPLOADS_RECORD_KEY,
+                    value: studentClassReportUploadsByName
+                });
+                request.onerror = () => reject(request.error || new Error('Could not save uploads database.'));
+                tx.oncomplete = () => {
+                    db.close();
+                    try {
+                        localStorage.removeItem(CLASS_REPORT_UPLOADS_KEY);
+                    } catch {
+                        /* ignore legacy cleanup failures */
+                    }
+                    resolve();
+                };
+                tx.onerror = () => reject(tx.error || new Error('Could not save uploads database.'));
+            });
+        })
+        .catch((error) => {
+            console.error('Error saving class report uploads:', error);
+        });
 }
 
 function isStudentName(name) {
@@ -3229,10 +3400,16 @@ function setupCalendarStudentPopoverDismiss() {
 
 function renameStudentClassReportRows(oldName, newName) {
     if (!oldName || !newName || oldName === newName) return;
-    if (!studentClassReportRows[oldName]) return;
-    studentClassReportRows[newName] = studentClassReportRows[oldName];
-    delete studentClassReportRows[oldName];
-    saveStudentClassReportRows();
+    if (studentClassReportRows[oldName]) {
+        studentClassReportRows[newName] = studentClassReportRows[oldName];
+        delete studentClassReportRows[oldName];
+        saveStudentClassReportRows();
+    }
+    if (studentClassReportUploadsByName[oldName]) {
+        studentClassReportUploadsByName[newName] = studentClassReportUploadsByName[oldName];
+        delete studentClassReportUploadsByName[oldName];
+        void saveStudentClassReportUploads();
+    }
 }
 
 function getPreferredPassportStudentName() {
@@ -3628,10 +3805,431 @@ function persistClassReportRowField(tr, el) {
     }
 }
 
+function getStudentClassReportUploadFeed(studentName) {
+    const key = String(studentName || '').trim();
+    if (!key) return [];
+    if (!Array.isArray(studentClassReportUploadsByName[key])) {
+        studentClassReportUploadsByName[key] = [];
+    }
+    return studentClassReportUploadsByName[key];
+}
+
+function getStudentClassReportFileSrc(fileData) {
+    return String(fileData?.dataUrl || fileData?.url || '');
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Could not read file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function getFirstNameLabel(fullName, fallback = '') {
+    const firstName = String(fullName || '').trim().split(/\s+/)[0] || String(fallback || '').trim();
+    return firstName || 'Name';
+}
+
+function removeStudentClassReportUpload(studentName, uploadId) {
+    const key = String(studentName || '').trim();
+    const feed = getStudentClassReportUploadFeed(key);
+    const index = feed.findIndex((item) => item && item.id === uploadId);
+    if (index === -1) return;
+    const [removed] = feed.splice(index, 1);
+    if (removed?.url && String(removed.url).startsWith('blob:')) {
+        URL.revokeObjectURL(removed.url);
+    }
+    if (Array.isArray(removed?.audioFiles)) {
+        removed.audioFiles.forEach((audio) => {
+            if (audio?.url && String(audio.url).startsWith('blob:')) URL.revokeObjectURL(audio.url);
+        });
+    }
+    if (Array.isArray(removed?.relatedFiles)) {
+        removed.relatedFiles.forEach((file) => {
+            if (file?.url && String(file.url).startsWith('blob:')) URL.revokeObjectURL(file.url);
+        });
+    }
+    void saveStudentClassReportUploads();
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+}
+
+async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, file) {
+    const key = String(studentName || '').trim();
+    if (!file) return;
+    const feed = getStudentClassReportUploadFeed(key);
+    const upload = feed.find((item) => item && item.id === uploadId);
+    if (!upload) return;
+    if (!Array.isArray(upload.relatedFiles)) {
+        upload.relatedFiles = [];
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    upload.relatedFiles.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name || 'Related file',
+        type: String(file.type || '').toLowerCase(),
+        dataUrl
+    });
+    await saveStudentClassReportUploads();
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+}
+
+function addQuestionToLatestStudentClassReportUpload(studentName) {
+    const key = String(studentName || '').trim();
+    if (!key) return;
+    const feed = getStudentClassReportUploadFeed(key);
+    const latestUpload = [...feed].reverse().find((item) => item && item.kind !== 'question');
+    if (!latestUpload) return;
+    if (!Array.isArray(latestUpload.questions)) {
+        latestUpload.questions = [];
+    }
+    if (latestUpload.questions.length === 0) {
+        latestUpload.questions.push({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            speaker: 'teacher',
+            text: ''
+        });
+    }
+    void saveStudentClassReportUploads();
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+    requestAnimationFrame(() => {
+        const panel = document.getElementById('studentClassReportPanel');
+        const input = panel?.querySelector(
+            `.student-class-report-file-card[data-upload-id="${latestUpload.id}"] .student-class-report-question-row:last-of-type input`
+        );
+        input?.focus();
+    });
+}
+
+function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQuestionId) {
+    const key = String(studentName || '').trim();
+    if (!key || !uploadId) return;
+    const feed = getStudentClassReportUploadFeed(key);
+    const upload = feed.find((item) => item && item.id === uploadId);
+    if (!upload) return;
+    if (!Array.isArray(upload.questions)) {
+        upload.questions = [];
+    }
+    const currentIndex = upload.questions.findIndex((question) => question && question.id === afterQuestionId);
+    const currentQuestion = currentIndex >= 0 ? upload.questions[currentIndex] : upload.questions[upload.questions.length - 1];
+    const nextSpeaker = currentQuestion?.speaker === 'teacher' ? 'student' : 'teacher';
+    const nextQuestion = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        speaker: nextSpeaker,
+        text: ''
+    };
+    upload.questions.splice(currentIndex >= 0 ? currentIndex + 1 : upload.questions.length, 0, nextQuestion);
+    void saveStudentClassReportUploads();
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+    requestAnimationFrame(() => {
+        const panel = document.getElementById('studentClassReportPanel');
+        const input = panel?.querySelector(
+            `.student-class-report-file-card[data-upload-id="${upload.id}"] .student-class-report-question-row[data-question-id="${nextQuestion.id}"] input`
+        );
+        input?.focus();
+    });
+}
+
+function appendStudentClassReportFileContent(parentEl, fileData, compact = false) {
+    if (!parentEl || !fileData) return;
+    const type = String(fileData.type || '').toLowerCase();
+    const name = String(fileData.name || '').toLowerCase();
+    if (type.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.className = compact
+            ? 'student-class-report-file-preview-image student-class-report-file-preview-image--related'
+            : 'student-class-report-file-preview-image';
+        img.src = getStudentClassReportFileSrc(fileData);
+        img.alt = fileData.name || 'Uploaded file preview';
+        parentEl.appendChild(img);
+    } else if (type.startsWith('audio/') || name.endsWith('.mp3')) {
+        const audio = document.createElement('audio');
+        audio.className = 'student-class-report-file-preview-audio';
+        audio.src = getStudentClassReportFileSrc(fileData);
+        audio.controls = true;
+        audio.preload = 'metadata';
+        parentEl.appendChild(audio);
+    } else if (type === 'application/pdf' || name.endsWith('.pdf')) {
+        const frame = document.createElement('iframe');
+        frame.className = compact
+            ? 'student-class-report-file-preview-pdf student-class-report-file-preview-pdf--related'
+            : 'student-class-report-file-preview-pdf';
+        frame.src = getStudentClassReportFileSrc(fileData);
+        frame.title = fileData.name || 'Uploaded PDF preview';
+        parentEl.appendChild(frame);
+    } else {
+        const unsupported = document.createElement('p');
+        unsupported.className = 'student-class-report-file-preview-empty';
+        unsupported.textContent = 'Preview is not available for this file type.';
+        parentEl.appendChild(unsupported);
+    }
+}
+
+function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
+    if (!feedEl || !upload) return;
+    const card = document.createElement('article');
+    card.className = 'student-class-report-file-card';
+    card.dataset.uploadId = upload.id || '';
+
+    const meta = document.createElement('div');
+    meta.className = 'student-class-report-file-card-meta';
+    const name = document.createElement('span');
+    name.className = 'student-class-report-file-card-name';
+    name.textContent = upload.name || 'Uploaded file';
+    const actions = document.createElement('div');
+    actions.className = 'student-class-report-file-card-actions';
+    const relatedInput = document.createElement('input');
+    relatedInput.type = 'file';
+    relatedInput.accept = 'image/*,.pdf,audio/mpeg,.mp3';
+    relatedInput.hidden = true;
+    relatedInput.addEventListener('change', async () => {
+        const file = relatedInput.files && relatedInput.files[0] ? relatedInput.files[0] : null;
+        try {
+            await addRelatedFileToStudentClassReportUpload(studentName, upload.id, file);
+        } finally {
+            relatedInput.value = '';
+        }
+    });
+    const addRelatedBtn = document.createElement('button');
+    addRelatedBtn.type = 'button';
+    addRelatedBtn.className = 'student-class-report-file-add-btn';
+    addRelatedBtn.setAttribute('aria-label', `Add related file to ${upload.name || 'uploaded file'}`);
+    addRelatedBtn.title = 'Add related file';
+    addRelatedBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
+    addRelatedBtn.addEventListener('click', () => {
+        relatedInput.click();
+    });
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'student-class-report-file-delete-btn';
+    deleteBtn.setAttribute('aria-label', `Delete ${upload.name || 'uploaded file'}`);
+    deleteBtn.title = 'Delete file';
+    deleteBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
+    deleteBtn.addEventListener('click', () => {
+        removeStudentClassReportUpload(studentName, upload.id);
+    });
+    meta.appendChild(name);
+    actions.appendChild(relatedInput);
+    actions.appendChild(addRelatedBtn);
+    actions.appendChild(deleteBtn);
+    meta.appendChild(actions);
+    card.appendChild(meta);
+
+    appendStudentClassReportFileContent(card, upload);
+
+    const relatedFiles = [
+        ...(Array.isArray(upload.audioFiles) ? upload.audioFiles : []),
+        ...(Array.isArray(upload.relatedFiles) ? upload.relatedFiles : [])
+    ];
+    if (relatedFiles.length > 0) {
+        const relatedGroup = document.createElement('div');
+        relatedGroup.className = 'student-class-report-card-related-group';
+        relatedFiles.forEach((relatedFile) => {
+            const relatedWrap = document.createElement('div');
+            relatedWrap.className = 'student-class-report-card-related-item';
+            const relatedName = document.createElement('span');
+            relatedName.className = 'student-class-report-card-related-name';
+            relatedName.textContent = relatedFile.name || 'Related file';
+            relatedWrap.appendChild(relatedName);
+            appendStudentClassReportFileContent(relatedWrap, relatedFile, true);
+            relatedGroup.appendChild(relatedWrap);
+        });
+        card.appendChild(relatedGroup);
+    }
+
+    if (Array.isArray(upload.questions) && upload.questions.length > 0) {
+        const questionGroup = document.createElement('div');
+        questionGroup.className = 'student-class-report-card-question-group';
+        const teacherLabel = getFirstNameLabel(getActiveTeacherProfileName() || loggedInTeacherName || currentTeacher, 'Teacher');
+        const studentLabel = getFirstNameLabel(studentName, 'Student');
+        upload.questions.forEach((question) => {
+            const speaker = question?.speaker === 'student' ? 'student' : 'teacher';
+            const questionRow = document.createElement('div');
+            questionRow.className = `student-class-report-question-row student-class-report-question-row--${speaker}`;
+            questionRow.dataset.questionId = question.id || '';
+
+            const label = document.createElement('span');
+            label.className = 'student-class-report-question-speaker';
+            label.textContent = speaker === 'teacher' ? teacherLabel : studentLabel;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'student-class-report-question-input';
+            input.placeholder = speaker === 'teacher' ? 'Write the question...' : 'Write the answer...';
+            input.value = String(question.text || '');
+            input.addEventListener('input', () => {
+                question.text = input.value;
+                void saveStudentClassReportUploads();
+            });
+
+            const addLineBtn = document.createElement('button');
+            addLineBtn.type = 'button';
+            addLineBtn.className = 'student-class-report-question-add-line-btn';
+            addLineBtn.setAttribute('aria-label', 'Add next question line');
+            addLineBtn.title = 'Add line';
+            addLineBtn.innerHTML =
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
+            addLineBtn.addEventListener('click', () => {
+                addQuestionLineToStudentClassReportUpload(studentName, upload.id, question.id);
+            });
+
+            if (speaker === 'student') {
+                questionRow.appendChild(input);
+                questionRow.appendChild(label);
+                questionRow.appendChild(addLineBtn);
+            } else {
+                questionRow.appendChild(label);
+                questionRow.appendChild(input);
+                questionRow.appendChild(addLineBtn);
+            }
+            questionGroup.appendChild(questionRow);
+        });
+        card.appendChild(questionGroup);
+    }
+
+    feedEl.appendChild(card);
+}
+
+function renderStudentClassReportUploadFeed(panel, studentName) {
+    if (!panel) return;
+    const uploadArea = panel.querySelector('.student-class-report-upload-area');
+    const changeFileBtn = panel.querySelector('.student-class-report-change-file-btn');
+    const feedEl = panel.querySelector('.student-class-report-file-preview');
+    const feed = getStudentClassReportUploadFeed(studentName);
+
+    if (feedEl) {
+        feedEl.textContent = '';
+        feed.forEach((upload) => appendStudentClassReportUploadPreview(feedEl, upload, studentName));
+        feedEl.hidden = feed.length === 0;
+    }
+    if (uploadArea) uploadArea.hidden = feed.length > 0;
+    if (changeFileBtn) changeFileBtn.hidden = feed.length === 0;
+    panel.classList.toggle('student-class-report-panel--with-file', feed.length > 0);
+}
+
+function ensureStudentClassReportPanelShell(studentName = '') {
+    let panel = document.getElementById('studentClassReportPanel');
+    if (!panel) {
+        const mainContent = document.querySelector('.main-content');
+        if (!mainContent) return false;
+        panel = document.createElement('div');
+        panel.id = 'studentClassReportPanel';
+        panel.className = 'student-class-report-panel';
+        panel.hidden = true;
+        const adminPanel = document.getElementById('adminControlPanel');
+        if (adminPanel && adminPanel.parentElement === mainContent) {
+            mainContent.insertBefore(panel, adminPanel);
+        } else {
+            mainContent.appendChild(panel);
+        }
+    }
+    panel.textContent = '';
+    panel.dataset.studentName = String(studentName || '').trim();
+
+    const uploadArea = document.createElement('label');
+    uploadArea.className = 'student-class-report-upload-area';
+    uploadArea.setAttribute('for', 'studentClassReportUploadInput');
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'studentClassReportUploadInput';
+    input.accept = 'image/*,.pdf,audio/mpeg,.mp3';
+    input.hidden = true;
+
+    const icon = document.createElement('span');
+    icon.className = 'student-class-report-upload-icon';
+    icon.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 16.2a4.2 4.2 0 0 0-1.1-8.26 5.6 5.6 0 0 0-10.78 1.7A3.7 3.7 0 0 0 8 17h12Z"></path><path d="M12 17V9"></path><path d="m8.5 12.5 3.5-3.5 3.5 3.5"></path></svg>';
+
+    const title = document.createElement('span');
+    title.className = 'student-class-report-upload-title';
+    title.textContent = 'Upload a file';
+
+    const hint = document.createElement('span');
+    hint.className = 'student-class-report-upload-hint';
+    hint.textContent = 'Start with a screenshot, image, or PDF.';
+
+    const action = document.createElement('span');
+    action.className = 'student-class-report-upload-action';
+    action.textContent = 'Choose file';
+
+    const selected = document.createElement('span');
+    selected.className = 'student-class-report-upload-selected';
+    selected.textContent = 'No file selected';
+
+    const preview = document.createElement('div');
+    preview.className = 'student-class-report-file-preview';
+    preview.hidden = true;
+
+    const changeFileBtn = document.createElement('button');
+    changeFileBtn.type = 'button';
+    changeFileBtn.className = 'student-class-report-change-file-btn';
+    changeFileBtn.setAttribute('aria-label', 'Upload file');
+    changeFileBtn.title = 'Upload file';
+    changeFileBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7.5 8.5 4.5-4.5 4.5 4.5"></path><path d="M20 16v2.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5V16"></path></svg>';
+    changeFileBtn.hidden = true;
+    changeFileBtn.addEventListener('click', () => {
+        input.click();
+    });
+
+    const floatingActions = document.createElement('div');
+    floatingActions.className = 'student-class-report-floating-actions';
+
+    const addQuestionBtn = document.createElement('button');
+    addQuestionBtn.type = 'button';
+    addQuestionBtn.className = 'student-class-report-add-question-btn';
+    addQuestionBtn.setAttribute('aria-label', 'Add question');
+    addQuestionBtn.title = 'Add question';
+    addQuestionBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
+    addQuestionBtn.addEventListener('click', () => {
+        const selectedStudent = String(panel.dataset.studentName || studentName || '').trim();
+        addQuestionToLatestStudentClassReportUpload(selectedStudent);
+    });
+
+    input.addEventListener('change', async () => {
+        const file = input.files && input.files[0] ? input.files[0] : null;
+        selected.textContent = file ? file.name : 'No file selected';
+        if (!file) return;
+        const selectedStudent = String(panel.dataset.studentName || studentName || '').trim();
+        const feed = getStudentClassReportUploadFeed(selectedStudent);
+        const dataUrl = await readFileAsDataUrl(file);
+        feed.push({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            name: file.name || 'Uploaded file',
+            type: String(file.type || '').toLowerCase(),
+            dataUrl,
+            questions: [],
+            relatedFiles: []
+        });
+        await saveStudentClassReportUploads();
+        input.value = '';
+        renderStudentClassReportUploadFeed(panel, selectedStudent);
+    });
+
+    uploadArea.appendChild(input);
+    uploadArea.appendChild(icon);
+    uploadArea.appendChild(title);
+    uploadArea.appendChild(hint);
+    uploadArea.appendChild(action);
+    uploadArea.appendChild(selected);
+    floatingActions.appendChild(addQuestionBtn);
+    floatingActions.appendChild(changeFileBtn);
+    panel.appendChild(uploadArea);
+    panel.appendChild(floatingActions);
+    panel.appendChild(preview);
+    renderStudentClassReportUploadFeed(panel, studentName);
+    return true;
+}
+
 function renderStudentClassReportTable(studentName) {
+    ensureStudentClassReportPanelShell(studentName);
     const title = document.getElementById('studentClassReportTitle');
     const tbody = document.getElementById('studentClassReportBody');
-    const hint = document.getElementById('studentClassReportHint');
     if (!tbody) return;
 
     if (title) {
@@ -3699,9 +4297,6 @@ function renderStudentClassReportTable(studentName) {
         tbody.appendChild(tr);
     });
 
-    if (hint) {
-        hint.hidden = list.length > 0;
-    }
 }
 
 function removeStudentClassReportRowAt(studentName, index) {
@@ -6293,180 +6888,10 @@ function setupPasswordToggles() {
     const addStudentPwdInput = document.getElementById('addStudentPassword');
     const addStudentPwdGen = document.getElementById('addStudentPasswordGenerate');
     bindPlatePasswordGenerateButton(addStudentPwdGen, addStudentPwdInput);
-    setupPasswordToggle('teacherLoginPassword', 'teacherLoginPasswordToggle');
 }
 
 function openTeacherLoginModal() {
-    const modal = document.getElementById('teacherLoginModal');
-    const emailInput = document.getElementById('teacherLoginEmail');
-    const passwordInput = document.getElementById('teacherLoginPassword');
-    const passwordToggleBtn = document.getElementById('teacherLoginPasswordToggle');
-    const saveCredentialsCheckbox = document.getElementById('teacherLoginSaveCredentials');
-    const errorEl = document.getElementById('teacherLoginError');
-    if (!modal || !emailInput || !passwordInput || !errorEl) return;
-
-    const savedCredentials = loadSavedLoginCredentials();
-    errorEl.textContent = '';
-    emailInput.value = savedCredentials?.email || '';
-    passwordInput.value = savedCredentials?.password || '';
-    if (saveCredentialsCheckbox) saveCredentialsCheckbox.checked = !!savedCredentials;
-    passwordInput.type = 'password';
-    setPasswordToggleVisual(passwordInput, passwordToggleBtn);
-    openModalWithAnimation(modal);
-    window.setTimeout(() => (emailInput.value ? passwordInput.focus() : emailInput.focus()), 0);
-}
-
-function closeTeacherLoginModal() {
-    const modal = document.getElementById('teacherLoginModal');
-    const errorEl = document.getElementById('teacherLoginError');
-    if (!modal) return;
-    closeModalWithAnimation(modal);
-    if (errorEl) errorEl.textContent = '';
-}
-
-function setupTeacherLoginModal() {
-    const modal = document.getElementById('teacherLoginModal');
-    const form = document.getElementById('teacherLoginForm');
-    const cancelBtn = document.getElementById('teacherLoginCancel');
-    const backdrop = document.getElementById('teacherLoginModalBackdrop');
-    const emailInput = document.getElementById('teacherLoginEmail');
-    const passwordInput = document.getElementById('teacherLoginPassword');
-    const saveCredentialsCheckbox = document.getElementById('teacherLoginSaveCredentials');
-    const errorEl = document.getElementById('teacherLoginError');
-    if (!modal || !form || !emailInput || !passwordInput || !errorEl) return;
-
-    const setError = (message) => {
-        errorEl.textContent = String(message || '').trim();
-    };
-
-    cancelBtn?.addEventListener('click', () => closeTeacherLoginModal());
-    backdrop?.addEventListener('click', () => closeTeacherLoginModal());
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const rawLogin = String(emailInput.value || '').trim();
-        const emailLc = rawLogin.toLowerCase();
-        const password = String(passwordInput.value || '').trim();
-
-        if (!rawLogin) {
-            setError('Enter your admin username, teacher email, or student username.');
-            emailInput.focus();
-            return;
-        }
-        if (!password) {
-            setError('Password is required to log in.');
-            passwordInput.focus();
-            return;
-        }
-
-        const adminLogin = await verifyAdminLogin(rawLogin, password);
-        if (adminLogin.ok) {
-            if (saveCredentialsCheckbox?.checked) {
-                saveLoginCredentials(rawLogin.trim(), password);
-            } else {
-                clearSavedLoginCredentials();
-            }
-            try {
-                sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
-            } catch {
-                /* ignore */
-            }
-            closeTeacherLoginModal();
-            isAdminLoggedIn = true;
-            loggedInStudentFullName = '';
-            loggedInTeacherName = '';
-            isTeacherLoggedIn = true;
-            currentTeacher = '';
-            renderSidebar();
-            setAdminDashboard();
-            return;
-        }
-        if (String(rawLogin || '').trim().toLowerCase() === String(adminAccount.username || '').trim().toLowerCase()) {
-            setError(adminLogin.error || 'Incorrect admin password.');
-            passwordInput.focus();
-            return;
-        }
-
-        const teacherNameByEmail = teachersList.find((name) => {
-            const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
-            return teacherEmail && teacherEmail === emailLc;
-        });
-
-        if (teacherNameByEmail) {
-            if (password.length < 8) {
-                setError('Teacher passwords must be at least 8 characters.');
-                passwordInput.focus();
-                return;
-            }
-            const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
-            if (!expectedPassword) {
-                setError('This profile has no password saved. Please create it again.');
-                return;
-            }
-            if (password !== expectedPassword) {
-                setError('Incorrect password.');
-                passwordInput.focus();
-                return;
-            }
-
-            if (saveCredentialsCheckbox?.checked) {
-                saveLoginCredentials(emailLc, password);
-            } else {
-                clearSavedLoginCredentials();
-            }
-
-            try {
-                sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
-            } catch {
-                /* ignore */
-            }
-
-            closeTeacherLoginModal();
-            isAdminLoggedIn = false;
-            loggedInStudentFullName = '';
-            isTeacherLoggedIn = true;
-            loggedInTeacherName = teacherNameByEmail;
-            renderSidebar();
-            selectTeacher(teacherNameByEmail, { view: 'calendar' });
-            return;
-        }
-
-        const v = await verifyStudentLogin(rawLogin, password);
-        if (v.ok) {
-            const tutor = getTutorRosterNameForStudent(v.studentName);
-            if (!tutor) {
-                setError(
-                    'Your student profile has no teacher assigned. Ask your teacher to choose a teacher in your profile.'
-                );
-                emailInput.focus();
-                return;
-            }
-
-            if (saveCredentialsCheckbox?.checked) {
-                saveLoginCredentials(rawLogin.trim(), password);
-            } else {
-                clearSavedLoginCredentials();
-            }
-
-            try {
-                sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
-            } catch {
-                /* ignore */
-            }
-
-            closeTeacherLoginModal();
-            isAdminLoggedIn = false;
-            loggedInStudentFullName = v.studentName;
-            loggedInTeacherName = tutor;
-            isTeacherLoggedIn = true;
-            renderSidebar();
-            selectTeacher(v.studentName, { view: 'classReport' });
-            return;
-        }
-
-        setError(v.error || 'Account not found. Use teacher email or student username.');
-        emailInput.focus();
-    });
+    window.location.href = 'admin.html';
 }
 
 // Initialize teachers sidebar
@@ -6576,10 +7001,12 @@ function selectTeacher(teacherName, opts) {
 
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
-    const reportPanel = document.getElementById('studentClassReportPanel');
+    let reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
 
     if (showClassReport) {
+        ensureStudentClassReportPanelShell();
+        reportPanel = document.getElementById('studentClassReportPanel');
         if (calendarWrapper) calendarWrapper.hidden = true;
         if (summaryPanel) summaryPanel.hidden = true;
         if (reportPanel) {
@@ -6637,6 +7064,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete teacherSchedules[removedName];
     delete speakonStudentWeeklyClass[removedName];
     delete studentClassReportRows[removedName];
+    delete studentClassReportUploadsByName[removedName];
     delete passportFollowupLinks[removedName];
     delete studentSchoolByName[removedName];
     delete studentPhonesByName[removedName];
@@ -6648,6 +7076,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentCityByName[removedName];
     delete studentCountryByName[removedName];
     saveStudentClassReportRows();
+    void saveStudentClassReportUploads();
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
@@ -11311,7 +11740,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupGlobalPointerDownToDismissOverlays();
     setupPasswordToggles();
     setupSidebarProfileAvatarUpload();
-    setupTeacherLoginModal();
     initCalendar();
     if (currentTeacher) {
         refreshCalendarDisplay();
