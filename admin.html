@@ -376,6 +376,215 @@
     </div>
 
     <script>
+        /* Moved from test.html lines 455-694; kept isolated so admin.html has no duplicate globals. */
+        (function movedAdminLoginHelpers() {
+            const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
+            const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
+            const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
+            const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
+            const ROSTER_STORAGE_KEY = 'timetable_roster';
+            const DEFAULT_ADMIN_USERNAME = 'admin_';
+            const DEFAULT_ADMIN_PASSWORD = '@Admin';
+            const PASSWORD_HASH_PREFIX = 'sha256$';
+
+            const usernameInput = document.getElementById('loginEmail');
+            const passwordInput = document.getElementById('loginPassword');
+            const loginBtn = document.querySelector('.login-btn');
+
+            async function hashPassword(password) {
+                const hasCrypto = window.crypto && window.crypto.subtle && typeof TextEncoder !== 'undefined';
+                if (!hasCrypto) return String(password || '');
+                const encoded = new TextEncoder().encode(String(password || ''));
+                const digestBuffer = await window.crypto.subtle.digest('SHA-256', encoded);
+                const digestBytes = Array.from(new Uint8Array(digestBuffer));
+                const digestHex = digestBytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+                return `${PASSWORD_HASH_PREFIX}${digestHex}`;
+            }
+
+            function normalizeAdminAccount(account) {
+                if (!account || typeof account !== 'object' || Array.isArray(account)) return null;
+                const username = String(account.username || '').trim();
+                const passwordHash = String(account.passwordHash || '').trim();
+                if (!username || !passwordHash) return null;
+                return { username, passwordHash };
+            }
+
+            function loadStoredAdminAccount() {
+                try {
+                    return normalizeAdminAccount(JSON.parse(localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY) || 'null'));
+                } catch {
+                    return null;
+                }
+            }
+
+            function loadCachedRosterAdminAccount() {
+                try {
+                    const roster = JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null');
+                    return normalizeAdminAccount(roster?.adminAccount);
+                } catch {
+                    return null;
+                }
+            }
+
+            function normalizeRoster(roster) {
+                return roster && typeof roster === 'object' && !Array.isArray(roster) ? roster : null;
+            }
+
+            function loadCachedRoster() {
+                try {
+                    return normalizeRoster(JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null'));
+                } catch {
+                    return null;
+                }
+            }
+
+            async function loadHostedRoster() {
+                try {
+                    const response = await fetch('/api/roster?t=' + Date.now(), {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                        cache: 'no-cache'
+                    });
+                    if (!response.ok) return null;
+                    const data = await response.json();
+                    const roster = normalizeRoster(data?.roster);
+                    if (!roster) return null;
+                    localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+                    const account = normalizeAdminAccount(roster.adminAccount);
+                    if (account) {
+                        localStorage.setItem(ADMIN_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
+                    }
+                    return roster;
+                } catch {
+                    return null;
+                }
+            }
+
+            async function loadHostedRosterAdminAccount() {
+                const roster = await loadHostedRoster();
+                return normalizeAdminAccount(roster?.adminAccount);
+            }
+
+            function getRosterCreatedAccounts(roster) {
+                if (!roster || typeof roster !== 'object') return [];
+                const accounts = [];
+                const teacherEmails = roster.teacherEmails && typeof roster.teacherEmails === 'object' ? roster.teacherEmails : {};
+                const teacherPasswords = roster.teacherPasswords && typeof roster.teacherPasswords === 'object' ? roster.teacherPasswords : {};
+                const teachers = Array.isArray(roster.teachers) ? roster.teachers : [];
+                teachers.forEach((name) => {
+                    const username = String(teacherEmails[name] || '').trim();
+                    const passwordHash = String(teacherPasswords[name] || '').trim();
+                    if (username && passwordHash) {
+                        accounts.push({ role: 'teacher', profileName: String(name || '').trim(), username, passwordHash });
+                    }
+                });
+
+                const studentEmails = roster.studentEmails && typeof roster.studentEmails === 'object' ? roster.studentEmails : {};
+                const studentUsernames = roster.studentUsernames && typeof roster.studentUsernames === 'object' ? roster.studentUsernames : {};
+                const studentPasswords = roster.studentPasswords && typeof roster.studentPasswords === 'object' ? roster.studentPasswords : {};
+                [
+                    ...(Array.isArray(roster.private) ? roster.private : []),
+                    ...(Array.isArray(roster.speakon) ? roster.speakon : []),
+                    ...(Array.isArray(roster.passport) ? roster.passport : [])
+                ].forEach((name) => {
+                    const passwordHash = String(studentPasswords[name] || '').trim();
+                    if (!passwordHash) return;
+                    const username = String(studentUsernames[name] || '').trim();
+                    const email = String(studentEmails[name] || '').trim();
+                    if (username) accounts.push({ role: 'student', profileName: String(name || '').trim(), username, passwordHash });
+                    if (email) accounts.push({ role: 'student', profileName: String(name || '').trim(), username: email, passwordHash });
+                });
+
+                return accounts;
+            }
+
+            async function verifyPassword(storedPasswordRaw, passwordRaw) {
+                const storedPassword = String(storedPasswordRaw || '').trim();
+                const typedPassword = String(passwordRaw || '');
+                if (!storedPassword || !typedPassword) return false;
+                if (!storedPassword.startsWith(PASSWORD_HASH_PREFIX)) {
+                    return typedPassword === storedPassword;
+                }
+                return await hashPassword(typedPassword) === storedPassword;
+            }
+
+            async function verifyLogin(usernameRaw, passwordRaw) {
+                const username = String(usernameRaw || '').trim();
+                const password = String(passwordRaw || '');
+                if (!username || !password) return { ok: false };
+
+                const storedAccount =
+                    await loadHostedRosterAdminAccount()
+                    || loadCachedRosterAdminAccount()
+                    || loadStoredAdminAccount();
+
+                if (storedAccount) {
+                    if (username.toLowerCase() === storedAccount.username.toLowerCase()) {
+                        return {
+                            ok: await verifyPassword(storedAccount.passwordHash, password),
+                            role: 'admin'
+                        };
+                    }
+                }
+
+                const roster = await loadHostedRoster() || loadCachedRoster();
+                const createdAccounts = getRosterCreatedAccounts(roster);
+                const matchingCreatedAccount = createdAccounts.find((account) => {
+                    return String(account.username || '').trim().toLowerCase() === username.toLowerCase();
+                });
+                if (matchingCreatedAccount) {
+                    return {
+                        ok: await verifyPassword(matchingCreatedAccount.passwordHash, password),
+                        role: matchingCreatedAccount.role,
+                        profileName: matchingCreatedAccount.profileName
+                    };
+                }
+                if (storedAccount || createdAccounts.length > 0) return { ok: false };
+
+                return {
+                    ok: username === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD,
+                    role: 'admin'
+                };
+            }
+
+            window.TimeTableAdminLogin = { verifyLogin };
+
+            if (!loginBtn || !usernameInput || !passwordInput) return;
+            loginBtn.addEventListener('click', async function(event) {
+                event.preventDefault();
+                const username = usernameInput.value.trim();
+                const password = passwordInput.value;
+                if (!username) {
+                    alert('Please enter your username.');
+                    usernameInput.focus();
+                    return;
+                }
+                if (!password) {
+                    alert('Please enter your password.');
+                    passwordInput.focus();
+                    return;
+                }
+                const loginResult = await verifyLogin(username, password);
+                if (loginResult.ok && loginResult.role === 'admin') {
+                    sessionStorage.setItem(ADMIN_LOGIN_SESSION_KEY, 'true');
+                    sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+                    window.location.href = 'admin.html';
+                } else if (loginResult.ok) {
+                    localStorage.setItem(LOGIN_CREDENTIALS_STORAGE_KEY, JSON.stringify({ email: username, password }));
+                    sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
+                    sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+                    window.location.href = 'index.html';
+                } else {
+                    alert('Invalid username or password.');
+                }
+            });
+            [usernameInput, passwordInput].forEach((input) => {
+                input.addEventListener('keydown', function(event) {
+                    if (event.key === 'Enter') loginBtn.click();
+                });
+            });
+        })();
+
         const ROSTER_STORAGE_KEY = 'timetable_roster';
         const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
         const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';

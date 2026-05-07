@@ -1,6 +1,3 @@
-/* Set test.html as the default page */
-//window.location.href = 'test.html';
-
 // Configuration
 const START_HOUR = 7; // 7 AM
 const END_HOUR = 23; // 11 PM (exclusive, includes 10 PM slot)
@@ -128,6 +125,9 @@ let studentUsernamesByName = {};
 let studentPasswordsByName = {};
 let studentCityByName = {};
 let studentCountryByName = {};
+let studentBirthDatesByName = {};
+let studentAgesByName = {};
+let studentLevelsByName = {};
 let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
@@ -193,6 +193,40 @@ const classStartNotifiedKeys = new Set();
 const studentClassStartNotifiedKeys = new Set();
 const MODAL_CLOSE_ANIMATION_MS = 220;
 const modalCloseTimers = new WeakMap();
+
+function getCurrentUser() {
+    if (loggedInStudentFullName) return { role: 'student', name: loggedInStudentFullName };
+    if (isAdminLoggedIn) return { role: 'admin', name: String(adminAccount?.username || DEFAULT_ADMIN_USERNAME).trim() };
+    if (isTeacherLoggedIn) return { role: 'teacher', name: loggedInTeacherName };
+    return { role: 'guest', name: '' };
+}
+
+function canManageRoster(user = getCurrentUser()) {
+    return !!user && (user.role === 'admin' || user.role === 'teacher');
+}
+
+function canEditFeed(user = getCurrentUser()) {
+    return !!user && (user.role === 'admin' || user.role === 'teacher');
+}
+
+// Role-based sidebar rendering: students get only view-safe navigation and actions.
+function getSidebarRenderMode(user = getCurrentUser()) {
+    if (user.role === 'student') return 'student';
+    if (user.role === 'admin') return 'admin';
+    if (user.role === 'teacher') return 'teacher';
+    return 'guest';
+}
+
+window.TimeTablePermissions = {
+    getCurrentUser,
+    canManageRoster,
+    canEditFeed
+};
+
+function denyStudentAction(message = 'Permission denied: students cannot manage this content.') {
+    console.warn(message);
+    showAppMessage(message);
+}
 
 function openModalWithAnimation(modal) {
     if (!modal) return;
@@ -1341,6 +1375,15 @@ async function verifyStudentPassword(storedPasswordRaw, passwordRaw) {
     return input === stored;
 }
 
+function formatStudentPasswordForAdminDisplay(storedPasswordRaw) {
+    const raw = String(storedPasswordRaw || '').trim();
+    if (!raw) return '<em>Not set</em>';
+    if (isStudentPasswordHashed(raw)) {
+        return '<em>Stored as hash (original not recoverable). Set a new password in Edit student or Account admin to show it here.</em>';
+    }
+    return escapeHtmlAttr(raw);
+}
+
 function loadAdminAccountFromStorage() {
     try {
         const raw = localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY);
@@ -1615,6 +1658,9 @@ async function initRoster(preloadedRoster = null) {
         studentPasswordsByName = {};
         studentCityByName = {};
         studentCountryByName = {};
+        studentBirthDatesByName = {};
+        studentAgesByName = {};
+        studentLevelsByName = {};
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
         customSchoolsList = [];
@@ -1730,6 +1776,29 @@ async function initRoster(preloadedRoster = null) {
         const iso = String(phone.countryIso || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
         const country = PHONE_COUNTRY_OPTIONS.find((item) => item.iso === iso);
         if (country?.name) studentCountryByName[name] = country.name;
+    });
+    const studentBirthDatesRaw =
+        saved.studentBirthDates && typeof saved.studentBirthDates === 'object' && !Array.isArray(saved.studentBirthDates)
+            ? { ...saved.studentBirthDates }
+            : {};
+    const studentAgesRaw =
+        saved.studentAges && typeof saved.studentAges === 'object' && !Array.isArray(saved.studentAges)
+            ? { ...saved.studentAges }
+            : {};
+    const studentLevelsRaw =
+        saved.studentLevels && typeof saved.studentLevels === 'object' && !Array.isArray(saved.studentLevels)
+            ? { ...saved.studentLevels }
+            : {};
+    studentBirthDatesByName = {};
+    studentAgesByName = {};
+    studentLevelsByName = {};
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const birthDate = String(studentBirthDatesRaw[name] || '').trim();
+        const age = String(studentAgesRaw[name] || '').trim();
+        const level = String(studentLevelsRaw[name] || '').trim();
+        if (birthDate) studentBirthDatesByName[name] = birthDate;
+        if (age) studentAgesByName[name] = age;
+        if (level) studentLevelsByName[name] = level;
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -3641,6 +3710,7 @@ function classReportDayDisplay(merged) {
 
 function appendClassReportFieldCell(tr, field, merged) {
     const td = document.createElement('td');
+    const feedEditable = canEditFeed();
 
     if (field === 'date') {
         td.classList.add('column-date');
@@ -3669,6 +3739,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         pick.dataset.field = 'date';
         pick.value = iso;
         pick.setAttribute('aria-label', 'Pick date');
+        pick.disabled = !feedEditable;
 
         calLabel.appendChild(calIcon);
         calLabel.appendChild(pick);
@@ -3692,6 +3763,7 @@ function appendClassReportFieldCell(tr, field, merged) {
             sel.appendChild(opt);
         }
         sel.value = normalizeClassReportTimeValue(merged.time);
+        sel.disabled = !feedEditable;
         td.appendChild(sel);
     } else if (field === 'dayOfWeek') {
         td.classList.add('column-day');
@@ -3721,6 +3793,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         });
         const st = String(merged.status || '').trim();
         sel.value = CLASS_REPORT_STATUS_OPTIONS.includes(st) ? st : '';
+        sel.disabled = !feedEditable;
         td.appendChild(sel);
     } else if (field === 'level') {
         td.classList.add('column-level');
@@ -3739,6 +3812,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         });
         const lv = String(merged.level || '').trim();
         sel.value = CLASS_REPORT_LEVEL_OPTIONS.includes(lv) ? lv : '';
+        sel.disabled = !feedEditable;
         td.appendChild(sel);
     } else if (field === 'unit') {
         td.classList.add('column-unit');
@@ -3757,9 +3831,18 @@ function appendClassReportFieldCell(tr, field, merged) {
         });
         const u = String(merged.unit || '').trim();
         sel.value = CLASS_REPORT_UNIT_OPTIONS.includes(u) ? u : '';
+        sel.disabled = !feedEditable;
         td.appendChild(sel);
     } else if (field === 'classTopic') {
         td.classList.add('column-topic');
+        if (!feedEditable) {
+            const text = document.createElement('span');
+            text.className = 'student-class-report-topic-readonly';
+            text.textContent = String(merged.classTopic || '').trim();
+            td.appendChild(text);
+            tr.appendChild(td);
+            return;
+        }
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'student-class-report-topic-btn';
@@ -3788,6 +3871,7 @@ function appendClassReportFieldCell(tr, field, merged) {
         input.className = 'student-class-report-input student-class-report-field';
         input.dataset.field = field;
         input.value = merged[field] ?? '';
+        input.readOnly = !feedEditable;
         td.appendChild(input);
     }
 
@@ -3795,6 +3879,10 @@ function appendClassReportFieldCell(tr, field, merged) {
 }
 
 function persistClassReportRowField(tr, el) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        return;
+    }
     const trEl = tr;
     const fieldEl = el;
     if (!trEl || trEl.dataset.rowIndex == null) return;
@@ -3854,6 +3942,10 @@ function getFirstNameLabel(fullName, fallback = '') {
 }
 
 function removeStudentClassReportUpload(studentName, uploadId) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot delete feed content.');
+        return;
+    }
     const key = String(studentName || '').trim();
     const feed = getStudentClassReportUploadFeed(key);
     const index = feed.findIndex((item) => item && item.id === uploadId);
@@ -3877,6 +3969,10 @@ function removeStudentClassReportUpload(studentName, uploadId) {
 }
 
 async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, file) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        return;
+    }
     const key = String(studentName || '').trim();
     if (!file) return;
     const feed = getStudentClassReportUploadFeed(key);
@@ -3897,6 +3993,10 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
 }
 
 function addQuestionToLatestStudentClassReportUpload(studentName) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        return;
+    }
     const key = String(studentName || '').trim();
     if (!key) return;
     const feed = getStudentClassReportUploadFeed(key);
@@ -3924,6 +4024,10 @@ function addQuestionToLatestStudentClassReportUpload(studentName) {
 }
 
 function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQuestionId) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        return;
+    }
     const key = String(studentName || '').trim();
     if (!key || !uploadId) return;
     const feed = getStudentClassReportUploadFeed(key);
@@ -4000,43 +4104,45 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
     name.textContent = upload.name || 'Uploaded file';
     const actions = document.createElement('div');
     actions.className = 'student-class-report-file-card-actions';
-    const relatedInput = document.createElement('input');
-    relatedInput.type = 'file';
-    relatedInput.accept = 'image/*,.pdf,audio/mpeg,.mp3';
-    relatedInput.hidden = true;
-    relatedInput.addEventListener('change', async () => {
-        const file = relatedInput.files && relatedInput.files[0] ? relatedInput.files[0] : null;
-        try {
-            await addRelatedFileToStudentClassReportUpload(studentName, upload.id, file);
-        } finally {
-            relatedInput.value = '';
-        }
-    });
-    const addRelatedBtn = document.createElement('button');
-    addRelatedBtn.type = 'button';
-    addRelatedBtn.className = 'student-class-report-file-add-btn';
-    addRelatedBtn.setAttribute('aria-label', `Add related file to ${upload.name || 'uploaded file'}`);
-    addRelatedBtn.title = 'Add related file';
-    addRelatedBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
-    addRelatedBtn.addEventListener('click', () => {
-        relatedInput.click();
-    });
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'student-class-report-file-delete-btn';
-    deleteBtn.setAttribute('aria-label', `Delete ${upload.name || 'uploaded file'}`);
-    deleteBtn.title = 'Delete file';
-    deleteBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
-    deleteBtn.addEventListener('click', () => {
-        removeStudentClassReportUpload(studentName, upload.id);
-    });
     meta.appendChild(name);
-    actions.appendChild(relatedInput);
-    actions.appendChild(addRelatedBtn);
-    actions.appendChild(deleteBtn);
-    meta.appendChild(actions);
+    if (canEditFeed()) {
+        const relatedInput = document.createElement('input');
+        relatedInput.type = 'file';
+        relatedInput.accept = 'image/*,.pdf,audio/mpeg,.mp3';
+        relatedInput.hidden = true;
+        relatedInput.addEventListener('change', async () => {
+            const file = relatedInput.files && relatedInput.files[0] ? relatedInput.files[0] : null;
+            try {
+                await addRelatedFileToStudentClassReportUpload(studentName, upload.id, file);
+            } finally {
+                relatedInput.value = '';
+            }
+        });
+        const addRelatedBtn = document.createElement('button');
+        addRelatedBtn.type = 'button';
+        addRelatedBtn.className = 'student-class-report-file-add-btn';
+        addRelatedBtn.setAttribute('aria-label', `Add related file to ${upload.name || 'uploaded file'}`);
+        addRelatedBtn.title = 'Add related file';
+        addRelatedBtn.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
+        addRelatedBtn.addEventListener('click', () => {
+            relatedInput.click();
+        });
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'student-class-report-file-delete-btn';
+        deleteBtn.setAttribute('aria-label', `Delete ${upload.name || 'uploaded file'}`);
+        deleteBtn.title = 'Delete file';
+        deleteBtn.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
+        deleteBtn.addEventListener('click', () => {
+            removeStudentClassReportUpload(studentName, upload.id);
+        });
+        actions.appendChild(relatedInput);
+        actions.appendChild(addRelatedBtn);
+        actions.appendChild(deleteBtn);
+        meta.appendChild(actions);
+    }
     card.appendChild(meta);
 
     appendStudentClassReportFileContent(card, upload);
@@ -4081,7 +4187,12 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
             input.className = 'student-class-report-question-input';
             input.placeholder = speaker === 'teacher' ? 'Write the question...' : 'Write the answer...';
             input.value = String(question.text || '');
+            input.readOnly = !canEditFeed();
             input.addEventListener('input', () => {
+                if (!canEditFeed()) {
+                    console.warn('Permission denied: students cannot edit feed content.');
+                    return;
+                }
                 question.text = input.value;
                 void saveStudentClassReportUploads();
             });
@@ -4096,6 +4207,7 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
             addLineBtn.addEventListener('click', () => {
                 addQuestionLineToStudentClassReportUpload(studentName, upload.id, question.id);
             });
+            addLineBtn.hidden = !canEditFeed();
 
             if (speaker === 'student') {
                 questionRow.appendChild(input);
@@ -4126,8 +4238,9 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
         feed.forEach((upload) => appendStudentClassReportUploadPreview(feedEl, upload, studentName));
         feedEl.hidden = feed.length === 0;
     }
-    if (uploadArea) uploadArea.hidden = feed.length > 0;
-    if (changeFileBtn) changeFileBtn.hidden = feed.length === 0;
+    const feedEditable = canEditFeed();
+    if (uploadArea) uploadArea.hidden = !feedEditable || feed.length > 0;
+    if (changeFileBtn) changeFileBtn.hidden = !feedEditable || feed.length === 0;
     panel.classList.toggle('student-class-report-panel--with-file', feed.length > 0);
 }
 
@@ -4153,6 +4266,7 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     const uploadArea = document.createElement('label');
     uploadArea.className = 'student-class-report-upload-area';
     uploadArea.setAttribute('for', 'studentClassReportUploadInput');
+    uploadArea.hidden = !canEditFeed();
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -4194,6 +4308,10 @@ function ensureStudentClassReportPanelShell(studentName = '') {
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7.5 8.5 4.5-4.5 4.5 4.5"></path><path d="M20 16v2.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5V16"></path></svg>';
     changeFileBtn.hidden = true;
     changeFileBtn.addEventListener('click', () => {
+        if (!canEditFeed()) {
+            console.warn('Permission denied: students cannot publish feed content.');
+            return;
+        }
         input.click();
     });
 
@@ -4208,11 +4326,21 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     addQuestionBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
     addQuestionBtn.addEventListener('click', () => {
+        if (!canEditFeed()) {
+            console.warn('Permission denied: students cannot edit feed content.');
+            return;
+        }
         const selectedStudent = String(panel.dataset.studentName || studentName || '').trim();
         addQuestionToLatestStudentClassReportUpload(selectedStudent);
     });
+    addQuestionBtn.hidden = !canEditFeed();
 
     input.addEventListener('change', async () => {
+        if (!canEditFeed()) {
+            console.warn('Permission denied: students cannot publish feed content.');
+            input.value = '';
+            return;
+        }
         const file = input.files && input.files[0] ? input.files[0] : null;
         selected.textContent = file ? file.name : 'No file selected';
         if (!file) return;
@@ -4303,16 +4431,18 @@ function renderStudentClassReportTable(studentName) {
 
         const tdAct = document.createElement('td');
         tdAct.classList.add('column-actions');
-        const rm = document.createElement('button');
-        rm.type = 'button';
-        rm.className = 'student-class-report-remove-row';
-        rm.textContent = '\u00D7';
-        rm.setAttribute('aria-label', 'Remove row');
-        rm.addEventListener('click', (e) => {
-            e.stopPropagation();
-            removeStudentClassReportRowAt(studentName, sourceIndex);
-        });
-        tdAct.appendChild(rm);
+        if (canEditFeed()) {
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'student-class-report-remove-row';
+            rm.textContent = '\u00D7';
+            rm.setAttribute('aria-label', 'Remove row');
+            rm.addEventListener('click', (e) => {
+                e.stopPropagation();
+                removeStudentClassReportRowAt(studentName, sourceIndex);
+            });
+            tdAct.appendChild(rm);
+        }
         tr.appendChild(tdAct);
 
         tbody.appendChild(tr);
@@ -4321,6 +4451,10 @@ function renderStudentClassReportTable(studentName) {
 }
 
 function removeStudentClassReportRowAt(studentName, index) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot delete feed content.');
+        return;
+    }
     const list = studentClassReportRows[studentName];
     if (!Array.isArray(list) || index < 0 || index >= list.length) return;
     list.splice(index, 1);
@@ -4426,6 +4560,10 @@ function updateClassTopicButtonFromText(btn, rawText) {
 }
 
 function openClassTopicEditor(studentName, rowIndex) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        return;
+    }
     if (!studentName || !isStudentName(studentName)) return;
     const list = studentClassReportRows[studentName];
     if (!Array.isArray(list) || !list[rowIndex]) return;
@@ -4460,6 +4598,11 @@ function closeClassTopicModal() {
 }
 
 function saveClassTopicFromModal() {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        closeClassTopicModal();
+        return;
+    }
     const ta = document.getElementById('classTopicTextarea');
     if (!classTopicEditContext || !ta) {
         closeClassTopicModal();
@@ -4526,6 +4669,7 @@ function setupStudentClassReportPanel() {
     const tbody = document.getElementById('studentClassReportBody');
     const addBtn = document.getElementById('addStudentClassReportRow');
     if (!tbody || !addBtn) return;
+    addBtn.hidden = !canEditFeed();
 
     if (!studentClassReportPanelSetup) {
         studentClassReportPanelSetup = true;
@@ -4547,6 +4691,10 @@ function setupStudentClassReportPanel() {
     if (addBtn.dataset.bound !== '1') {
         addBtn.dataset.bound = '1';
         addBtn.addEventListener('click', () => {
+            if (!canEditFeed()) {
+                console.warn('Permission denied: students cannot publish feed content.');
+                return;
+            }
             if (!currentTeacher || !isStudentName(currentTeacher)) return;
             if (!studentClassReportRows[currentTeacher]) {
                 studentClassReportRows[currentTeacher] = [];
@@ -4584,6 +4732,9 @@ function saveRoster() {
         studentPasswords: studentPasswordsByName,
         studentCities: studentCityByName,
         studentCountries: studentCountryByName,
+        studentBirthDates: studentBirthDatesByName,
+        studentAges: studentAgesByName,
+        studentLevels: studentLevelsByName,
         studentGoogleMeetLinks: studentGoogleMeetLinksByName,
         googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey,
         adminAccount: {
@@ -5213,11 +5364,14 @@ function performTeacherSessionLogout() {
     }
     renderSidebar();
     setLoggedOutDashboard();
+    window.location.href = 'test.html';
 }
 
 function renderSidebar() {
     const teacherList = document.getElementById('teacherList');
     if (!teacherList) return;
+    const sidebarMode = getSidebarRenderMode();
+    const isStudentSidebar = sidebarMode === 'student';
     const sidebarRoot = teacherList.closest('.sidebar');
     sidebarRoot?.classList.toggle('is-logged-in', !!isTeacherLoggedIn);
     sidebarRoot?.classList.toggle('is-student-session', !!loggedInStudentFullName);
@@ -5364,6 +5518,10 @@ function renderSidebar() {
     addTeacherBtn.setAttribute('aria-label', 'Add teacher profile');
     addTeacherBtn.innerHTML = SIDEBAR_ADD_TEACHER_SVG;
     addTeacherBtn.addEventListener('click', () => {
+        if (!canManageRoster()) {
+            denyStudentAction('Permission denied: students cannot add teacher profiles.');
+            return;
+        }
         window.openAddTeacherPopup?.();
     });
     bindSidebarCursorTooltip(addTeacherBtn, 'Add your Profile');
@@ -5412,6 +5570,10 @@ function renderSidebar() {
     addStudentEntryBtn.setAttribute('aria-label', 'Add student');
     addStudentEntryBtn.innerHTML = ADD_STUDENT_SVG;
     addStudentEntryBtn.addEventListener('click', () => {
+        if (!canManageRoster()) {
+            denyStudentAction('Permission denied: students cannot add student profiles.');
+            return;
+        }
         if (typeof window.openNewAddStudentModal === 'function') {
             window.openNewAddStudentModal();
             return;
@@ -5425,7 +5587,13 @@ function renderSidebar() {
     googleMeetBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--google-meet';
     googleMeetBtn.setAttribute('aria-label', 'Open Google Meet');
     googleMeetBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SVG;
-    googleMeetBtn.addEventListener('click', openGoogleMeetLinksLayer);
+    googleMeetBtn.addEventListener('click', () => {
+        if (!canEditFeed()) {
+            denyStudentAction('Permission denied: students cannot manage feed content.');
+            return;
+        }
+        openGoogleMeetLinksLayer();
+    });
     bindSidebarCursorTooltip(googleMeetBtn, 'Open Google Meet');
     const googleMeetSideBtn = document.createElement('button');
     googleMeetSideBtn.type = 'button';
@@ -5441,10 +5609,14 @@ function renderSidebar() {
     addStudentBtn.setAttribute('aria-label', 'Add school');
     addStudentBtn.innerHTML = SIDEBAR_ADD_SCHOOL_SVG;
     addStudentBtn.addEventListener('click', () => {
+        if (!canManageRoster()) {
+            denyStudentAction('Permission denied: students cannot add schools.');
+            return;
+        }
         window.openAddSchoolPopup?.();
     });
     bindSidebarCursorTooltip(addStudentBtn, 'Add a school');
-    if (loggedInStudentFullName) {
+    if (isStudentSidebar) {
         addTeacherBtn.hidden = true;
         googleMeetBtn.hidden = true;
         addStudentEntryBtn.hidden = true;
@@ -5491,6 +5663,11 @@ function renderSidebar() {
     });
     const classReportHeaderActions = document.createElement('div');
     classReportHeaderActions.className = 'sidebar-section-actions';
+    if (isStudentSidebar) {
+        googleMeetSideBtn.hidden = true;
+        classReportPromptBtn.hidden = true;
+        classReportDownloadBtn.hidden = true;
+    }
     classReportHeaderActions.appendChild(googleMeetBtn);
     classReportHeaderActions.appendChild(googleMeetSideBtn);
     classReportHeaderActions.appendChild(classReportPromptBtn);
@@ -6091,7 +6268,7 @@ function renderAdminOverviewPanel() {
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
                         <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
-                        <button class="admin-dashboard-item-remove">
+                        <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Teacher" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove teacher account">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
                                       <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -6133,12 +6310,22 @@ function renderAdminOverviewPanel() {
                       const email = String(studentEmailsByName[name] || '').trim();
                       const tutor = String(studentTeacherByName[name] || '').trim();
                       const rk = getStudentRosterKind(name) || 'private';
+                      const rawStudentPw = String(studentPasswordsByName[name] || '').trim();
+                      const studentPwHtml = formatStudentPasswordForAdminDisplay(rawStudentPw);
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         <span class="admin-dashboard-item-meta">School: ${escapeHtmlAttr(school)}</span>
                         <span class="admin-dashboard-item-meta">Profile / roster: ${escapeHtmlAttr(rk)}</span>
                         <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Password: ${studentPwHtml}</span>
                         <span class="admin-dashboard-item-meta">Assigned teacher: ${tutor ? escapeHtmlAttr(tutor) : '<em>None</em>'}</span>
+                        <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove student account">
+                            <div class="admin-dashboard-button-remove">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                      <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                        </button>
                       </div>`;
                   })
                   .join('');
@@ -6166,6 +6353,10 @@ function renderAdminOverviewPanel() {
 }
 
 async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw) {
+    if (!hasEffectiveAdminSession()) {
+        denyStudentAction('Permission denied: only admins can manage account credentials.');
+        return false;
+    }
     const email = String(emailRaw || '').trim();
     const password = String(passwordRaw || '').trim();
     if (role === 'Admin') {
@@ -6188,8 +6379,8 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
         return true;
     }
     if (!name) return false;
-    if (!email) {
-        showAppMessage('Email is required.');
+    if (role !== 'Student' && !email) {
+        showAppMessage('Teacher email is required.');
         return false;
     }
     if (password.length < 8) {
@@ -6200,27 +6391,29 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
         showAppMessage('Password must match @xxxnxnn (letters and numbers, case-insensitive).');
         return false;
     }
-    const emailLc = email.toLowerCase();
-    const allStudentNames = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
-    const emailConflictTeacher = teachersList.some((n) => {
-        if (role === 'Teacher' && n === name) return false;
-        return String(teacherEmailsByName[n] || '').trim().toLowerCase() === emailLc;
-    });
-    const emailConflictStudent = allStudentNames.some((n) => {
-        if (role === 'Student' && n === name) return false;
-        return String(studentEmailsByName[n] || '').trim().toLowerCase() === emailLc;
-    });
-    if (emailConflictTeacher || emailConflictStudent || emailLc === String(adminAccount.username || '').trim().toLowerCase()) {
-        showAppMessage('This email/username is already in use.');
-        return false;
+    if (email) {
+        const emailLc = email.toLowerCase();
+        const allStudentNames = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+        const emailConflictTeacher = teachersList.some((n) => {
+            if (role === 'Teacher' && n === name) return false;
+            return String(teacherEmailsByName[n] || '').trim().toLowerCase() === emailLc;
+        });
+        const emailConflictStudent = allStudentNames.some((n) => {
+            if (role === 'Student' && n === name) return false;
+            return String(studentEmailsByName[n] || '').trim().toLowerCase() === emailLc;
+        });
+        if (emailConflictTeacher || emailConflictStudent || emailLc === String(adminAccount.username || '').trim().toLowerCase()) {
+            showAppMessage('This email/username is already in use.');
+            return false;
+        }
     }
     if (role === 'Teacher') {
         teacherEmailsByName[name] = email;
         teacherPasswordsByName[name] = password;
     } else if (role === 'Student') {
-        const passwordHash = await hashStudentPassword(password);
-        studentEmailsByName[name] = email;
-        studentPasswordsByName[name] = passwordHash;
+        if (email) studentEmailsByName[name] = email;
+        else delete studentEmailsByName[name];
+        studentPasswordsByName[name] = password;
     }
     saveRoster();
     showAppMessage(`${role} credentials updated.`);
@@ -6228,6 +6421,10 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
 }
 
 function removeAccountFromAdmin(role, name) {
+    if (!hasEffectiveAdminSession()) {
+        denyStudentAction('Permission denied: only admins can remove account records.');
+        return;
+    }
     if (role === 'Admin') {
         showAppMessage('The admin account cannot be deleted.');
         return;
@@ -6252,6 +6449,7 @@ function removeAccountFromAdmin(role, name) {
         const school = getStudentSchoolName(name);
         const kind = rosterKindFromSchoolName(school);
         removeStudentFromRoster(name, kind);
+        showAppMessage('Student account removed.');
         return;
     }
     saveRoster();
@@ -6359,7 +6557,10 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
 }
 
 function removeSchoolFromSidebar(displayTitle) {
-    if (loggedInStudentFullName) return;
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot change school settings.');
+        return;
+    }
     const schoolTitle = String(displayTitle || '').trim();
     const schoolKey = schoolTitle.toLowerCase();
     if (!schoolTitle || !schoolKey) return;
@@ -6368,6 +6569,10 @@ function removeSchoolFromSidebar(displayTitle) {
 }
 
 function deleteSchoolFromSidebarConfirmed(displayTitle) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot delete schools.');
+        return;
+    }
     const schoolTitle = String(displayTitle || '').trim();
     const schoolKey = schoolTitle.toLowerCase();
     if (!schoolTitle || !schoolKey) return;
@@ -6430,6 +6635,10 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
 }
 
 function openDeleteSchoolModal(schoolTitle, studentCount = 0) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot delete schools.');
+        return;
+    }
     const modal = document.getElementById('deleteSchoolModal');
     const message = document.getElementById('deleteSchoolModalMessage');
     const warning = document.getElementById('deleteSchoolModalWarning');
@@ -6473,7 +6682,10 @@ function setupDeleteSchoolModal() {
 }
 
 function openSchoolSettingsModal(schoolTitle) {
-    if (loggedInStudentFullName) return;
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot change school settings.');
+        return;
+    }
     const modal = document.getElementById('schoolSettingsModal');
     const nameEl = document.getElementById('schoolSettingsModalSchoolName');
     const externalCheckbox = document.getElementById('schoolSettingsExternalCheckbox');
@@ -6520,6 +6732,10 @@ function closeSchoolSettingsModal() {
 }
 
 function saveSchoolSettingsFromModal() {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot change school settings.');
+        return;
+    }
     const schoolTitle = String(pendingSchoolSettingsTitle || '').trim();
     const schoolNameInput = document.getElementById('schoolSettingsModalSchoolName');
     const nextSchoolTitle = String(schoolNameInput?.value || '').trim();
@@ -7060,6 +7276,10 @@ function resyncSelectionAfterSidebarRender() {
 }
 
 function removeStudentFromRoster(name, rosterKey) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot delete student profiles.');
+        return;
+    }
     const kind = String(rosterKey || '').trim();
     const list = kind === 'private'
         ? privateStudentsList
@@ -7300,6 +7520,9 @@ function saveStudentAccountExtras(studentName, extras) {
     const password = String(extras?.password || '').trim();
     const city = String(extras?.city || '').trim();
     const country = String(extras?.country || '').trim();
+    const birthDate = String(extras?.birthDate || '').trim();
+    const age = String(extras?.age || '').trim();
+    const level = String(extras?.level || '').trim();
     if (email) studentEmailsByName[name] = email;
     else delete studentEmailsByName[name];
     if (username) studentUsernamesByName[name] = username;
@@ -7310,6 +7533,13 @@ function saveStudentAccountExtras(studentName, extras) {
     else delete studentCityByName[name];
     if (country) studentCountryByName[name] = country;
     else delete studentCountryByName[name];
+    // Birth and age use one canonical key pair so save, edit, and reload stay aligned.
+    if (birthDate) studentBirthDatesByName[name] = birthDate;
+    else delete studentBirthDatesByName[name];
+    if (age) studentAgesByName[name] = age;
+    else delete studentAgesByName[name];
+    if (level) studentLevelsByName[name] = level;
+    else delete studentLevelsByName[name];
 }
 
 function buildStudentWhatsappUrl(studentName, message = '') {
@@ -7422,8 +7652,8 @@ function refreshEditStudentSchoolSelect(selectedSchool = '') {
 }
 
 function openEditStudentModal(studentName, rosterKey) {
-    if (loggedInStudentFullName) {
-        showAppMessage('Student sessions cannot edit profiles.');
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot edit student profiles.');
         return;
     }
     const modal = document.getElementById('editStudentModal');
@@ -7437,6 +7667,7 @@ function openEditStudentModal(studentName, rosterKey) {
     const emailInput = document.getElementById('editStudentEmail');
     const birthDateInput = document.getElementById('editStudentBirthDate');
     const ageInput = document.getElementById('editStudentAge');
+    const levelInput = document.getElementById('editStudentLevel');
     const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
     const passportLinkInput = document.getElementById('editStudentPassportLink');
@@ -7462,9 +7693,10 @@ function openEditStudentModal(studentName, rosterKey) {
         countryInput.dataset.phoneDialIsoForCountry = String(phoneCountrySelect.value || '').trim().toUpperCase();
     }
     if (emailInput) emailInput.value = String(studentEmailsByName[studentName] || '');
-    if (birthDateInput) birthDateInput.value = '';
-    if (ageInput) ageInput.value = '';
+    if (birthDateInput) birthDateInput.value = String(studentBirthDatesByName[studentName] || '');
+    if (ageInput) ageInput.value = String(studentAgesByName[studentName] || '');
     syncEditStudentAgeFromBirthDate();
+    if (levelInput) levelInput.value = String(studentLevelsByName[studentName] || '');
     if (usernameInput) usernameInput.value = String(studentUsernamesByName[studentName] || buildDefaultStudentUsernameFromFullName(studentName));
     if (passwordInput) passwordInput.value = '';
     if (passportLinkInput) passportLinkInput.value = String(passportFollowupLinks[studentName] || '');
@@ -7513,6 +7745,10 @@ function refreshClassReportAfterMeetLinkChange() {
 }
 
 async function upsertStudentFromEditForm(action = 'save') {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot edit student profiles.');
+        return;
+    }
     const originalName = document.getElementById('editStudentOriginalName')?.value || '';
     const originalKind = document.getElementById('editStudentOriginalCategory')?.value || '';
     const first = document.getElementById('editStudentFirst')?.value || '';
@@ -7531,6 +7767,9 @@ async function upsertStudentFromEditForm(action = 'save') {
     const birthDateValue = String(document.getElementById('editStudentBirthDate')?.value || '').trim();
     const ageRaw = String(document.getElementById('editStudentAge')?.value || '').trim();
     const levelValue = String(document.getElementById('editStudentLevel')?.value || '').trim();
+    // Ensure calculated age is current before validation and save.
+    syncEditStudentAgeFromBirthDate();
+    const calculatedAgeRaw = String(document.getElementById('editStudentAge')?.value || ageRaw).trim();
 
     if (!originalName || !originalKind) {
         return;
@@ -7557,7 +7796,7 @@ async function upsertStudentFromEditForm(action = 'save') {
         return;
     }
     if (birthDateValue) {
-        const numericAge = ageRaw === '60+' ? 61 : Number(ageRaw);
+        const numericAge = calculatedAgeRaw === '60+' ? 61 : Number(calculatedAgeRaw);
         if (!Number.isFinite(numericAge) || numericAge < 18) {
             alert('Student age must be 18 or older.');
             document.getElementById('editStudentBirthDate')?.focus();
@@ -7672,6 +7911,18 @@ async function upsertStudentFromEditForm(action = 'save') {
             studentCountryByName[fullName] = studentCountryByName[originalName];
             delete studentCountryByName[originalName];
         }
+        if (Object.prototype.hasOwnProperty.call(studentBirthDatesByName, originalName)) {
+            studentBirthDatesByName[fullName] = studentBirthDatesByName[originalName];
+            delete studentBirthDatesByName[originalName];
+        }
+        if (Object.prototype.hasOwnProperty.call(studentAgesByName, originalName)) {
+            studentAgesByName[fullName] = studentAgesByName[originalName];
+            delete studentAgesByName[originalName];
+        }
+        if (Object.prototype.hasOwnProperty.call(studentLevelsByName, originalName)) {
+            studentLevelsByName[fullName] = studentLevelsByName[originalName];
+            delete studentLevelsByName[originalName];
+        }
     } else if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
@@ -7688,17 +7939,30 @@ async function upsertStudentFromEditForm(action = 'save') {
         studentPasswordsByName[fullName]
         || studentPasswordsByName[originalName]
         || '';
-    let nextPasswordHash = existingPasswordHash;
+    let nextPasswordStored = existingPasswordHash;
     if (nextPasswordRaw) {
-        nextPasswordHash = await hashStudentPassword(nextPasswordRaw);
+        nextPasswordStored = String(nextPasswordRaw || '').trim();
     }
-    saveStudentAccountExtras(fullName, { email, username, password: nextPasswordHash, city, country });
+    const ageValue = String(document.getElementById('editStudentAge')?.value || calculatedAgeRaw).trim();
+    saveStudentAccountExtras(fullName, {
+        email,
+        username,
+        password: nextPasswordStored,
+        city,
+        country,
+        birthDate: birthDateValue,
+        age: ageValue,
+        level: levelValue
+    });
     if (originalName !== fullName) {
         delete studentEmailsByName[originalName];
         delete studentUsernamesByName[originalName];
         delete studentPasswordsByName[originalName];
         delete studentCityByName[originalName];
         delete studentCountryByName[originalName];
+        delete studentBirthDatesByName[originalName];
+        delete studentAgesByName[originalName];
+        delete studentLevelsByName[originalName];
     }
     if (nextKind === 'passport' && passportLink) {
         passportFollowupLinks[fullName] = passportLink;
@@ -7870,6 +8134,10 @@ function setupEditStudentModal() {
 }
 
 function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, billingModelRaw) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot add schools.');
+        return;
+    }
     const schoolName = String(schoolNameRaw || '').trim();
     if (!schoolName) {
         alert("Please enter the school's name.");
@@ -7941,6 +8209,10 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, bi
 }
 
 function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot add teacher profiles.');
+        return;
+    }
     const first = String(firstName || '').trim();
     const last = String(lastName || '').trim();
     const email = String(emailRaw || '').trim();
@@ -8019,6 +8291,10 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
 }
 
 async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot add student profiles.');
+        return;
+    }
     const first = String(firstName || '').trim();
     const last = String(lastName || '').trim();
     const schoolName = String(schoolNameRaw || '').trim();
@@ -8118,8 +8394,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
     const addTeacherSelect = document.getElementById('addStudentMentor');
     saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
-    const passwordHash = await hashStudentPassword(password);
-    saveStudentAccountExtras(fullName, { email, username, password: passwordHash, city, country });
+    saveStudentAccountExtras(fullName, { email, username, password, city, country });
     const schoolKey = schoolName.trim().toLowerCase();
     if (schoolKey) {
         const primaryEl = document.getElementById('addSchoolPrimaryColor');
@@ -8144,6 +8419,86 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     selectTeacher(fullName, { view: 'classReport' });
     closeAddStudentModal();
 }
+
+async function createStudentFromModernModal(studentData) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot create student profiles.');
+        return false;
+    }
+    const first = String(studentData?.firstName || '').trim();
+    const last = String(studentData?.lastName || '').trim();
+    const schoolName = String(studentData?.school || '').trim();
+    const level = String(studentData?.level || '').trim();
+    const birthDate = String(studentData?.birthDate || '').trim();
+    const age = String(studentData?.age || '').trim();
+    if (!first || !last) {
+        showAppMessage('Please enter First name and Last name.');
+        return false;
+    }
+    if (!schoolName) {
+        showAppMessage("Please select the school's name.");
+        return false;
+    }
+    if (!level) {
+        showAppMessage('Please select the student level.');
+        return false;
+    }
+    const fullName = `${first} ${last}`.replace(/\s+/g, ' ').trim();
+    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
+        (n) => n.trim().toLowerCase() === fullName.toLowerCase()
+    );
+    if (nameTaken) {
+        showAppMessage('That name is already in the list.');
+        return false;
+    }
+    const username = String(studentData?.username || buildDefaultStudentUsername(first, last)).trim();
+    const password = String(studentData?.password || '').trim();
+    if (!username) {
+        showAppMessage('Student username is required for account login.');
+        return false;
+    }
+    if (!password) {
+        showAppMessage('Student password is required for account login.');
+        return false;
+    }
+    const usernameLc = username.toLowerCase();
+    const studentUsernameTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        return String(studentUsernamesByName[name] || '').trim().toLowerCase() === usernameLc;
+    });
+    if (studentUsernameTaken || usernameLc === String(adminAccount.username || '').trim().toLowerCase()) {
+        showAppMessage('This student username is already in use.');
+        return false;
+    }
+
+    const rosterKey = rosterKindFromSchoolName(schoolName);
+    const roster = rosterKey === 'passport'
+        ? passportStudentsList
+        : (rosterKey === 'speakon' ? speakonStudentsList : privateStudentsList);
+    roster.push(fullName);
+    roster.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    studentSchoolByName[fullName] = schoolName;
+
+    const phoneIso = String(studentData?.phoneCountry?.flag || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+    saveStudentPhoneInfo(fullName, phoneIso, studentData?.phoneNumber || '');
+    saveStudentAccountExtras(fullName, {
+        username,
+        password,
+        birthDate,
+        age,
+        level
+    });
+    if (!teacherSchedules[fullName]) {
+        teacherSchedules[fullName] = {};
+    }
+    saveRoster();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+    renderSidebar();
+    selectTeacher(fullName, { view: 'classReport' });
+    return true;
+}
+
+window.createStudentFromModernModal = createStudentFromModernModal;
 
 function populateAddStudentPhoneCountrySelect() {
     ensurePhoneResidenceCountryDatalist();
@@ -8630,6 +8985,10 @@ function updateAddStudentPassportFieldVisibility() {
 }
 
 function openAddStudentModal(mode = 'school') {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot manage roster records.');
+        return;
+    }
     ensureAddPopupProvidersRendered();
     populateAddStudentPhoneCountrySelect();
     const modal = document.getElementById('addModal');
@@ -8768,10 +9127,18 @@ function openAddStudentModal(mode = 'school') {
 }
 
 window.requestAddPopupMode = (mode) => {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot manage roster records.');
+        return;
+    }
     openAddStudentModal(mode);
 };
 
 function openAddStudentModalForSchool(schoolTitle) {
+    if (!canManageRoster()) {
+        denyStudentAction('Permission denied: students cannot add student profiles.');
+        return;
+    }
     const school = String(schoolTitle || '').trim();
     if (!school) return;
     addStudentTargetSchool = school;
@@ -8955,6 +9322,10 @@ function positionGoogleMeetStudentLinkPopover(anchorRef) {
 }
 
 function openGoogleMeetStudentLinkPopover(studentName, anchorRef) {
+    if (!canEditFeed()) {
+        denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+        return;
+    }
     closeGoogleMeetStudentLinkPopover();
     const pop = document.getElementById('googleMeetStudentLinkPopover');
     const sub = document.getElementById('googleMeetStudentLinkPopoverStudentName');
@@ -9264,6 +9635,10 @@ function closeGoogleMeetSchoolAccordion() {
 }
 
 function openGoogleMeetModal() {
+    if (!canEditFeed()) {
+        denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+        return;
+    }
     const modal = document.getElementById('googleMeetModal');
     const schoolToggle = document.getElementById('googleMeetSchoolToggle');
     if (!modal || !schoolToggle) {
@@ -9280,6 +9655,10 @@ function openGoogleMeetModal() {
 }
 
 function openGoogleMeetLinksLayer() {
+    if (!canEditFeed()) {
+        denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+        return;
+    }
     const layer = document.getElementById('googleMeetLinksLayer');
     if (!layer) return;
     updateGoogleMeetLinksPopupStats();
@@ -9382,6 +9761,10 @@ function getGoogleMeetLinkForStudent(studentName) {
 }
 
 function removeGoogleMeetLinkForStudent(studentName) {
+    if (!canEditFeed()) {
+        denyStudentAction('Permission denied: students cannot remove Google Meet links.');
+        return;
+    }
     const target = String(studentName || '').trim().toLowerCase();
     if (!target) return;
     delete studentGoogleMeetLinksByName[studentName];
@@ -9486,6 +9869,10 @@ function positionGoogleMeetAddLinkDialog(dialog, x, y) {
 }
 
 function openGoogleMeetAddLinkDialog(event, studentId, anchorButton, initialLink = '') {
+    if (!canEditFeed()) {
+        denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+        return;
+    }
     const dialog = ensureGoogleMeetAddLinkDialog();
     const input = dialog.querySelector('.meet-links-add-dialog-input');
     if (!input) return;
@@ -9552,6 +9939,10 @@ function setAllVisibleMeetLinksRowsSelected(checked) {
 }
 
 function removeGoogleMeetLinksForSelectedStudents() {
+    if (!canEditFeed()) {
+        denyStudentAction('Permission denied: students cannot remove Google Meet links.');
+        return 0;
+    }
     const selectedIds = getSelectedGoogleMeetStudentIds();
     if (selectedIds.length === 0) return 0;
     let removed = 0;
@@ -9661,6 +10052,12 @@ function renderGoogleMeetLinksStudentsRows() {
         if (nameEl) nameEl.textContent = studentName;
         const rowCheckbox = row.querySelector('.meet-links-checkbox');
         rowCheckbox?.addEventListener('change', () => syncMeetLinksSelectAllCheckbox());
+        const actionCell = row.querySelector('.meet-links-cell--actions');
+        const checkboxCell = row.querySelector('.meet-links-cell--check');
+        if (!canEditFeed()) {
+            actionCell?.remove();
+            checkboxCell?.remove();
+        }
         listBody.appendChild(row);
     });
     syncMeetLinksSelectAllCheckbox();
@@ -9713,6 +10110,10 @@ function setupGoogleMeetModal() {
             setAllVisibleMeetLinksRowsSelected(meetLinksSelectAll.checked);
         });
         meetLinksRemoveSelected?.addEventListener('click', () => {
+            if (!canEditFeed()) {
+                denyStudentAction('Permission denied: students cannot remove Google Meet links.');
+                return;
+            }
             const selectedCount = getSelectedGoogleMeetStudentIds().length;
             if (selectedCount === 0) return;
             const ok = window.confirm(`Remove Google Meet link from ${selectedCount} selected student(s)?`);
@@ -9738,6 +10139,10 @@ function setupGoogleMeetModal() {
             if (!(target instanceof Element)) return;
             const addLinkBtn = target.closest('.meet-links-add-link-btn');
             if (addLinkBtn) {
+                if (!canEditFeed()) {
+                    denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const studentId = String(addLinkBtn.getAttribute('data-student-id') || '').trim();
@@ -9747,6 +10152,10 @@ function setupGoogleMeetModal() {
             }
             const editBtn = target.closest('.meet-links-icon-btn--edit');
             if (editBtn) {
+                if (!canEditFeed()) {
+                    denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const studentId = String(
@@ -9762,6 +10171,10 @@ function setupGoogleMeetModal() {
             }
             const deleteBtn = target.closest('.meet-links-icon-btn--delete');
             if (deleteBtn) {
+                if (!canEditFeed()) {
+                    denyStudentAction('Permission denied: students cannot remove Google Meet links.');
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const studentId = String(
@@ -9808,6 +10221,10 @@ function setupGoogleMeetModal() {
         });
         addDialogSave?.addEventListener('click', (e) => {
             e.preventDefault();
+            if (!canEditFeed()) {
+                denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+                return;
+            }
             const studentId = String(googleMeetLinksAddDialogStudentId || '').trim();
             const studentName = getGoogleMeetStudentNameFromId(studentId);
             if (!studentId || !studentName) {
@@ -9863,6 +10280,11 @@ function setupGoogleMeetModal() {
         }
     });
     sharedSchoolCheckbox?.addEventListener('change', () => {
+        if (!canEditFeed()) {
+            sharedSchoolCheckbox.checked = !sharedSchoolCheckbox.checked;
+            denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+            return;
+        }
         googleMeetUseSharedSchoolLink = !!sharedSchoolCheckbox.checked;
         const schoolKey = getGoogleMeetSchoolKey(googleMeetSelectedSchool);
         if (schoolKey) {
@@ -9877,6 +10299,10 @@ function setupGoogleMeetModal() {
         }
     });
     sharedSchoolSave?.addEventListener('click', () => {
+        if (!canEditFeed()) {
+            denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+            return;
+        }
         const school = String(googleMeetSelectedSchool || '').trim();
         if (!school) return;
         const raw = String(sharedSchoolInput?.value || '').trim();
@@ -9946,6 +10372,10 @@ function setupGoogleMeetModal() {
     });
     linkSave?.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (!canEditFeed()) {
+            denyStudentAction('Permission denied: students cannot manage Google Meet links.');
+            return;
+        }
         const student = String(googleMeetLinkPopoverStudent || '').trim();
         if (!student) return;
         const raw = String(linkInput?.value || '').trim();
@@ -9980,6 +10410,10 @@ function setupGoogleMeetModal() {
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
+        if (!canEditFeed()) {
+            denyStudentAction('Permission denied: students cannot start or manage Google Meet sessions.');
+            return;
+        }
         const schoolName = String(googleMeetSelectedSchool || '').trim();
         if (!schoolName) {
             showAppMessage("Please select the school's name.");
@@ -10187,6 +10621,10 @@ function setupAddStudentModal() {
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!canManageRoster()) {
+            denyStudentAction('Permission denied: students cannot manage roster records.');
+            return;
+        }
         if (addModalMode === 'teacher') {
             const teacherValidityEls = [
                 document.getElementById('addTeacherFirst'),
@@ -11772,7 +12210,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupAdminControlPanel();
         document.getElementById('adminPageLogoff')?.addEventListener('click', () => {
             performTeacherSessionLogout();
-            window.location.href = 'test.html';
         });
         return;
     }

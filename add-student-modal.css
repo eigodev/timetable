@@ -24,7 +24,7 @@
 
     height: 591px;
     width: 812px;
-    padding: 20px;
+    padding: 50px;
 
     overflow: auto;
     background: #ffffff;
@@ -176,6 +176,10 @@
 .student-modal-card .input-with-icon input,
 .student-modal-card .select-with-icon select {
     padding: 0 12px 0 38px;
+}
+
+.student-modal-card select#school {
+    padding: 0 0 0 35px;
 }
 
 .student-modal-card select {
@@ -540,10 +544,13 @@
     height: 100%;
 }
 
+#school {
+    padding: 0px 0px 0px 35px;
+}
+
 @media (max-width: 800px) {
     .student-modal-card {
-        padding: 14px;
-        padding-bottom: 14px;
+        padding: 50px;
     }
 
     .student-form-grid {

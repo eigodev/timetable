@@ -114,6 +114,10 @@
     }
 
     function openAddStudentPopup() {
+        if (window.TimeTablePermissions && !window.TimeTablePermissions.canManageRoster?.()) {
+            console.warn('Permission denied: students cannot add student profiles.');
+            return;
+        }
         if (typeof window.requestAddPopupMode === 'function') {
             window.requestAddPopupMode('student-global');
         }

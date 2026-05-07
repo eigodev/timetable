@@ -256,6 +256,10 @@
     }
 
     function openAddSchoolPopup() {
+        if (window.TimeTablePermissions && !window.TimeTablePermissions.canManageRoster?.()) {
+            console.warn('Permission denied: students cannot add schools.');
+            return;
+        }
         if (typeof window.requestAddPopupMode === 'function') {
             window.requestAddPopupMode('school');
         }

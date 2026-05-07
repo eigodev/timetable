@@ -208,6 +208,10 @@
     }
 
     function openAddTeacherPopup() {
+        if (window.TimeTablePermissions && !window.TimeTablePermissions.canManageRoster?.()) {
+            console.warn('Permission denied: students cannot add teacher profiles.');
+            return;
+        }
         if (typeof window.requestAddPopupMode === 'function') {
             window.requestAddPopupMode('teacher');
         }

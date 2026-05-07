@@ -84,6 +84,10 @@
     }
 
     function openModal() {
+        if (window.TimeTablePermissions && !window.TimeTablePermissions.canManageRoster?.()) {
+            console.warn('Permission denied: students cannot add student profiles.');
+            return;
+        }
         const legacyAddModal = document.getElementById('addModal');
         if (legacyAddModal?.classList.contains('is-open')) {
             legacyAddModal.classList.remove('is-open', 'is-closing');
@@ -279,12 +283,6 @@
             hasError = true;
         }
 
-        if (!phoneDigits) {
-            fields.phoneNumber.setAttribute('aria-invalid', 'true');
-            validationErrors.push('Phone number is required.');
-            hasError = true;
-        }
-
         if (phoneDigits && phoneDigits.length < 10) {
             fields.phoneNumber.setAttribute('aria-invalid', 'true');
             validationErrors.push('Enter a valid phone number.');
@@ -414,7 +412,7 @@
     fields.level.addEventListener('change', () => fields.level.removeAttribute('aria-invalid'));
     fields.birthDate?.addEventListener('input', syncAgeFromBirthDate);
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!validateForm()) return;
 
@@ -422,9 +420,15 @@
             fields.password.value = generateStudentPassword();
         }
         syncUsernameFromNameFields();
+        syncAgeFromBirthDate();
 
         const studentData = getStudentPayload();
-        console.log('Student created:', studentData);
+        if (typeof window.createStudentFromModernModal === 'function') {
+            const saved = await window.createStudentFromModernModal(studentData);
+            if (!saved) return;
+        } else {
+            console.log('Student created:', studentData);
+        }
 
         if (!studentData.addAnotherAfterSaving) {
             closeModal();
