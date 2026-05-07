@@ -6565,14 +6565,21 @@ tr td.add-teacher-availability-table-day {
     gap: 0;
 }
 
-.student-class-report-panel--with-file .student-class-report-upload-area {
+.student-class-report-panel--with-file .student-class-report-upload-wrap {
     display: none;
+}
+
+.student-class-report-upload-wrap {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    box-sizing: border-box;
 }
 
 .student-class-report-upload-area {
     width: min(520px, 100%);
     min-height: 260px;
-    margin: auto;
+    margin: 0 auto;
     border: 2px dashed #c9d3e8;
     border-radius: 24px;
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
@@ -6590,11 +6597,12 @@ tr td.add-teacher-availability-table-day {
 }
 
 .student-class-report-upload-area:hover,
-.student-class-report-upload-area:focus-within {
+.student-class-report-upload-area:focus-visible {
     border-color: #334461;
     background: #f4f7ff;
     box-shadow: 0 14px 34px rgba(51, 68, 97, 0.12);
     transform: translateY(-1px);
+    outline: none;
 }
 
 .student-class-report-upload-icon {
@@ -6627,13 +6635,35 @@ tr td.add-teacher-availability-table-day {
 }
 
 .student-class-report-upload-action {
+    width: 100%;
+    max-width: min(288px, 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
     margin-top: 8px;
-    padding: 9px 16px;
-    border-radius: 999px;
+    border: 1px solid #334461;
+    border-radius: 12px;
     background: #334461;
     color: #ffffff;
-    font-size: 0.88rem;
-    font-weight: 700;
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.25;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(51, 68, 97, 0.12);
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.student-class-report-upload-area:focus {
+    outline: none;
+}
+
+.student-class-report-upload-action:hover {
+    background: #25334d;
+    border-color: #25334d;
+    box-shadow: 0 4px 14px rgba(51, 68, 97, 0.22);
 }
 
 .student-class-report-upload-selected {

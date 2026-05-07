@@ -1400,11 +1400,16 @@ function buildDefaultStudentUsernameFromFullName(studentFullName) {
 }
 
 function findStudentNameByLoginUsername(usernameRaw) {
-    const username = String(usernameRaw || '').trim().toLowerCase();
-    if (!username) return '';
+    const trimmed = String(usernameRaw || '').trim();
+    if (!trimmed) return '';
+    const key = normalizeUsername(trimmed);
+    const lc = trimmed.toLowerCase();
     return (
         [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].find((name) => {
-            return String(studentUsernamesByName[name] || '').trim().toLowerCase() === username;
+            const stored = String(studentUsernamesByName[name] || '').trim();
+            if (!stored) return false;
+            if (stored.toLowerCase() === lc) return true;
+            return key && normalizeUsername(stored) === key;
         }) || ''
     );
 }
@@ -1454,15 +1459,25 @@ async function hashStudentPassword(rawPassword) {
     return `${STUDENT_PASSWORD_HASH_PREFIX}${digestHex}`;
 }
 
+function sanitizeTypedLoginPassword(raw) {
+    return String(raw || '')
+        .replace(/\u200b|\uFEFF|\u2060/g, '')
+        .trim();
+}
+
 async function verifyStudentPassword(storedPasswordRaw, passwordRaw) {
     const stored = String(storedPasswordRaw || '').trim();
-    const input = String(passwordRaw || '');
+    const input = sanitizeTypedLoginPassword(passwordRaw);
     if (!stored || !input) return false;
     if (isStudentPasswordHashed(stored)) {
         const hashed = await hashStudentPassword(input);
         return hashed === stored;
     }
-    // Legacy plain-text student passwords from older versions.
+    // Plate-style passwords (@xxxNxNN) are validated case-insensitive when generating; match that here.
+    const plateRx = /^@[a-z]{3}\d[a-z]\d{2}$/i;
+    if (plateRx.test(stored) && plateRx.test(input)) {
+        return stored.toLowerCase() === input.toLowerCase();
+    }
     return input === stored;
 }
 
@@ -1534,7 +1549,7 @@ async function ensureAdminAccountReady() {
 
 async function verifyAdminLogin(usernameRaw, passwordRaw) {
     const username = String(usernameRaw || '').trim();
-    const password = String(passwordRaw || '');
+    const password = sanitizeTypedLoginPassword(passwordRaw);
     if (!username || !password) return { ok: false, error: '' };
     const expectedUsername = String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim();
     if (!expectedUsername || username.toLowerCase() !== expectedUsername.toLowerCase()) {
@@ -1551,7 +1566,7 @@ async function verifyAdminLogin(usernameRaw, passwordRaw) {
  */
 async function verifyStudentLogin(usernameRaw, passwordRaw) {
     const username = String(usernameRaw || '').trim();
-    const password = String(passwordRaw || '');
+    const password = sanitizeTypedLoginPassword(passwordRaw);
     if (!username) {
         return { ok: false, error: 'Student username or email is required to log in.' };
     }
@@ -1595,7 +1610,7 @@ async function tryRestoreSessionFromSavedCredentials() {
     if (!saved) return null;
     const rawEmail = String(saved.email || '').trim();
     const emailLc = rawEmail.toLowerCase();
-    const password = String(saved.password || '').trim();
+    const password = sanitizeTypedLoginPassword(saved.password);
     if (!rawEmail || !password) return null;
 
     const adminLogin = await verifyAdminLogin(rawEmail, password);
@@ -4044,6 +4059,66 @@ function readFileAsDataUrl(file) {
     });
 }
 
+function isTextEditingElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.closest && el.closest('[contenteditable="true"]')) return true;
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    if (tag === 'TEXTAREA') return true;
+    if (tag === 'INPUT') {
+        const type = String(el.type || '').toLowerCase();
+        if (type === 'checkbox' || type === 'radio' || type === 'file' || type === 'button' || type === 'submit' || type === 'reset') {
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+function pickFirstUsableFileFromClipboardData(clipboardData) {
+    if (!clipboardData || !clipboardData.items || !clipboardData.items.length) return null;
+    for (let i = 0; i < clipboardData.items.length; i++) {
+        const item = clipboardData.items[i];
+        if (item.kind !== 'file') continue;
+        const f = item.getAsFile();
+        if (f && f.size > 0) return f;
+    }
+    return null;
+}
+
+function classReportUploadAcceptsMimeOrName(file) {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    return (
+        type.startsWith('image/')
+        || type === 'application/pdf'
+        || name.endsWith('.pdf')
+        || type === 'audio/mpeg'
+        || name.endsWith('.mp3')
+    );
+}
+
+async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
+    const key = String(studentNameKey || '').trim();
+    if (!panel || !key || !file || !classReportUploadAcceptsMimeOrName(file)) return false;
+    const feed = getStudentClassReportUploadFeed(key);
+    const dataUrl = await readFileAsDataUrl(file);
+    feed.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name || 'Uploaded file',
+        type: String(file.type || '').toLowerCase(),
+        dataUrl,
+        questions: [],
+        relatedFiles: []
+    });
+    await saveStudentClassReportUploads();
+    const browseInput = panel.querySelector('#studentClassReportUploadInput');
+    if (browseInput) browseInput.value = '';
+    renderStudentClassReportUploadFeed(panel, key);
+    return true;
+}
+
 function getFirstNameLabel(fullName, fallback = '') {
     const firstName = String(fullName || '').trim().split(/\s+/)[0] || String(fallback || '').trim();
     return firstName || 'Name';
@@ -4253,6 +4328,17 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
     }
     card.appendChild(meta);
 
+    if (canEditFeed()) {
+        card.addEventListener('paste', async (e) => {
+            const target = e.target;
+            if (target && card.contains(target) && isTextEditingElement(target)) return;
+            const file = pickFirstUsableFileFromClipboardData(e.clipboardData);
+            if (!file || !classReportUploadAcceptsMimeOrName(file)) return;
+            e.preventDefault();
+            await addRelatedFileToStudentClassReportUpload(studentName, upload.id, file);
+        });
+    }
+
     appendStudentClassReportFileContent(card, upload);
 
     const relatedFiles = [
@@ -4336,7 +4422,8 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
 
 function renderStudentClassReportUploadFeed(panel, studentName) {
     if (!panel) return;
-    const uploadArea = panel.querySelector('.student-class-report-upload-area');
+    const uploadWrap = panel.querySelector('.student-class-report-upload-wrap');
+    const uploadTrigger = panel.querySelector('.student-class-report-upload-area');
     const changeFileBtn = panel.querySelector('.student-class-report-change-file-btn');
     const feedEl = panel.querySelector('.student-class-report-file-preview');
     const feed = getStudentClassReportUploadFeed(studentName);
@@ -4347,7 +4434,8 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
         feedEl.hidden = feed.length === 0;
     }
     const feedEditable = canEditFeed();
-    if (uploadArea) uploadArea.hidden = !feedEditable || feed.length > 0;
+    if (uploadWrap) uploadWrap.hidden = !feedEditable || feed.length > 0;
+    if (uploadTrigger) uploadTrigger.tabIndex = uploadWrap && !uploadWrap.hidden ? 0 : -1;
     if (changeFileBtn) changeFileBtn.hidden = !feedEditable || feed.length === 0;
     panel.classList.toggle('student-class-report-panel--with-file', feed.length > 0);
 }
@@ -4371,10 +4459,14 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     panel.textContent = '';
     panel.dataset.studentName = String(studentName || '').trim();
 
-    const uploadArea = document.createElement('label');
-    uploadArea.className = 'student-class-report-upload-area';
-    uploadArea.setAttribute('for', 'studentClassReportUploadInput');
-    uploadArea.hidden = !canEditFeed();
+    const uploadWrap = document.createElement('div');
+    uploadWrap.className = 'student-class-report-upload-wrap';
+    uploadWrap.hidden = !canEditFeed();
+
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type = 'button';
+    uploadBtn.className = 'student-class-report-upload-area';
+    uploadBtn.setAttribute('aria-label', 'Add file');
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -4384,6 +4476,7 @@ function ensureStudentClassReportPanelShell(studentName = '') {
 
     const icon = document.createElement('span');
     icon.className = 'student-class-report-upload-icon';
+    icon.setAttribute('aria-hidden', 'true');
     icon.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 16.2a4.2 4.2 0 0 0-1.1-8.26 5.6 5.6 0 0 0-10.78 1.7A3.7 3.7 0 0 0 8 17h12Z"></path><path d="M12 17V9"></path><path d="m8.5 12.5 3.5-3.5 3.5 3.5"></path></svg>';
 
@@ -4393,11 +4486,13 @@ function ensureStudentClassReportPanelShell(studentName = '') {
 
     const hint = document.createElement('span');
     hint.className = 'student-class-report-upload-hint';
-    hint.textContent = 'Start with a screenshot, image, or PDF.';
+    hint.textContent =
+        'Use the button below: paste what is on the clipboard (Print Screen, Snipping Tool, or pick in Windows+V first), or browse for a file.';
 
     const action = document.createElement('span');
     action.className = 'student-class-report-upload-action';
-    action.textContent = 'Choose file';
+    action.setAttribute('aria-hidden', 'true');
+    action.textContent = 'Add file…';
 
     const selected = document.createElement('span');
     selected.className = 'student-class-report-upload-selected';
@@ -4410,18 +4505,11 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     const changeFileBtn = document.createElement('button');
     changeFileBtn.type = 'button';
     changeFileBtn.className = 'student-class-report-change-file-btn';
-    changeFileBtn.setAttribute('aria-label', 'Upload file');
-    changeFileBtn.title = 'Upload file';
+    changeFileBtn.setAttribute('aria-label', 'Add file');
+    changeFileBtn.title = 'Add file';
     changeFileBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7.5 8.5 4.5-4.5 4.5 4.5"></path><path d="M20 16v2.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5V16"></path></svg>';
     changeFileBtn.hidden = true;
-    changeFileBtn.addEventListener('click', () => {
-        if (!canEditFeed()) {
-            console.warn('Permission denied: students cannot publish feed content.');
-            return;
-        }
-        input.click();
-    });
 
     const floatingActions = document.createElement('div');
     floatingActions.className = 'student-class-report-floating-actions';
@@ -4443,6 +4531,25 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     });
     addQuestionBtn.hidden = !canEditFeed();
 
+    uploadBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!canEditFeed()) {
+            console.warn('Permission denied: students cannot publish feed content.');
+            return;
+        }
+        input.click();
+    });
+
+    changeFileBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!canEditFeed()) {
+            console.warn('Permission denied: students cannot publish feed content.');
+            return;
+        }
+        input.click();
+    });
+
     input.addEventListener('change', async () => {
         if (!canEditFeed()) {
             console.warn('Permission denied: students cannot publish feed content.');
@@ -4453,30 +4560,35 @@ function ensureStudentClassReportPanelShell(studentName = '') {
         selected.textContent = file ? file.name : 'No file selected';
         if (!file) return;
         const selectedStudent = String(panel.dataset.studentName || studentName || '').trim();
-        const feed = getStudentClassReportUploadFeed(selectedStudent);
-        const dataUrl = await readFileAsDataUrl(file);
-        feed.push({
-            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            name: file.name || 'Uploaded file',
-            type: String(file.type || '').toLowerCase(),
-            dataUrl,
-            questions: [],
-            relatedFiles: []
-        });
-        await saveStudentClassReportUploads();
-        input.value = '';
-        renderStudentClassReportUploadFeed(panel, selectedStudent);
+        const ok = await appendClassReportUploadFromFile(panel, selectedStudent, file);
+        if (!ok) {
+            input.value = '';
+            selected.textContent = 'No file selected';
+        }
     });
 
-    uploadArea.appendChild(input);
-    uploadArea.appendChild(icon);
-    uploadArea.appendChild(title);
-    uploadArea.appendChild(hint);
-    uploadArea.appendChild(action);
-    uploadArea.appendChild(selected);
+    panel.addEventListener('paste', async (e) => {
+        if (panel.hidden || !canEditFeed()) return;
+        const target = e.target;
+        if (target && panel.contains(target) && isTextEditingElement(target)) return;
+        const file = pickFirstUsableFileFromClipboardData(e.clipboardData);
+        if (!file || !classReportUploadAcceptsMimeOrName(file)) return;
+        e.preventDefault();
+        const selectedStudent = String(panel.dataset.studentName || studentName || '').trim();
+        if (!selectedStudent) return;
+        await appendClassReportUploadFromFile(panel, selectedStudent, file);
+    });
+
+    uploadBtn.appendChild(icon);
+    uploadBtn.appendChild(title);
+    uploadBtn.appendChild(hint);
+    uploadBtn.appendChild(action);
+    uploadBtn.appendChild(selected);
+    uploadWrap.appendChild(uploadBtn);
+    uploadWrap.appendChild(input);
     floatingActions.appendChild(addQuestionBtn);
     floatingActions.appendChild(changeFileBtn);
-    panel.appendChild(uploadArea);
+    panel.appendChild(uploadWrap);
     panel.appendChild(floatingActions);
     panel.appendChild(preview);
     renderStudentClassReportUploadFeed(panel, studentName);
@@ -5368,11 +5480,9 @@ function setupSidebarProfileAvatarUpload() {
         avatarInput.click();
     });
 
-    avatarInput.addEventListener('change', () => {
-        const file = avatarInput.files && avatarInput.files[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            showAppMessage('Please select an image file.');
+    function applySidebarAvatarFromFile(file) {
+        if (!file || !file.type.startsWith('image/')) {
+            showAppMessage('Please select or paste an image file.');
             avatarInput.value = '';
             return;
         }
@@ -5385,6 +5495,20 @@ function setupSidebarProfileAvatarUpload() {
         };
         reader.readAsDataURL(file);
         avatarInput.value = '';
+    }
+
+    avatarBtn.addEventListener('paste', (e) => {
+        if (!isTeacherLoggedIn) return;
+        const file = pickFirstUsableFileFromClipboardData(e.clipboardData);
+        if (!file) return;
+        e.preventDefault();
+        applySidebarAvatarFromFile(file);
+    });
+
+    avatarInput.addEventListener('change', () => {
+        const file = avatarInput.files && avatarInput.files[0];
+        if (!file) return;
+        applySidebarAvatarFromFile(file);
     });
 }
 

@@ -584,11 +584,46 @@
 				return accounts;
 			}
 
+			function normalizeStudentLoginUsernameKey(value) {
+				const raw = String(value || '');
+				let normalized = raw;
+				try {
+					normalized = raw.normalize('NFD');
+				} catch (e1) {
+					normalized = raw;
+				}
+				return normalized
+					.replace(/[\u0300-\u036f]/g, '')
+					.toLowerCase()
+					.replace(/[^a-z0-9]/g, '');
+			}
+
+			function studentGateLoginAccountMatches(typedRaw, accountUsernameRaw) {
+				const typed = String(typedRaw || '').trim();
+				const acc = String(accountUsernameRaw || '').trim();
+				if (!typed || !acc) return false;
+				if (typed.toLowerCase() === acc.toLowerCase()) return true;
+				if (typed.includes('@') || acc.includes('@')) return false;
+				const a = normalizeStudentLoginUsernameKey(acc);
+				const b = normalizeStudentLoginUsernameKey(typed);
+				return !!a && a === b;
+			}
+
+			function sanitizeLoginPasswordTyped(raw) {
+				return String(raw || '')
+					.replace(/\u200b|\uFEFF|\u2060/g, '')
+					.trim();
+			}
+
 			async function verifyPassword(storedPasswordRaw, passwordRaw) {
 				const storedPassword = String(storedPasswordRaw || '').trim();
-				const typedPassword = String(passwordRaw || '');
+				const typedPassword = sanitizeLoginPasswordTyped(passwordRaw);
 				if (!storedPassword || !typedPassword) return false;
 				if (!storedPassword.startsWith(PASSWORD_HASH_PREFIX)) {
+					const plateRx = /^@[a-z]{3}\d[a-z]\d{2}$/i;
+					if (plateRx.test(storedPassword) && plateRx.test(typedPassword)) {
+						return storedPassword.toLowerCase() === typedPassword.toLowerCase();
+					}
 					return typedPassword === storedPassword;
 				}
 				return await hashPassword(typedPassword) === storedPassword;
@@ -596,7 +631,7 @@
 
 			async function verifyLogin(usernameRaw, passwordRaw) {
 				const username = String(usernameRaw || '').trim();
-				const password = String(passwordRaw || '');
+				const password = sanitizeLoginPasswordTyped(passwordRaw);
 				if (!username || !password) return { ok: false };
 
 				const storedAccount =
@@ -616,7 +651,7 @@
 				const roster = await loadHostedRoster() || loadCachedRoster();
 				const createdAccounts = getRosterCreatedAccounts(roster);
 				const matchingCreatedAccount = createdAccounts.find((account) => {
-					return String(account.username || '').trim().toLowerCase() === username.toLowerCase();
+					return studentGateLoginAccountMatches(username, account.username);
 				});
 				if (matchingCreatedAccount) {
 					return {
