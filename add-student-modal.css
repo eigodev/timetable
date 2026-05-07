@@ -26,10 +26,42 @@
     width: 812px;
     padding: 50px;
 
-    overflow: auto;
+    --student-modal-actions-right: 50px;
+    --student-modal-actions-bottom: 50px;
+    --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
+
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
     background: #ffffff;
-    border-radius: 14px;
+    border-radius: 50px;
     box-shadow: 2.5px 2.5px 5px 2.5px rgba(8, 16, 36, 0.35);
+}
+
+.edit-student-dialog.student-modal-card {
+    --student-modal-actions-right: 30px;
+    --student-modal-actions-bottom: 20px;
+    --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
+}
+
+.student-modal-card > header.student-modal-header,
+.student-modal-card > .student-modal-header {
+    flex-shrink: 0;
+}
+
+#addStudentModernForm {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.student-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .student-modal-header {
@@ -413,7 +445,7 @@
     margin-top: 10px;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 14px;
+    gap: 15px;
 }
 
 .student-birth-age-level-row {
@@ -424,17 +456,29 @@
 }
 
 .student-modal-footer {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+    border: none;
+}
+
+.student-modal-card .footer-actions {
+    position: absolute;
+    right: var(--student-modal-actions-right);
+    bottom: var(--student-modal-actions-bottom);
+    z-index: 2;
 }
 
 .student-external-link-section {
+    margin-top: 10px;
     flex: 1;
     min-width: 240px;
     max-width: 420px;
+}
+
+.student-modal-body .student-external-link-section {
+    flex-grow: 0;
+    align-self: flex-start;
 }
 
 .student-external-link-section label {
@@ -492,8 +536,6 @@
     display: inline-flex;
     gap: 8px;
     flex-shrink: 0;
-    margin-left: auto;
-    align-self: flex-end;
 }
 
 .btn {
@@ -561,11 +603,6 @@
         font-size: 0.76rem;
     }
 
-    .student-modal-footer {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
     .student-credentials-row {
         grid-template-columns: 1fr;
     }
@@ -574,10 +611,23 @@
         grid-template-columns: 1fr;
     }
 
+    .student-modal-footer {
+        margin-top: 8px;
+    }
+
+    .student-modal-card .footer-actions {
+        position: static;
+        z-index: auto;
+    }
+
+    .student-modal-body {
+        padding-bottom: 12px;
+    }
+
     .footer-actions {
-        margin-left: 0;
-        align-self: stretch;
+        display: flex;
         width: 100%;
+        box-sizing: border-box;
     }
 
     .footer-actions .btn {
@@ -589,7 +639,7 @@
 @media (min-width: 1440px) {
     .student-modal-card {
         position: fixed;
-        left: 19%;
+        left: 20%;
         height: 685px;
         width: 940px;
         max-height: 685px;

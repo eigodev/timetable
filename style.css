@@ -2321,6 +2321,7 @@ input.student-reposition-modal-day {
     box-sizing: border-box;
     width: min(980px, 100%);
     max-height: min(94vh, 980px);
+    min-height: 0;
     height: auto;
     padding: 18px 20px;
     margin: 0;
@@ -2328,7 +2329,7 @@ input.student-reposition-modal-day {
     background: #ffffff;
     border-radius: 14px;
     box-shadow: 0 24px 64px rgba(8, 16, 36, 0.28);
-    overflow: auto;
+    overflow: hidden;
 }
 
 .edit-student-title {
@@ -2341,6 +2342,12 @@ input.student-reposition-modal-day {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.edit-student-form > .student-modal-header {
+    flex-shrink: 0;
 }
 
 .edit-student-name-row {
@@ -5456,6 +5463,10 @@ tr td.add-teacher-availability-table-day {
     flex: 0 0 auto;
 }
 
+.sidebar-pane-materials {
+    flex: 0 0 auto;
+}
+
 .sidebar-pane-reposition-classes {
     flex: 0 0 auto;
 }
@@ -5463,6 +5474,7 @@ tr td.add-teacher-availability-table-day {
 .sidebar-pane-teachers-inner,
 .sidebar-pane-students-inner,
 .sidebar-pane-class-report-inner,
+.sidebar-pane-materials-inner,
 .sidebar-pane-reposition-classes-inner,
 .sidebar-pane-finances-inner {
     display: block;
@@ -5481,6 +5493,7 @@ tr td.add-teacher-availability-table-day {
 .sidebar.is-logged-in .sidebar-pane-teachers-inner,
 .sidebar.is-logged-in .sidebar-pane-students-inner,
 .sidebar.is-logged-in .sidebar-pane-class-report-inner,
+.sidebar.is-logged-in .sidebar-pane-materials-inner,
 .sidebar.is-logged-in .sidebar-pane-reposition-classes-inner,
 .sidebar.is-logged-in .sidebar-pane-finances-inner {
     padding: 0;
@@ -5490,6 +5503,7 @@ tr td.add-teacher-availability-table-day {
 .sidebar.is-logged-in .sidebar-pane-teachers-inner > .class-report-empty:only-child,
 .sidebar.is-logged-in .sidebar-pane-students-inner > .class-report-empty:only-child,
 .sidebar.is-logged-in .sidebar-pane-class-report-inner > .class-report-lists > .class-report-empty:only-child,
+.sidebar.is-logged-in .sidebar-pane-materials-inner > .materials-placeholder:only-child,
 .sidebar.is-logged-in .sidebar-pane-reposition-classes-inner > .reposition-classes-placeholder:only-child,
 .sidebar.is-logged-in .sidebar-pane-finances-inner > .finances-placeholder:only-child {
     padding: var(--sidebar-empty-content-pad-top);
@@ -5504,6 +5518,7 @@ tr td.add-teacher-availability-table-day {
 .sidebar-pane.is-collapsed .sidebar-pane-teachers-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-students-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-class-report-inner,
+.sidebar-pane.is-collapsed .sidebar-pane-materials-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-reposition-classes-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-finances-inner {
     max-height: 0;
@@ -5517,6 +5532,7 @@ tr td.add-teacher-availability-table-day {
 }
 
 .finances-placeholder,
+.materials-placeholder,
 .reposition-classes-placeholder {
     margin: 0;
     font-size: 0.82em;
@@ -6483,6 +6499,7 @@ tr td.add-teacher-availability-table-day {
 
 /* Main Content */
 .main-content {
+    position: relative;
     display: flex;
     align-items: stretch;
     align-content: stretch;
@@ -6523,6 +6540,57 @@ tr td.add-teacher-availability-table-day {
     grid-column: 1 / -1;
     grid-row: 1;
     min-width: 0;
+}
+
+.main-content .materials-frame-host {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #fff;
+    border-radius: var(--calendar-surface-radius, 20px);
+
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(14px) scale(0.988);
+    pointer-events: none;
+
+    transition:
+        opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0.45s;
+}
+
+.main-content .materials-frame-host.materials-frame-host--open {
+    z-index: 5;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+
+    transition:
+        opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .main-content .materials-frame-host,
+    .main-content .materials-frame-host.materials-frame-host--open {
+        transition-duration: 0.01ms;
+        transition-delay: 0s;
+        transform: none;
+    }
+}
+
+.materials-frame-host .materials-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
 }
 
 .visually-hidden {

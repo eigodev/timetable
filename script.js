@@ -1656,8 +1656,10 @@ async function tryRestoreSessionFromSavedCredentials() {
     const v = await verifyStudentLogin(rawEmail, password);
     if (v.ok) {
         isAdminLoggedIn = false;
-        const tutor = getTutorRosterNameForStudent(v.studentName);
-        if (!tutor) return null;
+        let tutor = getTutorRosterNameForStudent(v.studentName);
+        if (!tutor && teachersList.length === 1) {
+            tutor = String(teachersList[0] || '').trim();
+        }
         loggedInStudentFullName = v.studentName;
         loggedInTeacherName = tutor;
         isTeacherLoggedIn = true;
@@ -3780,6 +3782,10 @@ const PASSWORD_HIDE_ICON_SVG =
 /** Solid 6-tooth cog (Heroicons cog-6-tooth); fill inherits currentColor */
 const SETTINGS_GEAR_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 0 0-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 0 0-2.282.819l-.922 1.597a1.875 1.875 0 0 0 .432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 0 0 0 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 0 0-.432 2.385l.922 1.597a1.875 1.875 0 0 0 2.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 0 0 2.28-.819l.923-1.597a1.875 1.875 0 0 0-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 0 0 0-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 0 0-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 0 0-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 0 0-1.85-1.567h-1.843ZM12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z"/></svg>';
+
+/** Plus (filled) for sidebar Materials add */
+const SIDEBAR_ADD_MATERIALS_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 3.75a.75.75 0 0 1 .75.75v6.75h6.75a.75.75 0 0 1 0 1.5h-6.75v6.75a.75.75 0 0 1-1.5 0v-6.75H4.5a.75.75 0 0 1 0-1.5h6.75V4.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg>';
 
 const ADD_STUDENT_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8.5 4.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 13c.552 0 1.01-.452.9-.994a5.002 5.002 0 0 0-9.802 0c-.109.542.35.994.902.994h8ZM12.5 3.5a.75.75 0 0 1 .75.75v1h1a.75.75 0 0 1 0 1.5h-1v1a.75.75 0 0 1-1.5 0v-1h-1a.75.75 0 0 1 0-1.5h1v-1a.75.75 0 0 1 .75-.75Z"/></svg>';
@@ -6075,9 +6081,45 @@ function renderSidebar() {
     paneClassReport.appendChild(classReportHeader);
     paneClassReport.appendChild(classReportInner);
 
+    const paneMaterials = document.createElement('div');
+    paneMaterials.className = 'sidebar-pane sidebar-pane-materials';
+    const materialsHeader = document.createElement('div');
+    materialsHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const materialsHeaderTitle = document.createElement('span');
+    materialsHeaderTitle.className = 'sidebar-section-header-label';
+    materialsHeaderTitle.textContent = 'Materials';
+    const addMaterialsBtn = document.createElement('button');
+    addMaterialsBtn.type = 'button';
+    addMaterialsBtn.id = 'addMaterialsBtn';
+    addMaterialsBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--materials';
+    addMaterialsBtn.setAttribute('aria-label', 'Add material');
+    addMaterialsBtn.innerHTML = SIDEBAR_ADD_MATERIALS_SVG;
+    addMaterialsBtn.addEventListener('click', () => {
+        if (!canManageRoster()) {
+            denyStudentAction('Permission denied: students cannot add materials.');
+            return;
+        }
+        showMaterialsMainView();
+    });
+    bindSidebarCursorTooltip(addMaterialsBtn, 'Add material');
+    const materialsHeaderActions = document.createElement('div');
+    materialsHeaderActions.className = 'sidebar-section-actions';
+    materialsHeaderActions.appendChild(addMaterialsBtn);
+    if (isStudentSidebar) {
+        addMaterialsBtn.hidden = true;
+    }
+    materialsHeader.appendChild(materialsHeaderTitle);
+    materialsHeader.appendChild(materialsHeaderActions);
+    const materialsInner = document.createElement('div');
+    materialsInner.className = 'sidebar-pane-materials-inner';
+    materialsInner.setAttribute('aria-label', 'Materials');
+    paneMaterials.appendChild(materialsHeader);
+    paneMaterials.appendChild(materialsInner);
+
     teacherList.appendChild(paneTeachers);
     teacherList.appendChild(paneStudents);
     teacherList.appendChild(paneClassReport);
+    teacherList.appendChild(paneMaterials);
     const googleMeetSchoolToggle = document.getElementById('googleMeetSchoolToggle');
     if (googleMeetSchoolToggle) {
         refreshGoogleMeetSchoolSelect(googleMeetSelectedSchool);
@@ -6098,6 +6140,11 @@ function renderSidebar() {
         classReportEmpty.className = 'class-report-empty';
         classReportEmpty.textContent = "No student's info to show.";
         classReportInner.appendChild(classReportEmpty);
+
+        const materialsEmpty = document.createElement('p');
+        materialsEmpty.className = 'class-report-empty';
+        materialsEmpty.textContent = 'No materials to show.';
+        materialsInner.appendChild(materialsEmpty);
 
         return;
     }
@@ -6365,6 +6412,11 @@ function renderSidebar() {
             }
         }
     });
+
+    const materialsPlaceholder = document.createElement('p');
+    materialsPlaceholder.className = 'materials-placeholder';
+    materialsPlaceholder.textContent = 'No materials linked yet.';
+    materialsInner.appendChild(materialsPlaceholder);
 
     populateClassReportStudentLists(classReportInner);
     refreshAdminPanelIfShowingOverview();
@@ -6878,6 +6930,7 @@ function setAdminDashboard() {
         setLoggedOutDashboard();
         return;
     }
+    hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
@@ -6896,6 +6949,7 @@ function showAdminBlankMainPanel() {
         setLoggedOutDashboard();
         return;
     }
+    hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
@@ -6910,6 +6964,7 @@ function showAdminBlankMainPanel() {
 }
 
 function setLoggedOutDashboard() {
+    hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
     const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
@@ -6922,6 +6977,38 @@ function setLoggedOutDashboard() {
         adminPanel.innerHTML = '';
     }
     resetClassStartNotificationCache();
+}
+
+const MATERIALS_MAIN_IFRAME_SRC = 'materials/materials.html';
+
+function hideMaterialsMainView() {
+    const host = document.getElementById('materialsFrameHost');
+    if (!host) return;
+    host.classList.remove('materials-frame-host--open');
+    host.setAttribute('aria-hidden', 'true');
+}
+
+function showMaterialsMainView() {
+    const host = document.getElementById('materialsFrameHost');
+    const iframe = document.getElementById('materialsFrame');
+    if (!host || !iframe) return;
+
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const summaryPanel = document.getElementById('summaryPanel');
+    const reportPanel = document.getElementById('studentClassReportPanel');
+    const adminPanel = document.getElementById('adminControlPanel');
+    if (calendarWrapper) calendarWrapper.hidden = true;
+    if (summaryPanel) summaryPanel.hidden = true;
+    if (reportPanel) reportPanel.hidden = true;
+    if (adminPanel) adminPanel.hidden = true;
+
+    host.classList.add('materials-frame-host--open');
+    host.setAttribute('aria-hidden', 'false');
+
+    if (!iframe.dataset.materialsSrcSet) {
+        iframe.src = MATERIALS_MAIN_IFRAME_SRC;
+        iframe.dataset.materialsSrcSet = '1';
+    }
 }
 
 function setSidebarSectionCollapsed(section, collapsed, animate = true) {
@@ -7658,6 +7745,8 @@ function selectTeacher(teacherName, opts) {
     let reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
 
+    hideMaterialsMainView();
+
     if (showClassReport) {
         if (calendarWrapper) calendarWrapper.hidden = true;
         if (summaryPanel) summaryPanel.hidden = true;
@@ -7934,6 +8023,24 @@ function saveStudentTeacherInfo(studentName, teacherRaw) {
         return;
     }
     studentTeacherByName[name] = teacher;
+}
+
+/**
+ * Assigned mentor for a newly created student: explicit form value first, then roster match for
+ * `loggedInTeacherName`, then the only teacher profile when exactly one exists.
+ */
+function resolveMentorTeacherForNewStudent(preferredRaw) {
+    const fromForm = String(preferredRaw ?? '').trim();
+    if (fromForm) return fromForm;
+    const logged = String(loggedInTeacherName || '').trim();
+    if (logged && teachersList.length > 0) {
+        const found = teachersList.find((n) => String(n || '').trim().toLowerCase() === logged.toLowerCase());
+        if (found) return String(found).trim();
+    }
+    if (teachersList.length === 1) {
+        return String(teachersList[0] || '').trim();
+    }
+    return '';
 }
 
 /**
@@ -8899,7 +9006,7 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     }
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
     const addTeacherSelect = document.getElementById('addStudentMentor');
-    saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
+    saveStudentTeacherInfo(fullName, resolveMentorTeacherForNewStudent(addTeacherSelect?.value));
     saveStudentAccountExtras(fullName, { email, username, password, city, country });
     const schoolKey = schoolName.trim().toLowerCase();
     if (schoolKey) {
@@ -8989,6 +9096,8 @@ async function createStudentFromModernModal(studentData) {
     roster.push(fullName);
     roster.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     studentSchoolByName[fullName] = schoolName;
+
+    saveStudentTeacherInfo(fullName, resolveMentorTeacherForNewStudent(studentData?.mentorTeacher));
 
     const phoneIso = String(studentData?.phoneCountry?.flag || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
     saveStudentPhoneInfo(fullName, phoneIso, studentData?.phoneNumber || '');
