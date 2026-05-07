@@ -35,7 +35,7 @@ body {
     --calendar-surface-radius: 20px;
     --calendar-surface-padding: 20px;
     --calendar-surface-height: calc(100vh - 40px);
-    --calendar-surface-width: calc(100vw - 330px);
+    --calendar-surface-width: calc(100vw - 355px);
 }
 
 /* Sidebar Styles */
@@ -45,7 +45,7 @@ body {
     background: white;
 
     height: 100%;
-    width: 250px;
+    width: 275px;
 
     border-radius: 20px;
     box-shadow: 1px 1px 5px 0px rgba(0, 0, 0, 0.3);
@@ -6254,6 +6254,13 @@ tr td.add-teacher-availability-table-day {
     border-left: 2.5px solid transparent;
 }
 
+.teacher-item-student-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
 .teacher-item-name {
     flex: 1;
     min-width: 0;
@@ -6333,6 +6340,56 @@ tr td.add-teacher-availability-table-day {
     background: #334461;
     border-color: #e8eaf6;
     color: #fff;
+}
+
+.teacher-item .student-external-link-btn.sidebar-section-title-passport-btn {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border: 1px solid #334461;
+    border-radius: 5px;
+    background: #fff;
+    color: #334461;
+}
+
+.teacher-item.category-speakon .student-external-link-btn.sidebar-section-title-passport-btn {
+    border-color: #d81b60;
+    color: #d81b60;
+}
+
+.teacher-item.category-passport .student-external-link-btn.sidebar-section-title-passport-btn {
+    border-color: #d50000;
+    color: #d50000;
+}
+
+.teacher-item.teacher-item--school-theme .student-external-link-btn.sidebar-section-title-passport-btn {
+    border-color: var(--school-primary, #334461);
+    color: var(--school-primary, #334461);
+    background: #fff;
+}
+
+.teacher-item.category-private .student-external-link-btn.sidebar-section-title-passport-btn:hover {
+    background: #334461;
+    border-color: #e8eaf6;
+    color: #fff;
+}
+
+.teacher-item.category-speakon .student-external-link-btn.sidebar-section-title-passport-btn:hover {
+    background: #d81b60;
+    border-color: #fce4ec;
+    color: #fff;
+}
+
+.teacher-item.category-passport .student-external-link-btn.sidebar-section-title-passport-btn:hover {
+    background: #d50000;
+    border-color: #ffebee;
+    color: #fff;
+}
+
+.teacher-item.teacher-item--school-theme .student-external-link-btn.sidebar-section-title-passport-btn:hover {
+    background: var(--school-primary, #334461);
+    color: #fff;
+    border-color: var(--school-primary-soft, rgba(63, 81, 181, 0.25));
 }
 
 .teacher-item:hover {

@@ -128,6 +128,7 @@ let studentCountryByName = {};
 let studentBirthDatesByName = {};
 let studentAgesByName = {};
 let studentLevelsByName = {};
+let studentExternalFollowUpLinksByName = {};
 let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
@@ -221,6 +222,14 @@ window.TimeTablePermissions = {
     getCurrentUser,
     canManageRoster,
     canEditFeed
+};
+
+window.TimeTablePhone = {
+    sanitizeNationalPhoneDigits,
+    isPlausibleNationalPhoneDigits,
+    formatNationalPhoneDisplay,
+    getNationalPhoneDigitsForValidation,
+    normalizeStudentPhoneLocalInput
 };
 
 function denyStudentAction(message = 'Permission denied: students cannot manage this content.') {
@@ -1143,6 +1152,74 @@ function findPhoneCountryByDialPrefix(rawDigits, requireLocalDigits = true) {
     return matches[0] || null;
 }
 
+/** National-significant digits only — strips non-digits; drops Irish domestic trunk leading 0 when present. */
+function sanitizeNationalPhoneDigits(countryIso, digitString) {
+    let d = digitsOnly(digitString);
+    const iso = String(countryIso || '').trim().toUpperCase();
+    if (iso === 'IE' && d.length === 10 && d.startsWith('0')) {
+        d = d.slice(1);
+    }
+    return d;
+}
+
+/**
+ * Plausible lengths for stored national digits (calling code stripped; matches country-specific format caps).
+ */
+function isPlausibleNationalPhoneDigits(countryIso, digitCount) {
+    if (!digitCount) return false;
+    const iso = String(countryIso || '').trim().toUpperCase();
+    if (iso === 'IE') return digitCount >= 8 && digitCount <= 9;
+    if (iso === 'GB') return digitCount >= 9 && digitCount <= 10;
+    if (iso === 'BR') return digitCount >= 10 && digitCount <= 11;
+    if (iso === 'US' || iso === 'CA') return digitCount === 10;
+    return digitCount >= 8 && digitCount <= 15;
+}
+
+function formatBrazilNationalPhoneDisplay(rawDigits) {
+    const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 11);
+    if (!digits) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) {
+        return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function formatNanpNationalPhoneDisplay(rawDigits) {
+    const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 10);
+    if (!digits) return '';
+    if (digits.length <= 3) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function formatUkNationalPhoneDisplay(rawDigits) {
+    const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 10);
+    if (!digits) return '';
+    if (digits.length <= 4) return digits;
+    return `${digits.slice(0, 4)} ${digits.slice(4)}`;
+}
+
+function formatIrelandNationalPhoneDisplay(rawDigits) {
+    let digits = sanitizeNationalPhoneDigits('IE', rawDigits).slice(0, 9);
+    if (!digits) return '';
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)} ${digits.slice(2)}`;
+    return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5)}`;
+}
+
+/** WhatsApp/UI-friendly national display for the app's supported dial countries. */
+function formatNationalPhoneDisplay(countryIso, rawDigitsOrFormatted) {
+    const iso = String(countryIso || '').trim().toUpperCase();
+    if (iso === 'BR') return formatBrazilNationalPhoneDisplay(rawDigitsOrFormatted);
+    if (iso === 'GB') return formatUkNationalPhoneDisplay(rawDigitsOrFormatted);
+    if (iso === 'IE') return formatIrelandNationalPhoneDisplay(rawDigitsOrFormatted);
+    if (iso === 'US' || iso === 'CA') return formatNanpNationalPhoneDisplay(rawDigitsOrFormatted);
+    const d = sanitizeNationalPhoneDigits(iso, digitsOnly(rawDigitsOrFormatted));
+    return d.replace(/(.{4})/g, '$1 ').trim();
+}
+
 /**
  * Removes a duplicate country calling code from the start of `raw` when it matches `countryIso`.
  * Roster `number` is stored as the national/local part only; the flag selector holds the dial code.
@@ -1163,6 +1240,12 @@ function normalizeStudentPhoneLocalInput(raw, countryIso) {
         s = stripLeadingCountryDigitsFromFormattedPhone(s, dialDigits);
     }
     return s.trim();
+}
+
+function getNationalPhoneDigitsForValidation(countryIso, rawLocalInput) {
+    const iso = String(countryIso || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+    const normalized = normalizeStudentPhoneLocalInput(String(rawLocalInput || ''), iso);
+    return sanitizeNationalPhoneDigits(iso, digitsOnly(normalized));
 }
 
 function syncPhoneInputWithCountrySelector(phoneInput, countrySelect) {
@@ -1661,6 +1744,7 @@ async function initRoster(preloadedRoster = null) {
         studentBirthDatesByName = {};
         studentAgesByName = {};
         studentLevelsByName = {};
+        studentExternalFollowUpLinksByName = {};
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
         customSchoolsList = [];
@@ -1789,9 +1873,16 @@ async function initRoster(preloadedRoster = null) {
         saved.studentLevels && typeof saved.studentLevels === 'object' && !Array.isArray(saved.studentLevels)
             ? { ...saved.studentLevels }
             : {};
+    const studentExternalFollowUpRaw =
+        saved.studentExternalFollowUpLinks &&
+        typeof saved.studentExternalFollowUpLinks === 'object' &&
+        !Array.isArray(saved.studentExternalFollowUpLinks)
+            ? { ...saved.studentExternalFollowUpLinks }
+            : {};
     studentBirthDatesByName = {};
     studentAgesByName = {};
     studentLevelsByName = {};
+    studentExternalFollowUpLinksByName = {};
     [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
         const birthDate = String(studentBirthDatesRaw[name] || '').trim();
         const age = String(studentAgesRaw[name] || '').trim();
@@ -1799,6 +1890,8 @@ async function initRoster(preloadedRoster = null) {
         if (birthDate) studentBirthDatesByName[name] = birthDate;
         if (age) studentAgesByName[name] = age;
         if (level) studentLevelsByName[name] = level;
+        const extLink = String(studentExternalFollowUpRaw[name] || '').trim();
+        if (extLink) studentExternalFollowUpLinksByName[name] = extLink;
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -3534,6 +3627,10 @@ const EDIT_ICON_SVG_OUTLINE =
 const EDIT_ICON_SVG_SOLID =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z" /><path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" /></svg>';
 
+/** Same external-link SVG as `.sidebar-section-title-passport-btn` offsite opener */
+const STUDENT_EXTERNAL_FOLLOWUP_LINK_BTN_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>';
+
 const CLASS_TOPIC_PENCIL_ICON_HTML =
     `<span class="student-class-report-topic-btn-icon">${EDIT_ICON_SVG_OUTLINE}</span>`;
 
@@ -4735,6 +4832,7 @@ function saveRoster() {
         studentBirthDates: studentBirthDatesByName,
         studentAges: studentAgesByName,
         studentLevels: studentLevelsByName,
+        studentExternalFollowUpLinks: studentExternalFollowUpLinksByName,
         studentGoogleMeetLinks: studentGoogleMeetLinksByName,
         googleMeetSharedLinkModeBySchool: googleMeetSharedLinkModeBySchoolKey,
         adminAccount: {
@@ -5909,6 +6007,21 @@ function renderSidebar() {
 
             const allowEditRow = category.deletable && !loggedInStudentFullName;
             if (allowEditRow) {
+                const savedFollowUpLink = String(studentExternalFollowUpLinksByName[name] || '').trim();
+
+                const actionsWrap = document.createElement('span');
+                actionsWrap.className = 'teacher-item-student-actions';
+
+                const externalFollowUpBtn = document.createElement('button');
+                externalFollowUpBtn.type = 'button';
+                externalFollowUpBtn.className = 'student-external-link-btn sidebar-section-title-passport-btn';
+                externalFollowUpBtn.setAttribute('aria-label', 'Open external follow-up link');
+                externalFollowUpBtn.setAttribute('title', 'Open external follow-up link');
+                externalFollowUpBtn.setAttribute('data-student-name', name);
+                externalFollowUpBtn.innerHTML = STUDENT_EXTERNAL_FOLLOWUP_LINK_BTN_SVG;
+                externalFollowUpBtn.hidden = !savedFollowUpLink;
+                actionsWrap.appendChild(externalFollowUpBtn);
+
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
                 editBtn.className = 'teacher-item-edit';
@@ -5917,11 +6030,16 @@ function renderSidebar() {
                 editBtn.setAttribute('data-student-name', name);
                 editBtn.setAttribute('data-roster-kind', category.rosterKey);
                 editBtn.innerHTML = EDIT_ICON_SVG_SOLID;
-                teacherItem.appendChild(editBtn);
+                actionsWrap.appendChild(editBtn);
+
+                teacherItem.appendChild(actionsWrap);
             }
 
             teacherItem.addEventListener('click', (e) => {
                 if (e.target.closest('.teacher-item-edit')) {
+                    return;
+                }
+                if (e.target.closest('.student-external-link-btn')) {
                     return;
                 }
                 selectTeacher(name, { view: 'calendar' });
@@ -6599,6 +6717,7 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
         delete studentPasswordsByName[name];
         delete studentCityByName[name];
         delete studentCountryByName[name];
+        delete studentExternalFollowUpLinksByName[name];
     });
 
     customSchoolsList = customSchoolsList.filter((school) => String(school || '').trim().toLowerCase() !== schoolKey);
@@ -7309,6 +7428,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentClassReportRows[removedName];
     delete studentClassReportUploadsByName[removedName];
     delete passportFollowupLinks[removedName];
+    delete studentExternalFollowUpLinksByName[removedName];
     delete studentSchoolByName[removedName];
     delete studentPhonesByName[removedName];
     delete studentTeacherByName[removedName];
@@ -7341,6 +7461,16 @@ function setupTeacherListEditDelegation() {
     teacherList.dataset.editDelegation = '1';
     teacherList.addEventListener('click', (e) => {
         if (loggedInStudentFullName) return;
+        const extBtn = e.target.closest('.student-external-link-btn');
+        if (extBtn && teacherList.contains(extBtn)) {
+            e.preventDefault();
+            e.stopPropagation();
+            const nm = extBtn.getAttribute('data-student-name');
+            const href = String(studentExternalFollowUpLinksByName[nm] || '').trim();
+            if (!href) return;
+            window.open(href, '_blank', 'noopener,noreferrer');
+            return;
+        }
         const editBtn = e.target.closest('.teacher-item-edit');
         if (!editBtn || !teacherList.contains(editBtn)) {
             return;
@@ -7482,7 +7612,8 @@ function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {
     const iso = String(countryIsoRaw || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
     const countryIso = PHONE_COUNTRY_OPTIONS.some((country) => country.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
     const number = normalizeStudentPhoneLocalInput(numberRaw, countryIso);
-    if (!digitsOnly(number)) {
+    const nd = sanitizeNationalPhoneDigits(countryIso, digitsOnly(number));
+    if (!nd || !isPlausibleNationalPhoneDigits(countryIso, nd.length)) {
         delete studentPhonesByName[name];
         return;
     }
@@ -7512,6 +7643,32 @@ function saveStudentTeacherInfo(studentName, teacherRaw) {
     studentTeacherByName[name] = teacher;
 }
 
+/**
+ * Optional follow-up URL. Empty input -> { href: '', error: null }.
+ * Non-empty: normalizes with https:// if no scheme; only http/https allowed.
+ */
+function parseStudentExternalFollowUpLinkInput(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) {
+        return { href: '', error: null };
+    }
+    let candidate = trimmed;
+    if (!/^https?:\/\//i.test(candidate)) {
+        candidate = `https://${candidate}`;
+    }
+    try {
+        const u = new URL(candidate);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+            return { href: '', error: 'Only http:// and https:// links are allowed.' };
+        }
+        return { href: u.href, error: null };
+    } catch {
+        return { href: '', error: 'Please enter a valid link.' };
+    }
+}
+
+window.parseStudentExternalFollowUpLinkInput = parseStudentExternalFollowUpLinkInput;
+
 function saveStudentAccountExtras(studentName, extras) {
     const name = String(studentName || '').trim();
     if (!name) return;
@@ -7540,6 +7697,12 @@ function saveStudentAccountExtras(studentName, extras) {
     else delete studentAgesByName[name];
     if (level) studentLevelsByName[name] = level;
     else delete studentLevelsByName[name];
+
+    if (extras && Object.prototype.hasOwnProperty.call(extras, 'externalFollowUpLink')) {
+        const parsed = parseStudentExternalFollowUpLinkInput(String(extras.externalFollowUpLink ?? ''));
+        if (parsed.href) studentExternalFollowUpLinksByName[name] = parsed.href;
+        else delete studentExternalFollowUpLinksByName[name];
+    }
 }
 
 function buildStudentWhatsappUrl(studentName, message = '') {
@@ -7700,6 +7863,8 @@ function openEditStudentModal(studentName, rosterKey) {
     if (usernameInput) usernameInput.value = String(studentUsernamesByName[studentName] || buildDefaultStudentUsernameFromFullName(studentName));
     if (passwordInput) passwordInput.value = '';
     if (passportLinkInput) passportLinkInput.value = String(passportFollowupLinks[studentName] || '');
+    const externalFollowUpEl = document.getElementById('editStudentExternalFollowUpLink');
+    if (externalFollowUpEl) externalFollowUpEl.value = String(studentExternalFollowUpLinksByName[studentName] || '');
     refreshEditStudentSchoolSelect(currentSchool);
     originalNameInput.value = studentName;
     originalCategoryInput.value = rosterKey;
@@ -7847,6 +8012,15 @@ async function upsertStudentFromEditForm(action = 'save') {
         return;
     }
 
+    const externalFollowUpParsed = parseStudentExternalFollowUpLinkInput(
+        String(document.getElementById('editStudentExternalFollowUpLink')?.value ?? '').trim()
+    );
+    if (externalFollowUpParsed.error) {
+        alert(externalFollowUpParsed.error);
+        document.getElementById('editStudentExternalFollowUpLink')?.focus();
+        return;
+    }
+
     const oldList = originalKind === 'private'
         ? privateStudentsList
         : (originalKind === 'speakon' ? speakonStudentsList : passportStudentsList);
@@ -7923,6 +8097,10 @@ async function upsertStudentFromEditForm(action = 'save') {
             studentLevelsByName[fullName] = studentLevelsByName[originalName];
             delete studentLevelsByName[originalName];
         }
+        if (Object.prototype.hasOwnProperty.call(studentExternalFollowUpLinksByName, originalName)) {
+            studentExternalFollowUpLinksByName[fullName] = studentExternalFollowUpLinksByName[originalName];
+            delete studentExternalFollowUpLinksByName[originalName];
+        }
     } else if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
@@ -7952,7 +8130,8 @@ async function upsertStudentFromEditForm(action = 'save') {
         country,
         birthDate: birthDateValue,
         age: ageValue,
-        level: levelValue
+        level: levelValue,
+        externalFollowUpLink: externalFollowUpParsed.href
     });
     if (originalName !== fullName) {
         delete studentEmailsByName[originalName];
@@ -7963,6 +8142,7 @@ async function upsertStudentFromEditForm(action = 'save') {
         delete studentBirthDatesByName[originalName];
         delete studentAgesByName[originalName];
         delete studentLevelsByName[originalName];
+        delete studentExternalFollowUpLinksByName[originalName];
     }
     if (nextKind === 'passport' && passportLink) {
         passportFollowupLinks[fullName] = passportLink;
@@ -8227,7 +8407,11 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
     }
     const phoneEl = document.getElementById('addTeacherPhone');
     const phoneVal = phoneEl ? String(phoneEl.value || '').trim() : '';
-    if (!phoneVal || !digitsOnly(phoneVal)) {
+    const countrySel = document.getElementById('addTeacherPhoneCountry');
+    const iso = String(countrySel?.value || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+    const phoneCountryIso = PHONE_COUNTRY_OPTIONS.some((c) => c.iso === iso) ? iso : DEFAULT_PHONE_COUNTRY_ISO;
+    const phoneDigits = getNationalPhoneDigitsForValidation(phoneCountryIso, phoneVal);
+    if (!phoneVal || !phoneDigits || !isPlausibleNationalPhoneDigits(phoneCountryIso, phoneDigits.length)) {
         showAppMessage('Please enter a valid phone number.');
         phoneEl?.focus();
         return;
@@ -8391,6 +8575,19 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
     studentSchoolByName[fullName] = schoolName;
     const addPhoneInput = document.getElementById('addStudentPhone');
     const addPhoneCountrySelect = document.getElementById('addStudentPhoneCountry');
+    const addPhoneIsoRaw = String(addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
+    const addPhoneCountry = PHONE_COUNTRY_OPTIONS.some((c) => c.iso === addPhoneIsoRaw)
+        ? addPhoneIsoRaw
+        : DEFAULT_PHONE_COUNTRY_ISO;
+    const addPhoneRawVal = String(addPhoneInput?.value || '').trim();
+    if (addPhoneRawVal) {
+        const addPd = getNationalPhoneDigitsForValidation(addPhoneCountry, addPhoneRawVal);
+        if (!isPlausibleNationalPhoneDigits(addPhoneCountry, addPd.length)) {
+            alert('Enter a valid phone number.');
+            addPhoneInput?.focus();
+            return;
+        }
+    }
     saveStudentPhoneInfo(fullName, addPhoneCountrySelect?.value || DEFAULT_PHONE_COUNTRY_ISO, addPhoneInput?.value || '');
     const addTeacherSelect = document.getElementById('addStudentMentor');
     saveStudentTeacherInfo(fullName, addTeacherSelect?.value || '');
@@ -8470,6 +8667,12 @@ async function createStudentFromModernModal(studentData) {
         return false;
     }
 
+    const externalFollowUpParsed = parseStudentExternalFollowUpLinkInput(String(studentData?.externalFollowUpLink ?? '').trim());
+    if (externalFollowUpParsed.error) {
+        showAppMessage(externalFollowUpParsed.error);
+        return false;
+    }
+
     const rosterKey = rosterKindFromSchoolName(schoolName);
     const roster = rosterKey === 'passport'
         ? passportStudentsList
@@ -8485,7 +8688,8 @@ async function createStudentFromModernModal(studentData) {
         password,
         birthDate,
         age,
-        level
+        level,
+        externalFollowUpLink: externalFollowUpParsed.href
     });
     if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};

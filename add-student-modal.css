@@ -425,79 +425,75 @@
 
 .student-modal-footer {
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
 }
 
-.checkbox-wrap {
+.student-external-link-section {
+    flex: 1;
+    min-width: 240px;
+    max-width: 420px;
+}
+
+.student-external-link-section label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #334155;
+}
+
+.student-external-link-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color, #d8dee9);
+    border-radius: 10px;
+    background: #fff;
+    box-sizing: border-box;
+}
+
+.student-external-link-input-wrapper input {
+    width: 100%;
+    border: 0;
+    outline: 0;
+    font-size: 13px;
+    background: transparent;
+    min-width: 0;
+}
+
+.student-external-link-icon {
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    margin: 20px 0px 0px 0px;
-    gap: 8px;
-    font-size: 0.82rem;
-    color: #334155;
-    cursor: pointer;
+    justify-content: center;
+    line-height: 0;
+    color: #92a0ba;
 }
 
-.checkbox-wrap input {
-    position: relative;
-    overflow: hidden;
-    width: 20px;
-    height: 20px;
-    border: none;
-    border-radius: 5px;
-    box-sizing: border-box;
-    background: #dfe3f3;
-    appearance: none;
-    -webkit-appearance: none;
-    margin: 0;
-    cursor: pointer;
-    vertical-align: middle;
+.student-external-link-icon svg {
+    width: 18px;
+    height: 18px;
+    display: block;
 }
 
-.checkbox-wrap input::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: #334461;
-    transform: scale(0);
-    transform-origin: center;
-    transition: transform 280ms cubic-bezier(0.55, -0.17, 0, 0.51);
-}
-
-.checkbox-wrap input::after {
-    content: '';
-    position: absolute;
-    opacity: 0;
-    transition: transform 190ms ease-out 60ms, opacity 190ms ease-out 60ms;
-}
-
-.checkbox-wrap input:checked::before {
-    transform: scale(1);
-}
-
-.checkbox-wrap input:checked::after {
-    transform: rotate(45deg) scale(1);
-    opacity: 1;
-}
-
-.checkbox-wrap input:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(51, 68, 97, 0.2);
-}
-
-.checkbox-wrap input:active {
-    transform: scale(0.9);
+.student-external-link-section small {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: #6b7280;
 }
 
 .footer-actions {
     display: inline-flex;
     gap: 8px;
-    position: absolute;
-    right: 20px;
-    bottom: 20px;
+    flex-shrink: 0;
+    margin-left: auto;
+    align-self: flex-end;
 }
 
 .btn {
@@ -579,7 +575,8 @@
     }
 
     .footer-actions {
-        position: static;
+        margin-left: 0;
+        align-self: stretch;
         width: 100%;
     }
 

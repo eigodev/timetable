@@ -1,4 +1,27 @@
 (function addStudentModalScript() {
+    function parseExternalFollowUpLinkInput(raw) {
+        if (typeof window.parseStudentExternalFollowUpLinkInput === 'function') {
+            return window.parseStudentExternalFollowUpLinkInput(raw);
+        }
+        const trimmed = String(raw || '').trim();
+        if (!trimmed) {
+            return { href: '', error: null };
+        }
+        let candidate = trimmed;
+        if (!/^https?:\/\//i.test(candidate)) {
+            candidate = `https://${candidate}`;
+        }
+        try {
+            const u = new URL(candidate);
+            if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                return { href: '', error: 'Only http:// and https:// links are allowed.' };
+            }
+            return { href: u.href, error: null };
+        } catch {
+            return { href: '', error: 'Please enter a valid link.' };
+        }
+    }
+
     const overlay = document.getElementById('studentModalOverlay');
     const modalCard = overlay?.querySelector('.student-modal-card');
     const closeBtn = document.getElementById('closeModalBtn');
@@ -23,7 +46,7 @@
         level: document.getElementById('level'),
         username: document.getElementById('studentModalUsername'),
         password: document.getElementById('studentModalPassword'),
-        addAnother: document.getElementById('addAnother')
+        externalFollowUpLink: document.getElementById('studentExternalLink')
     };
     const passwordGenerateBtn = document.getElementById('studentModalPasswordGenerate');
 
@@ -139,11 +162,28 @@
     }
 
     function formatIrelandPhone(rawDigits) {
-        const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 9);
+        let digits = String(rawDigits || '').replace(/\D/g, '');
+        if (digits.length === 10 && digits.startsWith('0')) {
+            digits = digits.slice(1);
+        }
+        digits = digits.slice(0, 9);
         if (!digits) return '';
         if (digits.length <= 2) return digits;
         if (digits.length <= 5) return `${digits.slice(0, 2)} ${digits.slice(2)}`;
         return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5)}`;
+    }
+
+    /**
+     * National/local digit count **after** any +country stripping (matches validators and format caps).
+     * IE: mobiles are 9 NSN digits (e.g. 89 xxx xxxx); many geographic lines are 8 after +353.
+     */
+    function isPlausibleNationalPhoneDigits(iso, digitCount) {
+        if (!digitCount) return false;
+        if (iso === 'IE') return digitCount >= 8 && digitCount <= 9;
+        if (iso === 'GB') return digitCount >= 9 && digitCount <= 10;
+        if (iso === 'BR') return digitCount >= 10 && digitCount <= 11;
+        if (iso === 'US' || iso === 'CA') return digitCount === 10;
+        return digitCount >= 8 && digitCount <= 15;
     }
 
     function setSelectedCountry(iso) {
@@ -283,7 +323,7 @@
             hasError = true;
         }
 
-        if (phoneDigits && phoneDigits.length < 10) {
+        if (phoneDigits && !isPlausibleNationalPhoneDigits(selectedCountryIso, phoneDigits.length)) {
             fields.phoneNumber.setAttribute('aria-invalid', 'true');
             validationErrors.push('Enter a valid phone number.');
             hasError = true;
@@ -332,8 +372,7 @@
             age: fields.age.value,
             level: fields.level.value,
             username: fields.username.value.trim(),
-            password: fields.password.value.trim(),
-            addAnotherAfterSaving: fields.addAnother.checked
+            password: fields.password.value.trim()
         };
     }
 
@@ -422,7 +461,16 @@
         syncUsernameFromNameFields();
         syncAgeFromBirthDate();
 
+        const linkRaw = fields.externalFollowUpLink instanceof HTMLInputElement ? fields.externalFollowUpLink.value : '';
+        const linkParsed = parseExternalFollowUpLinkInput(linkRaw);
+        if (linkParsed.error) {
+            alert(linkParsed.error);
+            fields.externalFollowUpLink?.focus();
+            return;
+        }
+
         const studentData = getStudentPayload();
+        studentData.externalFollowUpLink = linkParsed.href;
         if (typeof window.createStudentFromModernModal === 'function') {
             const saved = await window.createStudentFromModernModal(studentData);
             if (!saved) return;
@@ -430,19 +478,7 @@
             console.log('Student created:', studentData);
         }
 
-        if (!studentData.addAnotherAfterSaving) {
-            closeModal();
-        } else {
-            form.reset();
-            setSelectedCountry('BR');
-            fields.phoneNumber.value = '';
-            if (fields.birthDate) fields.birthDate.value = '';
-            if (fields.age) fields.age.value = '';
-            if (fields.username) fields.username.value = '';
-            if (fields.password) fields.password.value = '';
-            clearAllErrors();
-            fields.firstName.focus();
-        }
+        closeModal();
     });
 
     syncUsernameFromNameFields();
