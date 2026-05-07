@@ -2245,7 +2245,11 @@ function normalizePersistedClassReportUploads(rawUploads) {
 function refreshVisibleStudentClassReportUploadFeed() {
     const panel = document.getElementById('studentClassReportPanel');
     if (!panel || panel.hidden) return;
-    const studentName = String(panel.dataset.studentName || currentTeacher || '').trim();
+    const loggedStudent = String(loggedInStudentFullName || '').trim();
+    let studentName = loggedStudent;
+    if (!studentName) {
+        studentName = String(panel.dataset.studentName || currentTeacher || '').trim();
+    }
     if (!studentName) return;
     renderStudentClassReportUploadFeed(panel, studentName);
 }
@@ -5067,13 +5071,25 @@ let pollTimer = null;
 
 function tickStudentClassReportUploadFeedPoll() {
     const panel = document.getElementById('studentClassReportPanel');
-    if (!panel || panel.hidden) return;
+    if (!panel) return;
+    const loggedStudent = !!(isTeacherLoggedIn && String(loggedInStudentFullName || '').trim());
+    const panelVisible = !panel.hidden;
+    if (!(loggedStudent || panelVisible)) return;
     loadStudentClassReportUploads({ migrate: false }).catch(() => {});
 }
+
+let classReportUploadsStorageListenerAttached = false;
 
 function startStudentClassReportUploadFeedPolling() {
     if (studentClassReportUploadPollTimer !== null) return;
     if (!document.getElementById('studentClassReportPanel')) return;
+    if (!classReportUploadsStorageListenerAttached) {
+        classReportUploadsStorageListenerAttached = true;
+        window.addEventListener('storage', (ev) => {
+            if (!ev.key || ev.key !== CLASS_REPORT_UPLOADS_KEY) return;
+            loadStudentClassReportUploads({ migrate: false }).catch(() => {});
+        });
+    }
     studentClassReportUploadPollTimer = window.setInterval(
         tickStudentClassReportUploadFeedPoll,
         STUDENT_CLASS_REPORT_UPLOAD_POLL_MS
@@ -7520,14 +7536,11 @@ function selectTeacher(teacherName, opts) {
     const adminPanel = document.getElementById('adminControlPanel');
 
     if (showClassReport) {
-        ensureStudentClassReportPanelShell();
-        reportPanel = document.getElementById('studentClassReportPanel');
         if (calendarWrapper) calendarWrapper.hidden = true;
         if (summaryPanel) summaryPanel.hidden = true;
-        if (reportPanel) {
-            reportPanel.hidden = false;
-            renderStudentClassReportTable(teacherName);
-        }
+        renderStudentClassReportTable(teacherName);
+        reportPanel = document.getElementById('studentClassReportPanel');
+        if (reportPanel) reportPanel.hidden = false;
         if (adminPanel) adminPanel.hidden = true;
     } else {
         if (calendarWrapper) calendarWrapper.hidden = false;

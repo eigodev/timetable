@@ -6550,6 +6550,7 @@ tr td.add-teacher-availability-table-day {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
+    justify-content: center;
 
     height: 100%;
     width: 100%;
