@@ -2324,10 +2324,16 @@ function loadStudentClassReportUploads(opts = {}) {
         });
 }
 
-function saveStudentClassReportUploads() {
+function saveStudentClassReportUploads(opts = {}) {
+    const skipCloudPush = opts.skipCloudPush === true;
+    const maybeQueueCloud = () => {
+        if (!skipCloudPush) queueSaveClassReportUploadsToCloud();
+    };
+
     if (!window.indexedDB) {
         try {
             localStorage.setItem(CLASS_REPORT_UPLOADS_KEY, JSON.stringify(studentClassReportUploadsByName));
+            maybeQueueCloud();
         } catch (error) {
             console.error('Error saving class report uploads:', error);
         }
@@ -2354,6 +2360,9 @@ function saveStudentClassReportUploads() {
                 };
                 tx.onerror = () => reject(tx.error || new Error('Could not save uploads database.'));
             });
+        })
+        .then(() => {
+            maybeQueueCloud();
         })
         .catch((error) => {
             console.error('Error saving class report uploads:', error);
@@ -5053,6 +5062,7 @@ function withUnavailableStudentNamesMeta(teacherName, schedule) {
 
 // Cloudflare API endpoint
 const API_ENDPOINT = '/api/schedules';
+const CLASS_REPORT_UPLOADS_API_ENDPOINT = '/api/class-report-uploads';
 
 // Polling interval for checking updates (in milliseconds)
 const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
@@ -5104,6 +5114,9 @@ let rosterSaveTimer = null;
 let isSavingRoster = false;
 let pendingRosterPayload = null;
 let rosterLastUpdateTimestamp = null;
+
+let classReportUploadsCloudTimestamp = null;
+let classReportUploadsCloudSaveTimer = null;
 
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object') return;
@@ -5183,6 +5196,65 @@ async function pollRosterUpdates() {
     }
 }
 
+async function saveClassReportUploadsToCloud() {
+    try {
+        const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uploads: studentClassReportUploadsByName }),
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data?.success && data.lastUpdated) {
+            classReportUploadsCloudTimestamp = data.lastUpdated;
+        }
+    } catch (error) {
+        console.error('Error saving class report uploads to cloud:', error);
+    }
+}
+
+function queueSaveClassReportUploadsToCloud() {
+    if (classReportUploadsCloudSaveTimer) {
+        clearTimeout(classReportUploadsCloudSaveTimer);
+    }
+    classReportUploadsCloudSaveTimer = setTimeout(() => {
+        classReportUploadsCloudSaveTimer = null;
+        void saveClassReportUploadsToCloud();
+    }, 700);
+}
+
+async function pollClassReportUploadsFromCloud() {
+    try {
+        const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT + '?t=' + Date.now(), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-cache',
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!data?.success) return;
+        const ts = data.lastUpdated || null;
+        if (!ts || ts === classReportUploadsCloudTimestamp) return;
+
+        const raw = data.uploads;
+        const next = normalizePersistedClassReportUploads(
+            raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+        );
+
+        classReportUploadsCloudTimestamp = ts;
+
+        const localStr = JSON.stringify(studentClassReportUploadsByName);
+        const remoteStr = JSON.stringify(next);
+        if (localStr === remoteStr) return;
+
+        studentClassReportUploadsByName = next;
+        refreshVisibleStudentClassReportUploadFeed();
+        await saveStudentClassReportUploads({ skipCloudPush: true });
+    } catch (error) {
+        console.error('Class report uploads cloud poll error:', error);
+    }
+}
+
 // Update sync status indicator
 function updateSyncStatus(status, message) {
     const syncStatus = document.getElementById('syncStatus');
@@ -5224,6 +5296,7 @@ async function loadAllSchedules() {
                 
                 // Start polling for updates
                 startPolling();
+                void pollClassReportUploadsFromCloud();
                 
                 updateSyncStatus('synced', '✓ Cloud sync active');
             } else {
@@ -5341,6 +5414,7 @@ function startPolling() {
             console.error('Polling error:', error);
         }
         await pollRosterUpdates();
+        await pollClassReportUploadsFromCloud();
     }, POLL_INTERVAL);
 }
 
