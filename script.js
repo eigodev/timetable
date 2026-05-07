@@ -1409,6 +1409,14 @@ function findStudentNameByLoginUsername(usernameRaw) {
     );
 }
 
+/**
+ * Same identity rules as test.html / admin.html login: match roster username or contact email.
+ * (Saved credentials store the typed value under `email` even when it is a username.)
+ */
+function findStudentNameByLoginIdentity(raw) {
+    return findStudentNameByLoginUsername(raw) || findStudentNameByLoginEmail(raw);
+}
+
 function syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput) {
     if (!firstInput || !lastInput || !usernameInput) return;
     usernameInput.value = buildDefaultStudentUsername(firstInput.value, lastInput.value);
@@ -1538,16 +1546,16 @@ async function verifyAdminLogin(usernameRaw, passwordRaw) {
 }
 
 /**
- * Student login: account username + account password.
+ * Student login: roster username or contact email + account password (same as the gate login page).
  * @returns {Promise<{ ok: true, studentName: string } | { ok: false, error: string }>}
  */
 async function verifyStudentLogin(usernameRaw, passwordRaw) {
     const username = String(usernameRaw || '').trim();
     const password = String(passwordRaw || '');
     if (!username) {
-        return { ok: false, error: 'Student username is required to log in.' };
+        return { ok: false, error: 'Student username or email is required to log in.' };
     }
-    const studentName = findStudentNameByLoginUsername(username);
+    const studentName = findStudentNameByLoginIdentity(username);
     if (!studentName) {
         return { ok: false, error: 'Teacher/Student account not found.' };
     }
