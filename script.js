@@ -169,6 +169,20 @@ let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
 let studentClassReportUploadsByName = {};
 let studentClassReportUploadPollTimer = null;
+/**
+ * Canonical JSON fingerprint of uploads map (`studentClassReportUploadsByName`) after last sync from storage /
+ * cloud or after a DOM render. Polling skips re-rendering when data is unchanged so audio elements keep playing.
+ */
+let lastSyncedClassReportUploadsJson = '';
+
+function bumpClassReportUploadsSyncFingerprint(candidate = studentClassReportUploadsByName) {
+    try {
+        lastSyncedClassReportUploadsJson = JSON.stringify(candidate || {});
+    } catch {
+        lastSyncedClassReportUploadsJson = '';
+    }
+}
+
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
 let googleMeetSelectedSchool = '';
@@ -2285,8 +2299,19 @@ function readClassReportUploadsFromLocalStorage() {
 function loadStudentClassReportUploads(opts = {}) {
     const migrateAfterLoad = opts.migrate !== false;
     if (!window.indexedDB) {
-        studentClassReportUploadsByName = readClassReportUploadsFromLocalStorage();
-        refreshVisibleStudentClassReportUploadFeed();
+        const next = readClassReportUploadsFromLocalStorage();
+        let nextFp = '';
+        try {
+            nextFp = JSON.stringify(next || {});
+        } catch {
+            nextFp = '';
+        }
+        const prevFp = lastSyncedClassReportUploadsJson;
+        studentClassReportUploadsByName = next;
+        if (nextFp !== prevFp) {
+            refreshVisibleStudentClassReportUploadFeed();
+        }
+        lastSyncedClassReportUploadsJson = nextFp;
         return Promise.resolve(studentClassReportUploadsByName);
     }
     return openClassReportUploadsDb()
@@ -2299,10 +2324,19 @@ function loadStudentClassReportUploads(opts = {}) {
                     const value = request.result?.value;
                     const fromDb = normalizePersistedClassReportUploads(value);
                     const hasDbUploads = Object.keys(fromDb).length > 0;
-                    studentClassReportUploadsByName = hasDbUploads
-                        ? fromDb
-                        : readClassReportUploadsFromLocalStorage();
-                    refreshVisibleStudentClassReportUploadFeed();
+                    const next = hasDbUploads ? fromDb : readClassReportUploadsFromLocalStorage();
+                    let nextFp = '';
+                    try {
+                        nextFp = JSON.stringify(next || {});
+                    } catch {
+                        nextFp = '';
+                    }
+                    const prevFp = lastSyncedClassReportUploadsJson;
+                    studentClassReportUploadsByName = next;
+                    if (nextFp !== prevFp) {
+                        refreshVisibleStudentClassReportUploadFeed();
+                    }
+                    lastSyncedClassReportUploadsJson = nextFp;
                     resolve(studentClassReportUploadsByName);
                 };
                 request.onerror = () => reject(request.error || new Error('Could not read uploads database.'));
@@ -2318,8 +2352,19 @@ function loadStudentClassReportUploads(opts = {}) {
         })
         .catch((error) => {
             console.error('Error loading class report uploads:', error);
-            studentClassReportUploadsByName = readClassReportUploadsFromLocalStorage();
-            refreshVisibleStudentClassReportUploadFeed();
+            const next = readClassReportUploadsFromLocalStorage();
+            let nextFp = '';
+            try {
+                nextFp = JSON.stringify(next || {});
+            } catch {
+                nextFp = '';
+            }
+            const prevFp = lastSyncedClassReportUploadsJson;
+            studentClassReportUploadsByName = next;
+            if (nextFp !== prevFp) {
+                refreshVisibleStudentClassReportUploadFeed();
+            }
+            lastSyncedClassReportUploadsJson = nextFp;
             return studentClassReportUploadsByName;
         });
 }
@@ -4456,6 +4501,7 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
     if (uploadTrigger) uploadTrigger.tabIndex = uploadWrap && !uploadWrap.hidden ? 0 : -1;
     if (changeFileBtn) changeFileBtn.hidden = !feedEditable || feed.length === 0;
     panel.classList.toggle('student-class-report-panel--with-file', feed.length > 0);
+    bumpClassReportUploadsSyncFingerprint();
 }
 
 function ensureStudentClassReportPanelShell(studentName = '') {
@@ -5245,7 +5291,10 @@ async function pollClassReportUploadsFromCloud() {
 
         const localStr = JSON.stringify(studentClassReportUploadsByName);
         const remoteStr = JSON.stringify(next);
-        if (localStr === remoteStr) return;
+        if (localStr === remoteStr) {
+            lastSyncedClassReportUploadsJson = localStr;
+            return;
+        }
 
         studentClassReportUploadsByName = next;
         refreshVisibleStudentClassReportUploadFeed();
