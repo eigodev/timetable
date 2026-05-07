@@ -1890,8 +1890,11 @@ async function initRoster(preloadedRoster = null) {
         if (birthDate) studentBirthDatesByName[name] = birthDate;
         if (age) studentAgesByName[name] = age;
         if (level) studentLevelsByName[name] = level;
-        const extLink = String(studentExternalFollowUpRaw[name] || '').trim();
-        if (extLink) studentExternalFollowUpLinksByName[name] = extLink;
+        const extLinkRaw = String(studentExternalFollowUpRaw[name] || '').trim();
+        if (extLinkRaw) {
+            const parsedExt = parseStudentExternalFollowUpLinkInput(extLinkRaw);
+            if (parsedExt.href) studentExternalFollowUpLinksByName[name] = parsedExt.href;
+        }
     });
     const emailsRaw =
         saved.teacherEmails && typeof saved.teacherEmails === 'object' && !Array.isArray(saved.teacherEmails)
@@ -6007,20 +6010,21 @@ function renderSidebar() {
 
             const allowEditRow = category.deletable && !loggedInStudentFullName;
             if (allowEditRow) {
-                const savedFollowUpLink = String(studentExternalFollowUpLinksByName[name] || '').trim();
+                const followUpHref = getStudentExternalFollowUpLinkHref(name);
 
                 const actionsWrap = document.createElement('span');
                 actionsWrap.className = 'teacher-item-student-actions';
 
-                const externalFollowUpBtn = document.createElement('button');
-                externalFollowUpBtn.type = 'button';
-                externalFollowUpBtn.className = 'student-external-link-btn sidebar-section-title-passport-btn';
-                externalFollowUpBtn.setAttribute('aria-label', 'Open external follow-up link');
-                externalFollowUpBtn.setAttribute('title', 'Open external follow-up link');
-                externalFollowUpBtn.setAttribute('data-student-name', name);
-                externalFollowUpBtn.innerHTML = STUDENT_EXTERNAL_FOLLOWUP_LINK_BTN_SVG;
-                externalFollowUpBtn.hidden = !savedFollowUpLink;
-                actionsWrap.appendChild(externalFollowUpBtn);
+                if (followUpHref) {
+                    const externalFollowUpBtn = document.createElement('button');
+                    externalFollowUpBtn.type = 'button';
+                    externalFollowUpBtn.className = 'student-external-link-btn sidebar-section-title-passport-btn';
+                    externalFollowUpBtn.setAttribute('aria-label', 'Open external follow-up link');
+                    externalFollowUpBtn.setAttribute('title', 'Open external follow-up link');
+                    externalFollowUpBtn.setAttribute('data-student-name', name);
+                    externalFollowUpBtn.innerHTML = STUDENT_EXTERNAL_FOLLOWUP_LINK_BTN_SVG;
+                    actionsWrap.appendChild(externalFollowUpBtn);
+                }
 
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
@@ -7466,7 +7470,7 @@ function setupTeacherListEditDelegation() {
             e.preventDefault();
             e.stopPropagation();
             const nm = extBtn.getAttribute('data-student-name');
-            const href = String(studentExternalFollowUpLinksByName[nm] || '').trim();
+            const href = getStudentExternalFollowUpLinkHref(nm);
             if (!href) return;
             window.open(href, '_blank', 'noopener,noreferrer');
             return;
@@ -7668,6 +7672,22 @@ function parseStudentExternalFollowUpLinkInput(raw) {
 }
 
 window.parseStudentExternalFollowUpLinkInput = parseStudentExternalFollowUpLinkInput;
+
+/** Opens in new tab — only truthy when a stored value parses as http/https. */
+function getStudentExternalFollowUpLinkHref(studentName) {
+    const displayName = String(studentName || '').trim();
+    if (!displayName) return '';
+    let raw = String(studentExternalFollowUpLinksByName[displayName] || '').trim();
+    if (!raw) {
+        const keyMatch = Object.keys(studentExternalFollowUpLinksByName).find(
+            (k) => String(k || '').trim().toLowerCase() === displayName.toLowerCase()
+        );
+        if (keyMatch) raw = String(studentExternalFollowUpLinksByName[keyMatch] || '').trim();
+    }
+    if (!raw) return '';
+    const parsed = parseStudentExternalFollowUpLinkInput(raw);
+    return parsed.error || !parsed.href ? '' : parsed.href;
+}
 
 function saveStudentAccountExtras(studentName, extras) {
     const name = String(studentName || '').trim();

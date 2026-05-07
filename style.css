@@ -6257,7 +6257,7 @@ tr td.add-teacher-availability-table-day {
 .teacher-item-student-actions {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 2.5px;
     flex-shrink: 0;
 }
 
