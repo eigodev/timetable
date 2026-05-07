@@ -1481,7 +1481,7 @@ async function tryRestoreSessionFromSavedCredentials() {
         isAdminLoggedIn = false;
         if (password.length < 8) return null;
         const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
-        if (!expectedPassword || password !== expectedPassword) return null;
+        if (!expectedPassword || !(await verifyStudentPassword(expectedPassword, password))) return null;
         loggedInStudentFullName = '';
         isTeacherLoggedIn = true;
         loggedInTeacherName = teacherNameByEmail;

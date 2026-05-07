@@ -7,7 +7,45 @@
 </head>
 <body>
 	<div id="loginModal" class="login-modal" aria-hidden="true">
+		<!-- Login Popup -->
 		<div class="login-popup">
+			<div class="header">
+				<div class="header-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+						<path d="M18 1.5c2.9 0 5.25 2.35 5.25 5.25v3.75a.75.75 0 0 1-1.5 0V6.75a3.75 3.75 0 1 0-7.5 0v3a3 3 0 0 1 3 3v6.75a3 3 0 0 1-3 3H3.75a3 3 0 0 1-3-3v-6.75a3 3 0 0 1 3-3h9v-3c0-2.9 2.35-5.25 5.25-5.25Z" />
+					</svg>
+				</div>
+				<h1></h1>
+				<h5></h5>
+			</div>
+			<div class="fields">
+				<div class="field-email">
+					<label for="loginEmail" class="label">Email or Username</label>
+					<input id="loginEmail" name="email" class="input-email" type="text" placeholder="Enter your email or username." autocomplete="username"  spellcheck="false" autocapitalize="none" required>
+				</div>
+				<div class="field-password">
+					<label for="loginPassword" class="label">Password</label>
+					<input id="loginPassword" name="password" class="input-password" type="password" placeholder="Enter your password." autocomplete="current-password" inputmode="password" spellcheck="false" autocapitalize="none" required>
+				</div>
+			</div>
+			<button type="button" class="login-btn">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+					<path fill-rule="evenodd" d="M16.5 3.75a1.5 1.5 0 0 1 1.5 1.5v13.5a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5V15a.75.75 0 0 0-1.5 0v3.75a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V5.25a3 3 0 0 0-3-3h-6a3 3 0 0 0-3 3V9A.75.75 0 1 0 9 9V5.25a1.5 1.5 0 0 1 1.5-1.5h6Zm-5.03 4.72a.75.75 0 0 0 0 1.06l1.72 1.72H2.25a.75.75 0 0 0 0 1.5h10.94l-1.72 1.72a.75.75 0 1 0 1.06 1.06l3-3a.75.75 0 0 0 0-1.06l-3-3a.75.75 0 0 0-1.06 0Z" clip-rule="evenodd" />
+				</svg>				   
+				<span>Login</span>
+			</button>
+			<div class="account-links">
+				<p class="forgot-password">Forgot password?</p>
+				<p class="signup-link">Don't have an account? Sign-up to the right.
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+						<path fill-rule="evenodd" d="M16.72 7.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06l2.47-2.47H3a.75.75 0 0 1 0-1.5h16.19l-2.47-2.47a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+					</svg>
+				</p>
+			</div>
+		</div>
+
+		<!-- Signup Popup -->
+		<div class="signup-popup">
 			<div class="header">
 				<div class="header-icon">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
@@ -18,22 +56,47 @@
 				<h5></h5>
 			</div>
 			<div class="fields">
-				<div class="field-email">
-					<label for="email" class="label">Email or Username</label>
-					<input id="email" name="email" class="input-email" type="text" placeholder="Enter your email or username." autocomplete="username"  spellcheck="false" autocapitalize="none" required>
+				<div class="field-name">
+					<div class="field-first-name">
+						<label for="first-name" class="label">First Name</label>
+						<input id="first-name" name="first-name" class="input-first-name" type="text" placeholder="Enter your first name." autocomplete="given-name" spellcheck="false" autocapitalize="none" required>
+					</div>
+					<div class="field-last-name">
+						<label for="last-name" class="label">Last Name</label>
+						<input id="last-name" name="last-name" class="input-last-name" type="text" placeholder="Enter your last name." autocomplete="family-name" spellcheck="false" autocapitalize="none" required>
+					</div>
+					<div class="field-phone-number">
+						<label for="phone-number" class="label">Phone Number</label>
+						<div class="phone-number-input">
+							<div class="country-flag"></div>
+							<div class="country-code"></div>
+							<input id="phone-number" name="phone-number" class="input-phone-number" type="text" placeholder="Enter your phone number." autocomplete="tel-national" inputmode="numeric" spellcheck="false" autocapitalize="none" required>
+						</div>
+					</div>
 				</div>
-				<div class="field-password">
-					<label for="password" class="label">Password</label>
-					<input id="password" name="password" class="input-password" type="password" placeholder="Enter your password." autocomplete="current-password" inputmode="password" spellcheck="false" autocapitalize="none" required>
+				<div class="field-credentials">
+					<div class="field-email">
+						<label for="signupEmail" class="label">Email or Username</label>
+						<input id="signupEmail" name="email" class="input-email" type="text" placeholder="Enter your email or username." autocomplete="username"  spellcheck="false" autocapitalize="none" required>
+					</div>
+					<div class="field-password">
+						<label for="signupPassword" class="label">Password</label>
+						<input id="signupPassword" name="password" class="input-password" type="password" placeholder="Enter your password." autocomplete="current-password" inputmode="password" spellcheck="false" autocapitalize="none" required>
+					</div>
 				</div>
 			</div>
-			<button class="login-btn">
+			<button type="button" class="signup-btn">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
 					<path fill-rule="evenodd" d="M16.5 3.75a1.5 1.5 0 0 1 1.5 1.5v13.5a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5V15a.75.75 0 0 0-1.5 0v3.75a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V5.25a3 3 0 0 0-3-3h-6a3 3 0 0 0-3 3V9A.75.75 0 1 0 9 9V5.25a1.5 1.5 0 0 1 1.5-1.5h6Zm-5.03 4.72a.75.75 0 0 0 0 1.06l1.72 1.72H2.25a.75.75 0 0 0 0 1.5h10.94l-1.72 1.72a.75.75 0 1 0 1.06 1.06l3-3a.75.75 0 0 0 0-1.06l-3-3a.75.75 0 0 0-1.06 0Z" clip-rule="evenodd" />
-				</svg>				   
-				<span>Login</span>
+				</svg>
+				<span>Signup</span>
 			</button>
-			<p class="forgot-password">Forgot password?</p>
+			<p class="login-link">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+					<path fill-rule="evenodd" d="M7.28 7.72a.75.75 0 0 1 0 1.06l-2.47 2.47H21a.75.75 0 0 1 0 1.5H4.81l2.47 2.47a.75.75 0 1 1-1.06 1.06l-3.75-3.75a.75.75 0 0 1 0-1.06l3.75-3.75a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+				   </svg>
+				   Already have an account? Login to the left.
+			</p>
 		</div>
 	</div>
 
@@ -67,7 +130,14 @@
 		}
 
 		h1, h2, h3, h4, h5, h6, p, span {
+			color: #334461;
 			line-height: 1;
+		}
+
+		svg {
+			height: 20px;
+			width: 20px;
+			fill: #334461;
 		}
 
 		/* Inputs */
@@ -93,8 +163,15 @@
 			color: #a9afb8;
 		}
 
+		/* Container */
+		div.login-modal {
+			display: flex;
+			gap: 10px;
+		}
+
 		/* Main Content */
-		div.login-modal div.login-popup {
+		div.login-modal div.login-popup,
+		div.login-modal div.signup-popup {
 			display: flex;
 			align-items: center;
 			flex-direction: column;
@@ -109,14 +186,20 @@
 			background-color: #ffffff;
 		}
 
+		div.login-modal div.signup-popup {
+			min-width: 700px;
+		}
+
 		/* Header */
-		div.login-modal div.login-popup div.header {
+		div.login-modal div.login-popup div.header,
+		div.login-modal div.signup-popup div.header {
 			display: flex;
 			align-items: center;
 			flex-direction: column;
 		}
 
-		div.login-modal div.login-popup div.header div.header-icon {
+		div.login-modal div.login-popup div.header div.header-icon,
+		div.login-modal div.signup-popup div.header div.header-icon {
 			display: flex;
 			justify-content: center;
 			align-items: center;
@@ -131,20 +214,23 @@
 			cursor: pointer;
 		}
 		
-		div.login-modal div.login-popup div.header svg {
+		div.login-modal div.login-popup div.header svg,
+		div.login-modal div.signup-popup div.header svg {
 			height: 30px;
 			width: 30px;
 			fill: #334461;
 		}
 
-		div.login-modal div.login-popup div.header h1 {
+		div.login-modal div.login-popup div.header h1,
+		div.login-modal div.signup-popup div.header h1 {
 			font-family: 'Gluten', cursive;
 			font-size: 1.5rem;
 			font-weight: 300;
 			color: #334461;
 		}
 
-		div.login-modal div.login-popup div.header h5 {
+		div.login-modal div.login-popup div.header h5,
+		div.login-modal div.signup-popup div.header h5 {
 			font-family: 'Dongle', sans-serif;
 			font-size: 1.5rem;
 			font-weight: 100;
@@ -152,11 +238,16 @@
 		}
 
 		/* Fields */
-		div.login-modal div.login-popup div.fields {
+		div.login-modal div.login-popup div.fields,
+		div.login-modal div.signup-popup div.fields {
 			display: flex;
 			flex-direction: column;
 			gap: 15px;
 			width: stretch;
+		}
+
+		div.login-modal div.signup-popup div.fields {
+			width: auto;
 		}
 		
 		div.login-modal div.login-popup div.fields div.field-email,
@@ -167,7 +258,8 @@
 		}
 
 		/* Login Button */
-		div.login-modal div.login-popup button.login-btn {
+		div.login-modal div.login-popup button.login-btn,
+		div.login-modal div.signup-popup button.signup-btn {
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -186,17 +278,82 @@
 			color: #ffffff;
 			cursor: pointer;
 			outline: none;
+			transition: transform 0.2s ease, filter 0.2s ease;
 		}
 
-		div.login-modal div.login-popup button.login-btn svg {
+		div.login-modal div.login-popup button.login-btn.is-pressed {
+			transform: scale(0.75);
+		}
+
+		div.login-modal div.signup-popup button.signup-btn {
+			width: 30%;
+		}
+
+		div.login-modal div.login-popup button.login-btn svg,
+		div.login-modal div.signup-popup button.signup-btn svg {
 			height: 20px;
 			width: 20px;
 			fill: #ffffff;
+		}
+
+		div.login-modal div.login-popup button.login-btn span,
+		div.login-modal div.signup-popup button.signup-btn span {
+			color: #ffffff;
+		}
+
+		div.login-modal div.login-popup p.signup-link,
+		div.login-modal div.signup-popup p.login-link {
+			display: flex;
+			align-items: flex-start;
+			gap: 10px;
+		}
+
+		/* Signup Popup */
+		div.login-modal div.signup-popup div.fields div.field-name,
+		div.login-modal div.signup-popup div.fields div.field-credentials {
+			display: flex;
+			gap: 10px;
+		}
+
+		/* Name */
+		div.login-modal div.signup-popup div.fields div.field-name div.field-first-name,
+		div.login-modal div.signup-popup div.fields div.field-name div.field-last-name {
+			flex: 0 1 25%;
+		}
+
+		div.login-modal div.signup-popup div.fields div.field-phone-number {
+			flex: 1 0 50%;
+		}
+
+		/* Phone Number */
+		div.login-modal div.signup-popup div.fields div.field-phone-number div.phone-number-input {
+			display: flex;
+			align-items: center;
+		}
+
+		div.login-modal div.signup-popup div.fields div.field-phone-number div.country-flag {
+			height: 50px;
+			width: 50px;
+
+			border-radius: 10px 0px 0px 10px;
+			background: #e2e6ec;
+		}
+
+		div.login-modal div.signup-popup div.fields div.field-phone-number div.country-code {
+			height: 50px;
+			width: 50px;
+
+			background: #e2e6ec;
+		}
+
+		div.login-modal div.signup-popup div.fields div.field-phone-number input {
+			border-radius: 0px 10px 10px 0px;
 		}
 	</style>
 
 	<!-- JS | JavaScript -->
 	<script>
+		/* Login Message */
 		/* Greetings */
 		const greetingsA = [
 			"Hi,",
@@ -235,8 +392,8 @@
 		];
 
 		/* Get the login container */
-		const greetingContainer = document.querySelector('.header h1')
-		const welcomeContainer = document.querySelector('.header h5')
+		const greetingContainer = document.querySelector('.login-popup .header h1')
+		const welcomeContainer = document.querySelector('.login-popup .header h5')
 
 		/* Generate a random login message */
 		// Math.floor rounds down to the nearest integer
@@ -249,32 +406,66 @@
 		greetingContainer.textContent = greetingsMessage
 		welcomeContainer.textContent = welcomeMessage
 
+		/* Signup Message */
+		/* Greetings */
+		const greetingsSignup = [
+			"Oops, you don't have an account yet?",
+			"You're not registered yet?",
+			"It seems you don't have an account yet.",
+			"If you don't have an account fill out the form, please!",
+		];
+
+		/* Welcome text */
+		const welcomeTextSignup = [
+			"As you fill out the form, your account will be created.",
+			"Please enter your details to signup.",
+			"Enter your credentials to create your account.",
+			"Use your info to continue to your account.",
+		];
+
+		/* Get the login container */
+		const greetingSignupContainer = document.querySelector('.signup-popup .header h1')
+		const welcomeSignupContainer = document.querySelector('.signup-popup .header h5')
+
+		/* Generate a random login message */
+		// Math.floor rounds down to the nearest integer
+		// Math.random generates a random number between 0 and 1
+		// * greetings.length or welcomeText.length to get a random index
+		const greetingsMessageSignup = `${greetingsSignup[Math.floor(Math.random() * greetingsSignup.length)]}`
+		const welcomeMessageSignup = `${welcomeTextSignup[Math.floor(Math.random() * welcomeTextSignup.length)]}`
+
+		/* Set the login message to the login container */
+		greetingSignupContainer.textContent = greetingsMessageSignup
+		welcomeSignupContainer.textContent = welcomeMessageSignup
+
 		/* Login Button */
 		const loginBtn = document.querySelector('.login-btn')
 
-		/* MouseDown Event */
-		loginBtn.addEventListener('mousedown', ()=>{
-			loginBtn.style.transform = 'scale(0.75)' // Scale the button down to 75%
-			loginBtn.style.transition = 'transform 0.5s ease' // Transition the button down to 75% in 0.5 seconds
-		})
+		/* Button Press Animation */
+		const setLoginButtonPressed = (pressed) => {
+			loginBtn.classList.toggle('is-pressed', pressed)
+		}
 
-		/* MouseUp Event */
-		loginBtn.addEventListener('mouseup', ()=>{
-			loginBtn.style.transform = 'scale(1)' // Scale the button back to 100%
-			loginBtn.style.transition = 'transform 0.5s ease' // Transition the button back to 100% in 0.2 seconds
-		})
+		loginBtn.addEventListener('pointerdown', () => setLoginButtonPressed(true))
+		loginBtn.addEventListener('pointerup', () => setLoginButtonPressed(false))
+		loginBtn.addEventListener('pointercancel', () => setLoginButtonPressed(false))
+		loginBtn.addEventListener('pointerleave', () => setLoginButtonPressed(false))
+		loginBtn.addEventListener('blur', () => setLoginButtonPressed(false))
 
 		/* Admin Login */
 		const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
 		const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
+		const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
+		const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 		const ROSTER_STORAGE_KEY = 'timetable_roster';
 		const DEFAULT_ADMIN_USERNAME = 'admin_';
 		const DEFAULT_ADMIN_PASSWORD = '@Admin';
 		const PASSWORD_HASH_PREFIX = 'sha256$';
 
-		const usernameInput = document.getElementById('email');
-		const passwordInput = document.getElementById('password');
+		const usernameInput = document.getElementById('loginEmail');
+		const passwordInput = document.getElementById('loginPassword');
 
+		/* Function to hash a password */
 		async function hashPassword(password) {
 			const hasCrypto = window.crypto && window.crypto.subtle && typeof TextEncoder !== 'undefined';
 			if (!hasCrypto) return String(password || '');
@@ -285,6 +476,7 @@
 			return `${PASSWORD_HASH_PREFIX}${digestHex}`;
 		}
 
+		/* Function to normalize an admin account */
 		function normalizeAdminAccount(account) {
 			if (!account || typeof account !== 'object' || Array.isArray(account)) return null;
 			const username = String(account.username || '').trim();
@@ -293,6 +485,7 @@
 			return { username, passwordHash };
 		}
 
+		/* Function to load a stored admin account */
 		function loadStoredAdminAccount() {
 			try {
 				return normalizeAdminAccount(JSON.parse(localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY) || 'null'));
@@ -301,6 +494,7 @@
 			}
 		}
 
+		/* Function to load a cached admin account */
 		function loadCachedRosterAdminAccount() {
 			try {
 				const roster = JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null');
@@ -310,7 +504,22 @@
 			}
 		}
 
-		async function loadHostedRosterAdminAccount() {
+		/* Function to normalize a roster */
+		function normalizeRoster(roster) {
+			return roster && typeof roster === 'object' && !Array.isArray(roster) ? roster : null;
+		}
+
+		/* Function to load a cached roster */
+		function loadCachedRoster() {
+			try {
+				return normalizeRoster(JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null'));
+			} catch {
+				return null;
+			}
+		}
+
+		/* Function to load a hosted roster */
+		async function loadHostedRoster() {
 			try {
 				const response = await fetch('/api/roster?t=' + Date.now(), {
 					method: 'GET',
@@ -319,18 +528,60 @@
 				});
 				if (!response.ok) return null;
 				const data = await response.json();
-				const account = normalizeAdminAccount(data?.roster?.adminAccount);
-				if (!account) return null;
-				localStorage.setItem(ADMIN_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
-				if (data?.roster && typeof data.roster === 'object') {
-					localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(data.roster));
+				const roster = normalizeRoster(data?.roster);
+				if (!roster) return null;
+				localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+				const account = normalizeAdminAccount(roster.adminAccount);
+				if (account) {
+					localStorage.setItem(ADMIN_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
 				}
-				return account;
+				return roster;
 			} catch {
 				return null;
 			}
 		}
 
+		/* Function to load a hosted roster admin account */
+		async function loadHostedRosterAdminAccount() {
+			const roster = await loadHostedRoster();
+			return normalizeAdminAccount(roster?.adminAccount);
+		}
+
+		/* Function to get the roster created accounts */
+		function getRosterCreatedAccounts(roster) {
+			if (!roster || typeof roster !== 'object') return [];
+			const accounts = [];
+			const teacherEmails = roster.teacherEmails && typeof roster.teacherEmails === 'object' ? roster.teacherEmails : {};
+			const teacherPasswords = roster.teacherPasswords && typeof roster.teacherPasswords === 'object' ? roster.teacherPasswords : {};
+			const teachers = Array.isArray(roster.teachers) ? roster.teachers : [];
+			teachers.forEach((name) => {
+				const username = String(teacherEmails[name] || '').trim();
+				const passwordHash = String(teacherPasswords[name] || '').trim();
+				if (username && passwordHash) {
+					accounts.push({ role: 'teacher', profileName: String(name || '').trim(), username, passwordHash });
+				}
+			});
+
+			const studentEmails = roster.studentEmails && typeof roster.studentEmails === 'object' ? roster.studentEmails : {};
+			const studentUsernames = roster.studentUsernames && typeof roster.studentUsernames === 'object' ? roster.studentUsernames : {};
+			const studentPasswords = roster.studentPasswords && typeof roster.studentPasswords === 'object' ? roster.studentPasswords : {};
+			[
+				...(Array.isArray(roster.private) ? roster.private : []),
+				...(Array.isArray(roster.speakon) ? roster.speakon : []),
+				...(Array.isArray(roster.passport) ? roster.passport : [])
+			].forEach((name) => {
+				const passwordHash = String(studentPasswords[name] || '').trim();
+				if (!passwordHash) return;
+				const username = String(studentUsernames[name] || '').trim();
+				const email = String(studentEmails[name] || '').trim();
+				if (username) accounts.push({ role: 'student', profileName: String(name || '').trim(), username, passwordHash });
+				if (email) accounts.push({ role: 'student', profileName: String(name || '').trim(), username: email, passwordHash });
+			});
+
+			return accounts;
+		}
+
+		/* Function to verify a password */
 		async function verifyPassword(storedPasswordRaw, passwordRaw) {
 			const storedPassword = String(storedPasswordRaw || '').trim();
 			const typedPassword = String(passwordRaw || '');
@@ -341,10 +592,11 @@
 			return await hashPassword(typedPassword) === storedPassword;
 		}
 
-		async function verifyAdminLogin(usernameRaw, passwordRaw) {
+		/* Function to verify a login */
+		async function verifyLogin(usernameRaw, passwordRaw) {
 			const username = String(usernameRaw || '').trim();
 			const password = String(passwordRaw || '');
-			if (!username || !password) return false;
+			if (!username || !password) return { ok: false };
 
 			const storedAccount =
 				await loadHostedRosterAdminAccount()
@@ -352,36 +604,77 @@
 				|| loadStoredAdminAccount();
 
 			if (storedAccount) {
-				if (username.toLowerCase() !== storedAccount.username.toLowerCase()) return false;
-				return await verifyPassword(storedAccount.passwordHash, password);
+				if (username.toLowerCase() === storedAccount.username.toLowerCase()) {
+					return {
+						ok: await verifyPassword(storedAccount.passwordHash, password),
+						role: 'admin'
+					};
+				}
 			}
 
-			return username === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD;
+			const roster = await loadHostedRoster() || loadCachedRoster();
+			const createdAccounts = getRosterCreatedAccounts(roster);
+			const matchingCreatedAccount = createdAccounts.find((account) => {
+				return String(account.username || '').trim().toLowerCase() === username.toLowerCase();
+			});
+			if (matchingCreatedAccount) {
+				return {
+					ok: await verifyPassword(matchingCreatedAccount.passwordHash, password),
+					role: matchingCreatedAccount.role,
+					profileName: matchingCreatedAccount.profileName
+				};
+			}
+			if (storedAccount || createdAccounts.length > 0) return { ok: false };
+
+			return {
+				ok: username === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD,
+				role: 'admin'
+			};
 		}
 
 		/* Form */
 		loginBtn.addEventListener('click', async function(event){
 			event.preventDefault(); // Prevent the form from submitting
 
+			/* Get the username and password from the input fields */
 			const username = usernameInput.value.trim();
 			const password = passwordInput.value;
 
+			/* Check if the username is empty */
 			if (!username) {
 				alert('Please enter your username.');
 				usernameInput.focus();
 				return;
 			}
 
+			/* Check if the password is empty */
 			if (!password) {
 				alert('Please enter your password.');
 				passwordInput.focus();
 				return;
 			}
 
-			if (await verifyAdminLogin(username, password)) {
+			/* Verify the login */
+			const loginResult = await verifyLogin(username, password);
+			/* If the login is successful and the user is an admin */
+			if (loginResult.ok && loginResult.role === 'admin') {
+				/* Set the admin login session key */
 				sessionStorage.setItem(ADMIN_LOGIN_SESSION_KEY, 'true');
+				/* Remove the login session suppress key */
+				sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+				/* Redirect to the admin page */
 				window.location.href = 'admin.html';
+			} else if (loginResult.ok) {
+				/* Set the login credentials in local storage */
+				localStorage.setItem(LOGIN_CREDENTIALS_STORAGE_KEY, JSON.stringify({ email: username, password }));
+				/* Remove the admin login session key */
+				sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
+				/* Remove the login session suppress key */
+				sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+				/* Redirect to the index page */
+				window.location.href = 'index.html';
 			} else {
+				/* Show an error message */
 				alert('Invalid username or password.')
 			}
 		})
@@ -392,6 +685,8 @@
 			loginBtn.click();
 		}
 	});
+
+	/* Listen for Enter key on password input to trigger login */
 	passwordInput.addEventListener('keydown', function(event) {
 		if (event.key === 'Enter') {
 			loginBtn.click();

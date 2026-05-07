@@ -38,12 +38,58 @@
     const COUNTRY_CODE_TO_ISO = { '+353': 'IE', '+55': 'BR', '+44': 'GB', '+1': 'US' };
     let selectedCountryIso = 'BR';
 
+    function getStoredRoster() {
+        try {
+            const roster = JSON.parse(localStorage.getItem('timetable_roster') || 'null');
+            return roster && typeof roster === 'object' && !Array.isArray(roster) ? roster : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function getAvailableSchoolNames() {
+        const roster = getStoredRoster();
+        const schools = new Set();
+        const studentSchools = roster?.studentSchools && typeof roster.studentSchools === 'object'
+            ? roster.studentSchools
+            : {};
+        Object.values(studentSchools).forEach((school) => {
+            const name = String(school || '').trim();
+            if (name) schools.add(name);
+        });
+        if (Array.isArray(roster?.customSchools)) {
+            roster.customSchools.forEach((school) => {
+                const name = String(school || '').trim();
+                if (name) schools.add(name);
+            });
+        }
+        ['HomeTeachers', 'SpeakOn', 'Passport'].forEach((fallback) => schools.add(fallback));
+        return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
+
+    function refreshSchoolOptions(selectedSchool = '') {
+        if (!(fields.school instanceof HTMLSelectElement)) return;
+        const selected = String(selectedSchool || fields.school.value || '').trim();
+        const schools = getAvailableSchoolNames();
+        fields.school.innerHTML = '<option value="" disabled selected>Select a school</option>';
+        schools.forEach((school) => {
+            const option = document.createElement('option');
+            option.value = school;
+            option.textContent = school;
+            fields.school.appendChild(option);
+        });
+        if (selected && schools.includes(selected)) {
+            fields.school.value = selected;
+        }
+    }
+
     function openModal() {
         const legacyAddModal = document.getElementById('addModal');
         if (legacyAddModal?.classList.contains('is-open')) {
             legacyAddModal.classList.remove('is-open', 'is-closing');
             legacyAddModal.setAttribute('aria-hidden', 'true');
         }
+        refreshSchoolOptions();
         overlay.classList.add('is-open');
         overlay.setAttribute('aria-hidden', 'false');
         setSelectedCountry('BR');
@@ -356,7 +402,7 @@
         closeCountryPicker();
     });
 
-    fields.school.addEventListener('input', () => fields.school.removeAttribute('aria-invalid'));
+    fields.school.addEventListener('change', () => fields.school.removeAttribute('aria-invalid'));
     fields.firstName.addEventListener('input', () => {
         fields.firstName.removeAttribute('aria-invalid');
         syncUsernameFromNameFields();
@@ -398,4 +444,5 @@
     syncUsernameFromNameFields();
     syncAgeFromBirthDate();
     setSelectedCountry('BR');
+    refreshSchoolOptions();
 })();
