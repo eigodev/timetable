@@ -8,6 +8,7 @@ const STORAGE_KEY = 'timetable_schedules';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
 const CLASS_REPORT_UPLOADS_KEY = 'timetable_student_class_report_uploads';
+const STUDENT_CLASS_REPORT_UPLOAD_POLL_MS = 2500;
 const CLASS_REPORT_UPLOADS_DB_NAME = 'timetable_student_class_report_uploads_db';
 const CLASS_REPORT_UPLOADS_STORE_NAME = 'uploads';
 const CLASS_REPORT_UPLOADS_RECORD_KEY = 'all';
@@ -167,6 +168,7 @@ let loggedInStudentFullName = '';
 let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
 let studentClassReportUploadsByName = {};
+let studentClassReportUploadPollTimer = null;
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
 let googleMeetSelectedSchool = '';
@@ -2276,9 +2278,11 @@ function readClassReportUploadsFromLocalStorage() {
     }
 }
 
-function loadStudentClassReportUploads() {
+function loadStudentClassReportUploads(opts = {}) {
+    const migrateAfterLoad = opts.migrate !== false;
     if (!window.indexedDB) {
         studentClassReportUploadsByName = readClassReportUploadsFromLocalStorage();
+        refreshVisibleStudentClassReportUploadFeed();
         return Promise.resolve(studentClassReportUploadsByName);
     }
     return openClassReportUploadsDb()
@@ -2302,6 +2306,7 @@ function loadStudentClassReportUploads() {
             });
         })
         .then((uploads) => {
+            if (!migrateAfterLoad) return uploads;
             if (Object.keys(uploads || {}).length > 0) {
                 return saveStudentClassReportUploads();
             }
@@ -4888,6 +4893,7 @@ function setupClassTopicModal() {
 function setupStudentClassReportPanel() {
     const tbody = document.getElementById('studentClassReportBody');
     const addBtn = document.getElementById('addStudentClassReportRow');
+    startStudentClassReportUploadFeedPolling();
     if (!tbody || !addBtn) return;
     addBtn.hidden = !canEditFeed();
 
@@ -5058,6 +5064,21 @@ let saveTimer = null;
 
 // Polling timer for checking updates
 let pollTimer = null;
+
+function tickStudentClassReportUploadFeedPoll() {
+    const panel = document.getElementById('studentClassReportPanel');
+    if (!panel || panel.hidden) return;
+    loadStudentClassReportUploads({ migrate: false }).catch(() => {});
+}
+
+function startStudentClassReportUploadFeedPolling() {
+    if (studentClassReportUploadPollTimer !== null) return;
+    if (!document.getElementById('studentClassReportPanel')) return;
+    studentClassReportUploadPollTimer = window.setInterval(
+        tickStudentClassReportUploadFeedPoll,
+        STUDENT_CLASS_REPORT_UPLOAD_POLL_MS
+    );
+}
 
 // Track if status update is pending
 let statusUpdateTimer = null;
@@ -12601,5 +12622,8 @@ window.addEventListener('beforeunload', () => {
     // Clean up polling
     if (pollTimer) {
         clearInterval(pollTimer);
+    }
+    if (studentClassReportUploadPollTimer !== null) {
+        clearInterval(studentClassReportUploadPollTimer);
     }
 });
