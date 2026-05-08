@@ -5,6 +5,8 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 // LocalStorage key (fallback)
 const STORAGE_KEY = 'timetable_schedules';
+/** Set after local schedule edits until `performSave` confirms KV write (avoids stale cloud wiping a fast refresh). */
+const SCHEDULE_PENDING_CLOUD_UPLOAD_KEY = 'timetable_schedule_pending_cloud_upload';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
 const LEGACY_CLASS_REPORT_UPLOADS_LS_KEY = 'timetable_student_class_report_uploads';
@@ -5661,6 +5663,8 @@ let lastUpdateTimestamp = null;
 
 // Debounce timer for saving
 let saveTimer = null;
+/** Schedules skipped `saveAllSchedules` calls while KV POST runs; flushed after `performSave` finishes. */
+let schedulesCloudSavePending = false;
 
 // Polling timer for checking updates
 let pollTimer = null;
@@ -5845,7 +5849,10 @@ function updateSyncStatus(status, message) {
 async function loadAllSchedules() {
     try {
         updateSyncStatus('syncing', 'Syncing with cloud...');
-        
+        loadAllSchedulesLocal();
+        const skipCloudClobberPendingUpload =
+            isSchedulePendingCloudUpload() && Object.keys(teacherSchedules || {}).length > 0;
+
         const response = await fetch(API_ENDPOINT, {
             method: 'GET',
             headers: {
@@ -5857,16 +5864,19 @@ async function loadAllSchedules() {
             const data = await response.json();
             
             if (data.success) {
-                if (data.schedules) {
+                if (data.schedules && !skipCloudClobberPendingUpload) {
                     Object.assign(teacherSchedules, data.schedules);
                 }
                 lastUpdateTimestamp = data.lastUpdated;
-                
+
                 // Start polling for updates
                 startPolling();
                 void pollClassReportUploadsFromCloud();
-                
+
                 updateSyncStatus('synced', '✓ Cloud sync active');
+                if (skipCloudClobberPendingUpload) {
+                    saveAllSchedules();
+                }
             } else {
                 // API returned error
                 const errorMsg = data.error || 'Unknown error';
@@ -5978,18 +5988,20 @@ function startPolling() {
                             console.log('Timestamp changed - checking for updates');
 
                             if (dataChanged) {
-                                console.log('Data changed - updating from cloud');
-                                // Update local schedules with remote data
-                                Object.assign(teacherSchedules, data.schedules);
-                                lastUpdateTimestamp = data.lastUpdated;
-                                syncSpeakOnWeeklyToAllTeacherSchedules();
+                                if (isSchedulePendingCloudUpload()) {
+                                    void saveAllSchedules();
+                                } else {
+                                    console.log('Data changed - updating from cloud');
+                                    Object.assign(teacherSchedules, data.schedules);
+                                    syncSpeakOnWeeklyToAllTeacherSchedules();
 
-                                updateSyncStatus('synced', '✓ Updated from cloud');
-                                setTimeout(() => {
-                                    updateSyncStatus('synced', 'Cloud sync active');
-                                }, 2000);
+                                    updateSyncStatus('synced', '✓ Updated from cloud');
+                                    setTimeout(() => {
+                                        updateSyncStatus('synced', 'Cloud sync active');
+                                    }, 2000);
+                                }
+                                lastUpdateTimestamp = data.lastUpdated;
                             } else {
-                                // Timestamp changed but data is same - just update timestamp
                                 lastUpdateTimestamp = data.lastUpdated;
                                 console.log('Timestamp updated, data unchanged');
                             }
@@ -6027,13 +6039,37 @@ function loadAllSchedulesLocal() {
     }
 }
 
+function markSchedulePendingCloudUpload() {
+    try {
+        localStorage.setItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY, '1');
+    } catch (_) {
+        /* quota / private mode */
+    }
+}
+
+function clearSchedulePendingCloudUpload() {
+    try {
+        localStorage.removeItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function isSchedulePendingCloudUpload() {
+    try {
+        return localStorage.getItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
 // Save all schedules to Cloudflare KV or localStorage (with debouncing)
 function saveAllSchedules() {
-    // Don't queue another save if we're already saving
     if (isSaving) {
+        schedulesCloudSavePending = true;
         return;
     }
-    
+
     // Clear any pending save
     if (saveTimer) {
         clearTimeout(saveTimer);
@@ -6053,13 +6089,13 @@ async function performSave() {
         clearTimeout(statusUpdateTimer);
         statusUpdateTimer = null;
     }
-    
+
     try {
         isSaving = true;
         updateSyncStatus('syncing', 'Saving to cloud...');
-        
+
         console.log('Saving schedules to cloud...', Object.keys(teacherSchedules).length, 'teachers');
-        
+
         const response = await fetch(API_ENDPOINT, {
             method: 'POST',
             headers: {
@@ -6069,23 +6105,20 @@ async function performSave() {
                 schedules: teacherSchedules,
             }),
         });
-        
+
         if (response.ok) {
             const data = await response.json();
-            
+
             if (data.success) {
                 lastUpdateTimestamp = data.lastUpdated;
                 console.log('Successfully saved to cloud. Timestamp:', data.lastUpdated);
-                
-                // Also save to localStorage as backup (even when cloud save succeeds)
+
+                clearSchedulePendingCloudUpload();
                 saveAllSchedulesLocal();
-                
-                // Update status after a short delay
+
                 statusUpdateTimer = setTimeout(() => {
-                    isSaving = false;
                     updateSyncStatus('synced', '✓ Saved to cloud');
-                    
-                    // Reset to normal status after a delay
+
                     statusUpdateTimer = setTimeout(() => {
                         updateSyncStatus('synced', 'Cloud sync active');
                         statusUpdateTimer = null;
@@ -6095,7 +6128,6 @@ async function performSave() {
                 throw new Error(data.error || 'Save failed');
             }
         } else {
-            // Get error details from response
             let errorDetails = `HTTP ${response.status}`;
             try {
                 const errorData = await response.json();
@@ -6111,23 +6143,29 @@ async function performSave() {
     } catch (error) {
         console.error('Error saving schedules to Cloudflare:', error);
         console.error('Error details:', error.message);
-        
-        isSaving = false;
-        
-        // Determine error message
+
         let errorMessage = 'Save failed';
-        if (error.message.includes('schedules_kv not configured') || error.message.includes('KV_SCHEDULES not configured') || error.message.includes('503')) {
+        if (
+            error.message.includes('schedules_kv not configured') ||
+            error.message.includes('KV_SCHEDULES not configured') ||
+            error.message.includes('503')
+        ) {
             errorMessage = 'KV not configured - check binding name is "schedules_kv"';
         } else if (error.message.includes('404')) {
             errorMessage = 'API not found - check function deployment';
         } else if (error.message) {
             errorMessage = error.message;
         }
-        
+
         updateSyncStatus('local-only', `⚠ ${errorMessage} - using local storage`);
-        
-        // Still save locally as fallback
+
         saveAllSchedulesLocal();
+    } finally {
+        isSaving = false;
+        if (schedulesCloudSavePending) {
+            schedulesCloudSavePending = false;
+            saveAllSchedules();
+        }
     }
 }
 
@@ -11877,7 +11915,8 @@ function saveTeacherSchedule(teacherName) {
         teacherSchedules[teacherName] = next;
         syncSpeakOnWeeklyToAllTeacherSchedules();
     }
-    // Save to Cloudflare (will also save to localStorage as backup)
+    markSchedulePendingCloudUpload();
+    saveAllSchedulesLocal();
     saveAllSchedules();
 }
 
