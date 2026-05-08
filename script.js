@@ -7,13 +7,19 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const STORAGE_KEY = 'timetable_schedules';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
-const CLASS_REPORT_UPLOADS_KEY = 'timetable_student_class_report_uploads';
+const LEGACY_CLASS_REPORT_UPLOADS_LS_KEY = 'timetable_student_class_report_uploads';
 /** Persisted KV `lastUpdated` for `/api/class-report-uploads` so reloads compare revisions (deletions propagate). */
 const CLASS_REPORT_UPLOADS_CLOUD_TS_STORAGE_KEY = 'timetable_class_report_uploads_cloud_updated';
-const STUDENT_CLASS_REPORT_UPLOAD_POLL_MS = 2500;
-const CLASS_REPORT_UPLOADS_DB_NAME = 'timetable_student_class_report_uploads_db';
-const CLASS_REPORT_UPLOADS_STORE_NAME = 'uploads';
-const CLASS_REPORT_UPLOADS_RECORD_KEY = 'all';
+const CLASS_REPORT_UPLOADS_API_ENDPOINT = '/api/class-report-uploads';
+
+try {
+    if (typeof ClassReportUploadsStore !== 'undefined') {
+        ClassReportUploadsStore.purgeLegacyUploadDatabase('timetable_student_class_report_uploads_db');
+    }
+    localStorage.removeItem(LEGACY_CLASS_REPORT_UPLOADS_LS_KEY);
+} catch (_) {
+    /* ignore */
+}
 const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
 /** When set in sessionStorage, skip auto-login until the next successful manual login (same tab). */
 const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
@@ -174,20 +180,10 @@ let loggedInStudentFullName = '';
 let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
 let studentClassReportUploadsByName = {};
-let studentClassReportUploadPollTimer = null;
 /**
- * Canonical JSON fingerprint of uploads map (`studentClassReportUploadsByName`) after last sync from storage /
- * cloud or after a DOM render. Polling skips re-rendering when data is unchanged so audio elements keep playing.
+ * Stable manifest-only fingerprint string. Polling skips re-hydration while this matches remote manifest.
  */
 let lastSyncedClassReportUploadsJson = '';
-
-function bumpClassReportUploadsSyncFingerprint(candidate = studentClassReportUploadsByName) {
-    try {
-        lastSyncedClassReportUploadsJson = JSON.stringify(candidate || {});
-    } catch {
-        lastSyncedClassReportUploadsJson = '';
-    }
-}
 
 let profileAvatarsByKey = {};
 let profileAvatarsLoaded = false;
@@ -2325,168 +2321,408 @@ function saveStudentClassReportRows() {
     }
 }
 
-function normalizePersistedClassReportFile(file) {
-    if (!file || typeof file !== 'object') return null;
-    const dataUrl = String(file.dataUrl || '').trim();
-    if (!dataUrl) return null;
-    return {
-        id: String(file.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
-        name: String(file.name || 'Uploaded file'),
-        type: String(file.type || '').toLowerCase(),
-        dataUrl,
-        questions: Array.isArray(file.questions)
-            ? file.questions.map((question, index) => ({
-                id: String(question?.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
-                speaker: question?.speaker === 'student' ? 'student' : (index % 2 === 1 ? 'student' : 'teacher'),
-                text: String(question?.text || question?.question || '')
-            }))
-            : [],
-        relatedFiles: Array.isArray(file.relatedFiles)
-            ? file.relatedFiles.map(normalizePersistedClassReportFile).filter(Boolean)
-            : []
-    };
+function cloneQuestionListForMemory(qs) {
+    return (Array.isArray(qs) ? qs : []).map((q, index) => ({
+        id: String(q?.id || `q_${index}_${Date.now()}`).trim(),
+        speaker: q?.speaker === 'student' ? 'student' : 'teacher',
+        text: String(q?.text || q?.question || '')
+    }));
 }
 
-function normalizePersistedClassReportUploads(rawUploads) {
-    const next = {};
-    if (rawUploads && typeof rawUploads === 'object' && !Array.isArray(rawUploads)) {
-        Object.entries(rawUploads).forEach(([studentName, uploads]) => {
-            if (!Array.isArray(uploads)) return;
-            const cleaned = [];
-            uploads.forEach((upload) => {
-                if (upload?.kind === 'question') {
-                    const lastUpload = cleaned[cleaned.length - 1];
-                    if (!lastUpload) return;
-                    if (!Array.isArray(lastUpload.questions)) {
-                        lastUpload.questions = [];
-                    }
-                    lastUpload.questions.push({
-                        id: String(upload.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
-                        speaker: 'teacher',
-                        text: String(upload.question || upload.text || '')
-                    });
-                    return;
-                }
-                const normalizedUpload = normalizePersistedClassReportFile(upload);
-                if (normalizedUpload) cleaned.push(normalizedUpload);
-            });
-            if (cleaned.length > 0) {
-                next[String(studentName || '').trim()] = cleaned;
-            }
-        });
-    }
-    return next;
-}
-
-/**
- * Union class-report file lists from two devices without dropping local-only rows.
- * Remote entries are seeded first (stable order), then local-only ids are appended.
- * Used by cloud poll so an empty/stale KV snapshot cannot wipe IndexedDB uploads.
- */
-function mergeClassReportQuestionLists(localQs, remoteQs) {
-    const ql = Array.isArray(localQs) ? localQs : [];
-    const qr = Array.isArray(remoteQs) ? remoteQs : [];
-    const byId = new Map();
-    qr.forEach((q) => {
-        if (!q || typeof q !== 'object') return;
-        const id = String(q.id || '').trim();
-        if (!id) return;
-        byId.set(id, { ...q });
-    });
-    ql.forEach((q) => {
-        if (!q || typeof q !== 'object') return;
-        const id = String(q.id || '').trim();
-        if (!id) return;
-        if (!byId.has(id)) byId.set(id, { ...q });
-        else byId.set(id, { ...byId.get(id), ...q });
-    });
-    const order = [];
-    const seen = new Set();
-    qr.forEach((q) => {
-        const id = String(q?.id || '').trim();
-        if (id && byId.has(id) && !seen.has(id)) {
-            order.push(byId.get(id));
-            seen.add(id);
-        }
-    });
-    ql.forEach((q) => {
-        const id = String(q?.id || '').trim();
-        if (id && byId.has(id) && !seen.has(id)) {
-            order.push(byId.get(id));
-            seen.add(id);
-        }
-    });
-    return order;
-}
-
-function mergeClassReportUploadLists(localList, remoteList) {
-    const loc = Array.isArray(localList) ? localList : [];
-    const rem = Array.isArray(remoteList) ? remoteList : [];
-    const byId = new Map();
-    rem.forEach((item) => {
-        const n = normalizePersistedClassReportFile(item);
-        if (!n) return;
-        const id = String(n.id || '').trim();
-        if (!id) return;
-        byId.set(id, n);
-    });
-    loc.forEach((item) => {
-        const n = normalizePersistedClassReportFile(item);
-        if (!n) return;
-        const id = String(n.id || '').trim();
-        if (!id) return;
-        if (!byId.has(id)) {
-            byId.set(id, n);
-        } else {
-            const prev = byId.get(id);
-            const merged = {
-                ...prev,
-                ...n,
-                dataUrl: String(n.dataUrl || '').trim() || String(prev.dataUrl || '').trim(),
-                questions: mergeClassReportQuestionLists(n.questions, prev.questions),
-                relatedFiles: mergeClassReportUploadLists(n.relatedFiles, prev.relatedFiles)
-            };
-            const norm = normalizePersistedClassReportFile(merged);
-            if (norm) byId.set(id, norm);
-        }
-    });
-    const order = [];
-    const seen = new Set();
-    const takeOrder = (arr) => {
-        arr.forEach((item) => {
-            const n = normalizePersistedClassReportFile(item);
-            if (!n) return;
-            const id = String(n.id || '').trim();
-            if (!id) return;
-            if (byId.has(id) && !seen.has(id)) {
-                order.push(byId.get(id));
-                seen.add(id);
-            }
-        });
-    };
-    takeOrder(rem);
-    takeOrder(loc);
-    const tail = [];
-    [...rem, ...loc].forEach((item) => {
-        const n = normalizePersistedClassReportFile(item);
-        if (n && !String(n.id || '').trim()) tail.push(n);
-    });
-    return [...order, ...tail];
-}
-
-function mergeClassReportUploadMaps(localMap, remoteMap) {
-    const loc = localMap && typeof localMap === 'object' && !Array.isArray(localMap) ? localMap : {};
-    const rem = remoteMap && typeof remoteMap === 'object' && !Array.isArray(remoteMap) ? remoteMap : {};
-    const keys = new Set([...Object.keys(loc), ...Object.keys(rem)]);
+function manifestStudentRecordToSkeletonFeed(students) {
     const out = {};
-    keys.forEach((k) => {
-        const studentKey = String(k || '').trim();
-        if (!studentKey) return;
-        const mergedList = mergeClassReportUploadLists(loc[studentKey], rem[studentKey]);
-        if (mergedList.length) out[studentKey] = mergedList;
+    if (!students || typeof students !== 'object') return out;
+    Object.entries(students).forEach(([name, uploads]) => {
+        const studentKey = String(name || '').trim();
+        if (!studentKey || !Array.isArray(uploads)) return;
+        const list = uploads
+            .map((upload) => {
+                if (!upload || typeof upload !== 'object' || upload.kind === 'question') return null;
+                const id = String(upload.id || '').trim();
+                if (!id) return null;
+                return {
+                    id,
+                    name: String(upload.name || 'Uploaded file'),
+                    type: String(upload.type || '').toLowerCase(),
+                    dataUrl: '',
+                    blobUrl: '',
+                    url: '',
+                    questions: cloneQuestionListForMemory(upload.questions),
+                    relatedFiles: (Array.isArray(upload.relatedFiles) ? upload.relatedFiles : [])
+                        .filter((rf) => rf && typeof rf === 'object' && rf.id)
+                        .map((rf) => ({
+                            id: String(rf.id).trim(),
+                            name: String(rf.name || 'Related file'),
+                            type: String(rf.type || '').toLowerCase(),
+                            dataUrl: '',
+                            blobUrl: '',
+                            url: ''
+                        }))
+                };
+            })
+            .filter(Boolean);
+        if (list.length) out[studentKey] = list;
     });
     return out;
 }
+
+function memoryToStudentManifestBuckets() {
+    const students = {};
+    Object.entries(studentClassReportUploadsByName || {}).forEach(([studentName, uploads]) => {
+        const key = String(studentName || '').trim();
+        if (!key || !Array.isArray(uploads)) return;
+        const rows = uploads
+            .map((upload) => {
+                if (!upload || typeof upload !== 'object') return null;
+                const id = String(upload.id || '').trim();
+                if (!id) return null;
+                return {
+                    id,
+                    name: String(upload.name || 'Uploaded file'),
+                    type: String(upload.type || '').toLowerCase(),
+                    questions: cloneQuestionListForMemory(upload.questions),
+                    relatedFiles: (Array.isArray(upload.relatedFiles) ? upload.relatedFiles : []).map((rf) => ({
+                        id: String(rf.id || '').trim(),
+                        name: String(rf.name || 'Related file'),
+                        type: String(rf.type || '').toLowerCase()
+                    }))
+                };
+            })
+            .filter(Boolean);
+        if (rows.length) students[key] = rows;
+    });
+    return students;
+}
+
+function memoryToManifest() {
+    return { students: memoryToStudentManifestBuckets() };
+}
+
+function stableStringifyManifestStudents(studentsRecord) {
+    const keys = Object.keys(studentsRecord || {}).sort();
+    const canon = {};
+    keys.forEach((k) => {
+        canon[k] = studentsRecord[k];
+    });
+    try {
+        return JSON.stringify({ students: canon });
+    } catch {
+        return '';
+    }
+}
+
+function bumpClassReportUploadsSyncFingerprint() {
+    try {
+        lastSyncedClassReportUploadsJson = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+    } catch {
+        lastSyncedClassReportUploadsJson = '';
+    }
+}
+
+function revokeIfBlobLikeUrl(fileSlice) {
+    if (!fileSlice) return;
+    const cand = String(fileSlice.blobUrl || fileSlice.url || '').trim();
+    if (cand.startsWith('blob:')) URL.revokeObjectURL(cand);
+}
+
+function revokeUploadDerivedUrls(upload) {
+    if (!upload) return;
+    revokeIfBlobLikeUrl(upload);
+    (Array.isArray(upload.relatedFiles) ? upload.relatedFiles : []).forEach((rf) => revokeIfBlobLikeUrl(rf));
+    (Array.isArray(upload.audioFiles) ? upload.audioFiles : []).forEach((a) => revokeIfBlobLikeUrl(a));
+}
+
+function revokeAllUrlsInStudentMap(map) {
+    Object.values(map || {}).forEach((feed) =>
+        (Array.isArray(feed) ? feed : []).forEach((u) => revokeUploadDerivedUrls(u))
+    );
+}
+
+function collectManifestAssetIds(manifestStudents) {
+    const ids = new Set();
+    if (!manifestStudents || typeof manifestStudents !== 'object') return [];
+    Object.values(manifestStudents).forEach((uploads) => {
+        if (!Array.isArray(uploads)) return;
+        uploads.forEach((upload) => {
+            if (!upload || typeof upload !== 'object') return;
+            if (upload.id) ids.add(String(upload.id));
+            if (Array.isArray(upload.relatedFiles)) {
+                upload.relatedFiles.forEach((rf) => {
+                    if (rf?.id) ids.add(String(rf.id));
+                });
+            }
+        });
+    });
+    return [...ids];
+}
+
+async function persistClassReportOfflineSnapshot(extra = {}) {
+    if (typeof ClassReportUploadsStore === 'undefined') return;
+    try {
+        const manifest = memoryToManifest();
+        const pkg = {
+            lastUpdated:
+                extra.remoteLastUpdated != null
+                    ? String(extra.remoteLastUpdated)
+                    : classReportUploadsCloudTimestamp || '',
+            manifest
+        };
+        await ClassReportUploadsStore.metaPut('offlineSnapshot', pkg);
+        bumpClassReportUploadsSyncFingerprint();
+    } catch (e) {
+        console.warn('persistClassReportOfflineSnapshot:', e);
+    }
+}
+
+async function hydrateMapWithCachedBlobsOnly(map) {
+    if (!map || typeof ClassReportUploadsStore === 'undefined') return;
+    for (const feed of Object.values(map)) {
+        if (!Array.isArray(feed)) continue;
+        for (const upload of feed) {
+            if (!upload) continue;
+            const mainBlob = await ClassReportUploadsStore.getBlob(upload.id);
+            if (mainBlob) {
+                revokeIfBlobLikeUrl(upload);
+                const url = URL.createObjectURL(mainBlob);
+                upload.blobUrl = url;
+                upload.url = url;
+                upload.dataUrl = '';
+            }
+            for (const rf of upload.relatedFiles || []) {
+                if (!rf?.id) continue;
+                const rblob = await ClassReportUploadsStore.getBlob(rf.id);
+                if (rblob) {
+                    revokeIfBlobLikeUrl(rf);
+                    const rurl = URL.createObjectURL(rblob);
+                    rf.blobUrl = rurl;
+                    rf.url = rurl;
+                    rf.dataUrl = '';
+                }
+            }
+        }
+    }
+}
+
+async function applyServerAssetBundlesToMemory(map, assets) {
+    if (!map || !assets || typeof assets !== 'object' || typeof ClassReportUploadsStore === 'undefined') return;
+    for (const feed of Object.values(map)) {
+        if (!Array.isArray(feed)) continue;
+        for (const upload of feed) {
+            const duMain = assets[upload.id];
+            if (duMain) {
+                const blob = await ClassReportUploadsStore.dataUrlToBlob(duMain);
+                await ClassReportUploadsStore.putBlob(upload.id, blob);
+                revokeIfBlobLikeUrl(upload);
+                const url = URL.createObjectURL(blob);
+                upload.blobUrl = url;
+                upload.url = url;
+                upload.dataUrl = '';
+            }
+            for (const rf of upload.relatedFiles || []) {
+                if (!rf?.id) continue;
+                const du = assets[rf.id];
+                if (!du) continue;
+                const rblob = await ClassReportUploadsStore.dataUrlToBlob(du);
+                await ClassReportUploadsStore.putBlob(rf.id, rblob);
+                revokeIfBlobLikeUrl(rf);
+                const ru = URL.createObjectURL(rblob);
+                rf.blobUrl = ru;
+                rf.url = ru;
+                rf.dataUrl = '';
+            }
+        }
+    }
+}
+
+let lastRemoteManifestFingerprint = '';
+
+let classReportUploadPushInFlight = 0;
+
+async function fetchClassReportUploadAssetsByIds(ids) {
+    const idList = (Array.isArray(ids) ? ids : []).slice(0, 96);
+    if (!idList.length) return {};
+    const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-cache',
+        body: JSON.stringify({ action: 'fetchAssets', ids: idList })
+    });
+    if (!res.ok) return {};
+    const data = await res.json().catch(() => null);
+    if (!data?.success || !data.assets || typeof data.assets !== 'object') return {};
+    return data.assets;
+}
+
+async function applyRemoteManifestPayload(manifest, lastUpdated) {
+    const studentsBucket = manifest && manifest.students && typeof manifest.students === 'object' ? manifest.students : {};
+    const fpNew = stableStringifyManifestStudents(studentsBucket);
+
+    revokeAllUrlsInStudentMap(studentClassReportUploadsByName);
+    studentClassReportUploadsByName = manifestStudentRecordToSkeletonFeed(studentsBucket);
+    await hydrateMapWithCachedBlobsOnly(studentClassReportUploadsByName);
+
+    const needed = collectManifestAssetIds(studentsBucket);
+    const have = new Set();
+
+    Object.values(studentClassReportUploadsByName).forEach((feed) =>
+        (Array.isArray(feed) ? feed : []).forEach((u) => {
+            const mainOk = `${u.blobUrl || ''}`.startsWith('blob:') || `${u.dataUrl || ''}`.startsWith('data:');
+            if (mainOk) have.add(u.id);
+            (u.relatedFiles || []).forEach((rf) => {
+                const ok = `${rf.blobUrl || ''}`.startsWith('blob:') || `${rf.dataUrl || ''}`.startsWith('data:');
+                if (ok) have.add(rf.id);
+            });
+        })
+    );
+
+    let missing = needed.filter((id) => id && !have.has(id));
+
+    while (missing.length > 0) {
+        const chunk = missing.splice(0, 40);
+        const bundle = await fetchClassReportUploadAssetsByIds(chunk);
+        await applyServerAssetBundlesToMemory(studentClassReportUploadsByName, bundle);
+    }
+
+    if (lastUpdated) setClassReportUploadsCloudTimestamp(lastUpdated);
+
+    await persistClassReportOfflineSnapshot({ remoteLastUpdated: lastUpdated });
+    refreshVisibleStudentClassReportUploadFeed();
+    lastSyncedClassReportUploadsJson = fpNew;
+    lastRemoteManifestFingerprint = fpNew;
+}
+
+async function renameClassReportStudentBucketOnServer(fromStudent, toStudent) {
+    const fromName = String(fromStudent || '').trim();
+    const toName = String(toStudent || '').trim();
+    if (!fromName || !toName || fromName === toName) return false;
+    try {
+        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'renameStudentBucket',
+                fromStudent: fromName,
+                toStudent: toName
+            })
+        });
+        if (!res.ok) return false;
+        const data = await res.json().catch(() => null);
+        if (data?.success && data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        return !!data?.success;
+    } catch (e) {
+        console.warn('renameClassReportStudentBucketOnServer', e);
+        return false;
+    }
+}
+
+async function patchClassReportUploadQuestionsOnServer(studentKey, uploadId, questionsPayload) {
+    try {
+        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'patchUploadMeta',
+                student: String(studentKey || '').trim(),
+                uploadId: String(uploadId || '').trim(),
+                questions: Array.isArray(questionsPayload)
+                    ? questionsPayload.map((q) => ({
+                        id: q.id,
+                        speaker: q.speaker === 'student' ? 'student' : 'teacher',
+                        text: String(q.text || '')
+                    }))
+                    : []
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) return false;
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        return true;
+    } catch (e) {
+        console.warn('patchUploadMeta err', e);
+        return false;
+    }
+}
+
+const classReportQuestionPatchDebounceTimers = Object.create(null);
+
+function debouncePatchClassReportQuestions(studentKey, uploadId) {
+    if (!canEditFeed()) return;
+    const sid = String(studentKey || '').trim();
+    const uid = String(uploadId || '').trim();
+    if (!sid || !uid) return;
+    const k = `${sid}::${uid}`;
+    window.clearTimeout(classReportQuestionPatchDebounceTimers[k]);
+    classReportQuestionPatchDebounceTimers[k] = window.setTimeout(() => {
+        delete classReportQuestionPatchDebounceTimers[k];
+        const feed = getStudentClassReportUploadFeed(sid);
+        const target = feed.find((x) => x && x.id === uid);
+        if (!target) return;
+        classReportUploadPushInFlight++;
+        void (async () => {
+            try {
+                await patchClassReportUploadQuestionsOnServer(sid, uid, target.questions || []);
+            } finally {
+                classReportUploadPushInFlight--;
+            }
+        })();
+    }, 260);
+}
+
+async function flushClassReportReplaceManifestFromMemory() {
+    if (!canEditFeed()) return;
+    classReportUploadPushInFlight++;
+    try {
+        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'replaceManifest',
+                manifest: memoryToManifest()
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+            console.warn('replaceManifest failed', data?.error || res.status);
+            return;
+        }
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+    } catch (e) {
+        console.warn('replaceManifest', e);
+    } finally {
+        classReportUploadPushInFlight--;
+    }
+}
+
+async function loadStudentClassReportUploads() {
+    if (typeof ClassReportUploadsStore === 'undefined') {
+        bumpClassReportUploadsSyncFingerprint();
+        return studentClassReportUploadsByName;
+    }
+    try {
+        const snap = await ClassReportUploadsStore.metaGet('offlineSnapshot');
+        const rawManifest = snap && snap.manifest ? snap.manifest : null;
+        const buckets = rawManifest && rawManifest.students ? rawManifest.students : null;
+        if (buckets && typeof buckets === 'object') {
+            const prevFp = lastSyncedClassReportUploadsJson;
+            revokeAllUrlsInStudentMap(studentClassReportUploadsByName);
+            studentClassReportUploadsByName = manifestStudentRecordToSkeletonFeed(buckets);
+            await hydrateMapWithCachedBlobsOnly(studentClassReportUploadsByName);
+            bumpClassReportUploadsSyncFingerprint();
+            if (lastSyncedClassReportUploadsJson !== prevFp) refreshVisibleStudentClassReportUploadFeed();
+            if (snap.lastUpdated && String(snap.lastUpdated).trim())
+                maybeAdvanceClassReportUploadsCloudTsFromPoll(String(snap.lastUpdated));
+        }
+    } catch (e) {
+        console.warn('loadStudentClassReportUploads cache hydrate', e);
+    }
+    bumpClassReportUploadsSyncFingerprint();
+    return studentClassReportUploadsByName;
+}
+
+
 
 function studentClassReportPanelHasTypingFocus(panel) {
     const p = panel || document.getElementById('studentClassReportPanel');
@@ -2557,157 +2793,6 @@ function refreshVisibleStudentClassReportUploadFeed(opts = {}) {
     renderStudentClassReportUploadFeed(panel, studentName);
 }
 
-function openClassReportUploadsDb() {
-    return new Promise((resolve, reject) => {
-        if (!window.indexedDB) {
-            reject(new Error('IndexedDB is not available.'));
-            return;
-        }
-        const request = indexedDB.open(CLASS_REPORT_UPLOADS_DB_NAME, 1);
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains(CLASS_REPORT_UPLOADS_STORE_NAME)) {
-                db.createObjectStore(CLASS_REPORT_UPLOADS_STORE_NAME, { keyPath: 'key' });
-            }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error('Could not open uploads database.'));
-    });
-}
-
-function readClassReportUploadsFromLocalStorage() {
-    try {
-        const raw = localStorage.getItem(CLASS_REPORT_UPLOADS_KEY);
-        const parsed = raw ? JSON.parse(raw) : {};
-        return normalizePersistedClassReportUploads(parsed);
-    } catch {
-        return {};
-    }
-}
-
-function loadStudentClassReportUploads(opts = {}) {
-    const migrateAfterLoad = opts.migrate !== false;
-    if (!window.indexedDB) {
-        const next = readClassReportUploadsFromLocalStorage();
-        let nextFp = '';
-        try {
-            nextFp = JSON.stringify(next || {});
-        } catch {
-            nextFp = '';
-        }
-        const prevFp = lastSyncedClassReportUploadsJson;
-        studentClassReportUploadsByName = next;
-        if (nextFp !== prevFp) {
-            refreshVisibleStudentClassReportUploadFeed();
-        }
-        lastSyncedClassReportUploadsJson = nextFp;
-        return Promise.resolve(studentClassReportUploadsByName);
-    }
-    return openClassReportUploadsDb()
-        .then((db) => {
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(CLASS_REPORT_UPLOADS_STORE_NAME, 'readonly');
-                const store = tx.objectStore(CLASS_REPORT_UPLOADS_STORE_NAME);
-                const request = store.get(CLASS_REPORT_UPLOADS_RECORD_KEY);
-                request.onsuccess = () => {
-                    const value = request.result?.value;
-                    const fromDb = normalizePersistedClassReportUploads(value);
-                    const hasDbUploads = Object.keys(fromDb).length > 0;
-                    const next = hasDbUploads ? fromDb : readClassReportUploadsFromLocalStorage();
-                    let nextFp = '';
-                    try {
-                        nextFp = JSON.stringify(next || {});
-                    } catch {
-                        nextFp = '';
-                    }
-                    const prevFp = lastSyncedClassReportUploadsJson;
-                    studentClassReportUploadsByName = next;
-                    if (nextFp !== prevFp) {
-                        refreshVisibleStudentClassReportUploadFeed();
-                    }
-                    lastSyncedClassReportUploadsJson = nextFp;
-                    resolve(studentClassReportUploadsByName);
-                };
-                request.onerror = () => reject(request.error || new Error('Could not read uploads database.'));
-                tx.oncomplete = () => db.close();
-            });
-        })
-        .then((uploads) => {
-            if (!migrateAfterLoad) return uploads;
-            if (Object.keys(uploads || {}).length > 0) {
-                return saveStudentClassReportUploads();
-            }
-            return uploads;
-        })
-        .catch((error) => {
-            console.error('Error loading class report uploads:', error);
-            const next = readClassReportUploadsFromLocalStorage();
-            let nextFp = '';
-            try {
-                nextFp = JSON.stringify(next || {});
-            } catch {
-                nextFp = '';
-            }
-            const prevFp = lastSyncedClassReportUploadsJson;
-            studentClassReportUploadsByName = next;
-            if (nextFp !== prevFp) {
-                refreshVisibleStudentClassReportUploadFeed();
-            }
-            lastSyncedClassReportUploadsJson = nextFp;
-            return studentClassReportUploadsByName;
-        });
-}
-
-function saveStudentClassReportUploads(opts = {}) {
-    const skipCloudPush = opts.skipCloudPush === true;
-    const eagerCloudFlush = opts.eagerCloudFlush === true;
-    const maybeQueueCloud = () => {
-        if (skipCloudPush) return;
-        if (eagerCloudFlush) {
-            flushQueuedClassReportUploadsToCloud();
-        } else {
-            queueSaveClassReportUploadsToCloud();
-        }
-    };
-
-    if (!window.indexedDB) {
-        try {
-            localStorage.setItem(CLASS_REPORT_UPLOADS_KEY, JSON.stringify(studentClassReportUploadsByName));
-            maybeQueueCloud();
-        } catch (error) {
-            console.error('Error saving class report uploads:', error);
-        }
-        return Promise.resolve();
-    }
-    return openClassReportUploadsDb()
-        .then((db) => {
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(CLASS_REPORT_UPLOADS_STORE_NAME, 'readwrite');
-                const store = tx.objectStore(CLASS_REPORT_UPLOADS_STORE_NAME);
-                const request = store.put({
-                    key: CLASS_REPORT_UPLOADS_RECORD_KEY,
-                    value: studentClassReportUploadsByName
-                });
-                request.onerror = () => reject(request.error || new Error('Could not save uploads database.'));
-                tx.oncomplete = () => {
-                    db.close();
-                    try {
-                        localStorage.removeItem(CLASS_REPORT_UPLOADS_KEY);
-                    } catch {
-                        /* ignore legacy cleanup failures */
-                    }
-                    resolve();
-                };
-                tx.onerror = () => reject(tx.error || new Error('Could not save uploads database.'));
-            });
-        })
-        .then(() => {
-            maybeQueueCloud();
-        })
-        .catch((error) => {
-            console.error('Error saving class report uploads:', error);
-        });
-}
 
 function isStudentName(name) {
     const n = String(name || '').trim().toLowerCase();
@@ -4006,7 +4091,11 @@ function renameStudentClassReportRows(oldName, newName) {
     if (studentClassReportUploadsByName[oldName]) {
         studentClassReportUploadsByName[newName] = studentClassReportUploadsByName[oldName];
         delete studentClassReportUploadsByName[oldName];
-        void saveStudentClassReportUploads({ eagerCloudFlush: true });
+        void renameClassReportStudentBucketOnServer(oldName, newName).then(async (ok) => {
+            if (ok && classReportUploadsCloudTimestamp)
+                await persistClassReportOfflineSnapshot({ remoteLastUpdated: classReportUploadsCloudTimestamp });
+            else await persistClassReportOfflineSnapshot();
+        });
     }
 }
 
@@ -4449,6 +4538,8 @@ function getStudentClassReportUploadFeed(studentName) {
 }
 
 function getStudentClassReportFileSrc(fileData) {
+    const blobish = String(fileData?.blobUrl || '').trim();
+    if (blobish) return blobish;
     return String(fileData?.dataUrl || fileData?.url || '');
 }
 
@@ -4504,17 +4595,60 @@ function classReportUploadAcceptsMimeOrName(file) {
 async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
     const key = String(studentNameKey || '').trim();
     if (!panel || !key || !file || !classReportUploadAcceptsMimeOrName(file)) return false;
+    if (typeof ClassReportUploadsStore === 'undefined') return false;
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const mime = String(file.type || '').toLowerCase();
+    await ClassReportUploadsStore.putBlob(id, file);
+    const blobUrl = URL.createObjectURL(file);
+
     const feed = getStudentClassReportUploadFeed(key);
-    const dataUrl = await readFileAsDataUrl(file);
     feed.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        id,
         name: file.name || 'Uploaded file',
-        type: String(file.type || '').toLowerCase(),
-        dataUrl,
+        type: mime,
+        blobUrl,
+        url: blobUrl,
+        dataUrl: '',
         questions: [],
         relatedFiles: []
     });
-    await saveStudentClassReportUploads({ eagerCloudFlush: true });
+
+    classReportUploadPushInFlight++;
+    try {
+        const mainB64 = await ClassReportUploadsStore.blobToPureBase64(file);
+        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'putUpload',
+                student: key,
+                mainBase64: mainB64,
+                upload: {
+                    id,
+                    name: file.name || 'Uploaded file',
+                    type: mime,
+                    questions: [],
+                    relatedFiles: []
+                }
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+            console.error('Class report upload failed:', data?.error || res.status, data?.code || '');
+            const msg =
+                data?.error ||
+                (res.status === 413 ? 'File is too large for cloud sync.' : 'Could not sync file.');
+            alert(`${msg}`);
+            return false;
+        }
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+    } finally {
+        classReportUploadPushInFlight--;
+    }
+
     const browseInput = panel.querySelector('#studentClassReportUploadInput');
     if (browseInput) browseInput.value = '';
     renderStudentClassReportUploadFeed(panel, key);
@@ -4531,26 +4665,47 @@ function removeStudentClassReportUpload(studentName, uploadId) {
         console.warn('Permission denied: students cannot delete feed content.');
         return;
     }
+    if (typeof ClassReportUploadsStore === 'undefined') return;
     const key = String(studentName || '').trim();
     const feed = getStudentClassReportUploadFeed(key);
     const index = feed.findIndex((item) => item && item.id === uploadId);
     if (index === -1) return;
     const [removed] = feed.splice(index, 1);
-    if (removed?.url && String(removed.url).startsWith('blob:')) {
-        URL.revokeObjectURL(removed.url);
-    }
-    if (Array.isArray(removed?.audioFiles)) {
-        removed.audioFiles.forEach((audio) => {
-            if (audio?.url && String(audio.url).startsWith('blob:')) URL.revokeObjectURL(audio.url);
-        });
-    }
+    revokeUploadDerivedUrls(removed);
+
+    const delIds = [String(uploadId || '').trim()].filter(Boolean);
     if (Array.isArray(removed?.relatedFiles)) {
-        removed.relatedFiles.forEach((file) => {
-            if (file?.url && String(file.url).startsWith('blob:')) URL.revokeObjectURL(file.url);
+        removed.relatedFiles.forEach((rf) => {
+            if (rf?.id) delIds.push(String(rf.id));
         });
     }
-    void saveStudentClassReportUploads({ eagerCloudFlush: true });
-    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+    void ClassReportUploadsStore.deleteManyBlobs(delIds);
+
+    classReportUploadPushInFlight++;
+    void (async () => {
+        try {
+            const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'deleteUpload',
+                    student: key,
+                    uploadId: String(uploadId || '').trim()
+                })
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data?.success) {
+                console.error('deleteUpload failed', data?.error);
+                return;
+            }
+            if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+            await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+            lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+        } finally {
+            classReportUploadPushInFlight--;
+        }
+        renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+    })();
 }
 
 async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, file) {
@@ -4558,6 +4713,7 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
         console.warn('Permission denied: students cannot edit feed content.');
         return;
     }
+    if (typeof ClassReportUploadsStore === 'undefined') return;
     const key = String(studentName || '').trim();
     if (!file) return;
     const feed = getStudentClassReportUploadFeed(key);
@@ -4566,14 +4722,46 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
     if (!Array.isArray(upload.relatedFiles)) {
         upload.relatedFiles = [];
     }
-    const dataUrl = await readFileAsDataUrl(file);
-    upload.relatedFiles.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    const rid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const mime = String(file.type || '').toLowerCase();
+    await ClassReportUploadsStore.putBlob(rid, file);
+    const blobUrl = URL.createObjectURL(file);
+    const relatedRow = {
+        id: rid,
         name: file.name || 'Related file',
-        type: String(file.type || '').toLowerCase(),
-        dataUrl
-    });
-    await saveStudentClassReportUploads({ eagerCloudFlush: true });
+        type: mime,
+        blobUrl,
+        url: blobUrl,
+        dataUrl: ''
+    };
+    upload.relatedFiles.push(relatedRow);
+
+    classReportUploadPushInFlight++;
+    try {
+        const b64 = await ClassReportUploadsStore.blobToPureBase64(file);
+        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'addRelatedUpload',
+                student: key,
+                uploadId: String(uploadId || '').trim(),
+                relatedBase64: b64,
+                relatedFile: { id: rid, name: relatedRow.name, type: mime }
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+            console.error('addRelated failed', data?.error);
+            alert('Could not attach related file to cloud.');
+            return;
+        }
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+    } finally {
+        classReportUploadPushInFlight--;
+    }
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
 }
 
@@ -4597,8 +4785,8 @@ function addQuestionToLatestStudentClassReportUpload(studentName) {
             text: ''
         });
     }
-    void saveStudentClassReportUploads({ skipCloudPush: true });
-    scheduleClassReportTypingCloudFlush();
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportQuestions(key, latestUpload.id);
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
     requestAnimationFrame(() => {
         const panel = document.getElementById('studentClassReportPanel');
@@ -4631,8 +4819,8 @@ function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQ
         text: ''
     };
     upload.questions.splice(currentIndex >= 0 ? currentIndex + 1 : upload.questions.length, 0, nextQuestion);
-    void saveStudentClassReportUploads({ skipCloudPush: true });
-    scheduleClassReportTypingCloudFlush();
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportQuestions(key, upload.id);
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
     requestAnimationFrame(() => {
         const panel = document.getElementById('studentClassReportPanel');
@@ -4792,8 +4980,7 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
                     return;
                 }
                 question.text = input.value;
-                void saveStudentClassReportUploads({ skipCloudPush: true });
-                scheduleClassReportTypingCloudFlush();
+                debouncePatchClassReportQuestions(studentName, upload.id);
             });
 
             const addLineBtn = document.createElement('button');
@@ -5305,7 +5492,6 @@ function setupClassTopicModal() {
 function setupStudentClassReportPanel() {
     const tbody = document.getElementById('studentClassReportBody');
     const addBtn = document.getElementById('addStudentClassReportRow');
-    startStudentClassReportUploadFeedPolling();
     if (!tbody || !addBtn) return;
     addBtn.hidden = !canEditFeed();
 
@@ -5461,7 +5647,6 @@ function withUnavailableStudentNamesMeta(teacherName, schedule) {
 
 // Cloudflare API endpoint
 const API_ENDPOINT = '/api/schedules';
-const CLASS_REPORT_UPLOADS_API_ENDPOINT = '/api/class-report-uploads';
 
 // Polling interval for checking updates (in milliseconds)
 const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
@@ -5481,37 +5666,6 @@ let saveTimer = null;
 let pollTimer = null;
 let classReportUploadCloudPollTimer = null;
 
-function tickStudentClassReportUploadFeedPoll() {
-    const panel = document.getElementById('studentClassReportPanel');
-    if (!panel) return;
-    const studentSession = !!String(loggedInStudentFullName || '').trim();
-    // Student devices rely on pollClassReportUploadsFromCloud (plus initial loadStudentClassReportUploads).
-    // Reloading IndexedDB here can race the async skipCloudPush save right after a cloud merge and
-    // overwrite memory with stale uploads before the DB write commits.
-    if (studentSession) return;
-    const panelVisible = !panel.hidden;
-    if (!panelVisible) return;
-    loadStudentClassReportUploads({ migrate: false }).catch(() => {});
-}
-
-let classReportUploadsStorageListenerAttached = false;
-
-function startStudentClassReportUploadFeedPolling() {
-    if (studentClassReportUploadPollTimer !== null) return;
-    if (!document.getElementById('studentClassReportPanel')) return;
-    if (!classReportUploadsStorageListenerAttached) {
-        classReportUploadsStorageListenerAttached = true;
-        window.addEventListener('storage', (ev) => {
-            if (!ev.key || ev.key !== CLASS_REPORT_UPLOADS_KEY) return;
-            loadStudentClassReportUploads({ migrate: false }).catch(() => {});
-        });
-    }
-    studentClassReportUploadPollTimer = window.setInterval(
-        tickStudentClassReportUploadFeedPoll,
-        STUDENT_CLASS_REPORT_UPLOAD_POLL_MS
-    );
-}
-
 // Track if status update is pending
 let statusUpdateTimer = null;
 
@@ -5529,18 +5683,6 @@ try {
     }
 } catch {
     classReportUploadsCloudTimestamp = null;
-}
-let classReportUploadsCloudSaveTimer = null;
-let classReportTypingCloudFlushTimer = null;
-
-function scheduleClassReportTypingCloudFlush() {
-    if (classReportTypingCloudFlushTimer) {
-        window.clearTimeout(classReportTypingCloudFlushTimer);
-    }
-    classReportTypingCloudFlushTimer = window.setTimeout(() => {
-        classReportTypingCloudFlushTimer = null;
-        flushQueuedClassReportUploadsToCloud();
-    }, 100);
 }
 
 function setClassReportUploadsCloudTimestamp(nextTs) {
@@ -5562,9 +5704,6 @@ function maybeAdvanceClassReportUploadsCloudTsFromPoll(remoteTs) {
         setClassReportUploadsCloudTimestamp(s);
     }
 }
-
-/** True while a debounced or in-flight KV POST for class-report uploads runs; avoids polling stale GET + merge undoing deletes. */
-let classReportUploadsKvOutboundBusy = false;
 
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object') return;
@@ -5647,58 +5786,9 @@ async function pollRosterUpdates() {
     }
 }
 
-async function saveClassReportUploadsToCloud() {
-    classReportUploadsKvOutboundBusy = true;
-    try {
-        const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uploads: studentClassReportUploadsByName }),
-        });
-        if (!response.ok) {
-            let detail = '';
-            try {
-                detail = await response.text();
-            } catch {
-                detail = '';
-            }
-            console.error('Class report uploads cloud save failed:', response.status, detail);
-            return;
-        }
-        const data = await response.json();
-        if (data?.success && data.lastUpdated) {
-            setClassReportUploadsCloudTimestamp(data.lastUpdated);
-        }
-    } catch (error) {
-        console.error('Error saving class report uploads to cloud:', error);
-    } finally {
-        classReportUploadsKvOutboundBusy = false;
-    }
-}
-
-function queueSaveClassReportUploadsToCloud() {
-    classReportUploadsKvOutboundBusy = true;
-    if (classReportUploadsCloudSaveTimer) {
-        clearTimeout(classReportUploadsCloudSaveTimer);
-    }
-    classReportUploadsCloudSaveTimer = setTimeout(() => {
-        classReportUploadsCloudSaveTimer = null;
-        void saveClassReportUploadsToCloud();
-    }, 350);
-}
-
-function flushQueuedClassReportUploadsToCloud() {
-    classReportUploadsKvOutboundBusy = true;
-    if (classReportUploadsCloudSaveTimer) {
-        clearTimeout(classReportUploadsCloudSaveTimer);
-        classReportUploadsCloudSaveTimer = null;
-    }
-    void saveClassReportUploadsToCloud();
-}
-
 async function pollClassReportUploadsFromCloud() {
     try {
-        if (classReportUploadsKvOutboundBusy) {
+        if (classReportUploadPushInFlight > 0) {
             return;
         }
         const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT + '?t=' + Date.now(), {
@@ -5710,87 +5800,24 @@ async function pollClassReportUploadsFromCloud() {
         const data = await response.json();
         if (!data?.success) return;
         const ts = data.lastUpdated || null;
+        const manifest =
+            data.manifest && typeof data.manifest === 'object' && !Array.isArray(data.manifest)
+                ? data.manifest
+                : { students: {} };
+        const buckets = manifest.students && typeof manifest.students === 'object' ? manifest.students : {};
+        const fpRemote = stableStringifyManifestStudents(buckets);
 
-        let raw = data.uploads;
-        if (typeof raw === 'string') {
-            try {
-                raw = JSON.parse(raw);
-            } catch {
-                raw = null;
-            }
-        }
-        const next = normalizePersistedClassReportUploads(
-            raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
-        );
-
-        const localStr = JSON.stringify(studentClassReportUploadsByName);
-        const remoteStr = JSON.stringify(next);
         const storedTs = classReportUploadsCloudTimestamp;
-        /** Edge/read lag: KV may return JSON older than last successful POST; never merge/replace downward. */
         if (storedTs && ts && String(ts).trim() && String(ts) < String(storedTs)) {
             return;
         }
 
-        const canMergeForStudent = loggedInStudentCanMergeClassReportUploadsFromCloud();
-
-        // Keep client revision in sync; avoid re-rendering when the payload already matches local.
-        // (Legacy KV rows may omit last_updated — comparing JSON handles that; do not bail on !ts.)
-        if (remoteStr === localStr) {
+        if (fpRemote === lastSyncedClassReportUploadsJson) {
             maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
-            lastSyncedClassReportUploadsJson = localStr;
             return;
         }
 
-        if (!canMergeForStudent) {
-            maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
-            refreshVisibleStudentClassReportUploadFeed();
-            return;
-        }
-
-        /** Newer KV revision ⇒ apply full remote snapshot so removed files/students disappear (merge alone is union-only). */
-        const storedTsCompare = classReportUploadsCloudTimestamp;
-        const remoteRevIsAhead =
-            ts &&
-            remoteStr !== localStr &&
-            (storedTsCompare
-                ? String(ts) > String(storedTsCompare)
-                : Object.keys(next).length > 0 || Object.keys(studentClassReportUploadsByName).length === 0);
-
-        if (remoteRevIsAhead) {
-            studentClassReportUploadsByName = next;
-            if (ts) {
-                maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
-            }
-            lastSyncedClassReportUploadsJson = remoteStr;
-            refreshVisibleStudentClassReportUploadFeed();
-            await saveStudentClassReportUploads({ skipCloudPush: true });
-            return;
-        }
-
-        const mergedRaw = mergeClassReportUploadMaps(studentClassReportUploadsByName, next);
-        const merged = normalizePersistedClassReportUploads(mergedRaw);
-        const mergedStr = JSON.stringify(merged);
-
-        // Local already has everything remote has (typical after upload + cloud lag, or empty KV).
-        // Push local back to KV instead of replacing memory with `{}` / a stale subset.
-        if (mergedStr === localStr) {
-            if (remoteStr !== localStr) {
-                queueSaveClassReportUploadsToCloud();
-            }
-            maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
-            lastSyncedClassReportUploadsJson = localStr;
-            return;
-        }
-
-        maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
-        studentClassReportUploadsByName = merged;
-        refreshVisibleStudentClassReportUploadFeed();
-        await saveStudentClassReportUploads({ skipCloudPush: true });
-
-        if (mergedStr !== remoteStr) {
-            queueSaveClassReportUploadsToCloud();
-        }
-        lastSyncedClassReportUploadsJson = JSON.stringify(studentClassReportUploadsByName);
+        await applyRemoteManifestPayload(manifest, ts);
     } catch (error) {
         console.error('Class report uploads cloud poll error:', error);
     }
@@ -8328,7 +8355,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentCityByName[removedName];
     delete studentCountryByName[removedName];
     saveStudentClassReportRows();
-    void saveStudentClassReportUploads({ eagerCloudFlush: true });
+    void flushClassReportReplaceManifestFromMemory();
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
@@ -8519,11 +8546,6 @@ function getStudentTeacherInfo(studentName) {
         (key) => String(key || '').trim().toLowerCase() === keyLc
     );
     return mappedKey ? String(studentTeacherByName[mappedKey] || '').trim() : '';
-}
-
-/** Teachers and students both need cloud merge so class-report files can load on any device. */
-function loggedInStudentCanMergeClassReportUploadsFromCloud() {
-    return true;
 }
 
 function saveStudentTeacherInfo(studentName, teacherRaw) {
@@ -13420,7 +13442,7 @@ window.addEventListener('beforeunload', () => {
     if (pollTimer) {
         clearInterval(pollTimer);
     }
-    if (studentClassReportUploadPollTimer !== null) {
-        clearInterval(studentClassReportUploadPollTimer);
+    if (classReportUploadCloudPollTimer) {
+        clearInterval(classReportUploadCloudPollTimer);
     }
 });
