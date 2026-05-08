@@ -5210,9 +5210,9 @@ let pollTimer = null;
 function tickStudentClassReportUploadFeedPoll() {
     const panel = document.getElementById('studentClassReportPanel');
     if (!panel) return;
-    const loggedStudent = !!(isTeacherLoggedIn && String(loggedInStudentFullName || '').trim());
+    const studentSession = !!String(loggedInStudentFullName || '').trim();
     const panelVisible = !panel.hidden;
-    if (!(loggedStudent || panelVisible)) return;
+    if (!(studentSession || panelVisible)) return;
     loadStudentClassReportUploads({ migrate: false }).catch(() => {});
 }
 
@@ -5441,6 +5441,9 @@ async function loadAllSchedules() {
                 }
                 // Fallback to localStorage
                 loadAllSchedulesLocal();
+                // Still poll roster + class-report feed — /api/schedules may be misconfigured while other APIs work
+                startPolling();
+                void pollClassReportUploadsFromCloud();
             }
         } else {
             // Get error details
@@ -5472,7 +5475,21 @@ async function loadAllSchedules() {
         updateSyncStatus('local-only', statusMessage);
         // Fallback to localStorage
         loadAllSchedulesLocal();
+        // First schedule fetch failed (offline, DNS, regional routing); still sync roster + class report feed when possible
+        startPolling();
+        void pollClassReportUploadsFromCloud();
     }
+}
+
+/** When the tab wakes from background, timers may have been throttled — catch up roster + feed. */
+function setupVisibilityCloudRefresh() {
+    if (document.body.dataset.visibilityCloudRefresh === '1') return;
+    document.body.dataset.visibilityCloudRefresh = '1';
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        void pollClassReportUploadsFromCloud();
+        void pollRosterUpdates();
+    });
 }
 
 // Start polling for updates from other devices
@@ -12922,6 +12939,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         await initTeachers();
         setupAppMessageModal();
+        setupVisibilityCloudRefresh();
         setupAdminControlPanel();
         document.getElementById('adminPageLogoff')?.addEventListener('click', () => {
             performTeacherSessionLogout();
@@ -12934,6 +12952,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupStudentRepositionModal();
     setupGlobalEscapeToDismissOverlays();
     setupGlobalPointerDownToDismissOverlays();
+    setupVisibilityCloudRefresh();
     setupPasswordToggles();
     setupSidebarProfileAvatarUpload();
     initCalendar();
