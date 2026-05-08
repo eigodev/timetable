@@ -8,6 +8,8 @@ const STORAGE_KEY = 'timetable_schedules';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
 const CLASS_REPORT_UPLOADS_KEY = 'timetable_student_class_report_uploads';
+/** Persisted KV `lastUpdated` for `/api/class-report-uploads` so reloads compare revisions (deletions propagate). */
+const CLASS_REPORT_UPLOADS_CLOUD_TS_STORAGE_KEY = 'timetable_class_report_uploads_cloud_updated';
 const STUDENT_CLASS_REPORT_UPLOAD_POLL_MS = 2500;
 const CLASS_REPORT_UPLOADS_DB_NAME = 'timetable_student_class_report_uploads_db';
 const CLASS_REPORT_UPLOADS_STORE_NAME = 'uploads';
@@ -5459,7 +5461,26 @@ let pendingRosterPayload = null;
 let rosterLastUpdateTimestamp = null;
 
 let classReportUploadsCloudTimestamp = null;
+try {
+    const bootTs = localStorage.getItem(CLASS_REPORT_UPLOADS_CLOUD_TS_STORAGE_KEY);
+    if (bootTs && String(bootTs).trim()) {
+        classReportUploadsCloudTimestamp = String(bootTs).trim();
+    }
+} catch {
+    classReportUploadsCloudTimestamp = null;
+}
 let classReportUploadsCloudSaveTimer = null;
+
+function setClassReportUploadsCloudTimestamp(nextTs) {
+    if (nextTs == null || !String(nextTs).trim()) return;
+    const s = String(nextTs).trim();
+    classReportUploadsCloudTimestamp = s;
+    try {
+        localStorage.setItem(CLASS_REPORT_UPLOADS_CLOUD_TS_STORAGE_KEY, s);
+    } catch {
+        /* private mode / quota */
+    }
+}
 
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object') return;
@@ -5561,7 +5582,7 @@ async function saveClassReportUploadsToCloud() {
         }
         const data = await response.json();
         if (data?.success && data.lastUpdated) {
-            classReportUploadsCloudTimestamp = data.lastUpdated;
+            setClassReportUploadsCloudTimestamp(data.lastUpdated);
         }
     } catch (error) {
         console.error('Error saving class report uploads to cloud:', error);
@@ -5618,7 +5639,7 @@ async function pollClassReportUploadsFromCloud() {
         // (Legacy KV rows may omit last_updated — comparing JSON handles that; do not bail on !ts.)
         if (remoteStr === localStr) {
             if (ts) {
-                classReportUploadsCloudTimestamp = ts;
+                setClassReportUploadsCloudTimestamp(ts);
             }
             lastSyncedClassReportUploadsJson = localStr;
             return;
@@ -5626,9 +5647,29 @@ async function pollClassReportUploadsFromCloud() {
 
         if (!canMergeForStudent) {
             if (ts) {
-                classReportUploadsCloudTimestamp = ts;
+                setClassReportUploadsCloudTimestamp(ts);
             }
             refreshVisibleStudentClassReportUploadFeed();
+            return;
+        }
+
+        /** Newer KV revision ⇒ apply full remote snapshot so removed files/students disappear (merge alone is union-only). */
+        const storedTs = classReportUploadsCloudTimestamp;
+        const remoteRevIsAhead =
+            ts &&
+            remoteStr !== localStr &&
+            (storedTs
+                ? String(ts) > String(storedTs)
+                : Object.keys(next).length > 0 || Object.keys(studentClassReportUploadsByName).length === 0);
+
+        if (remoteRevIsAhead) {
+            studentClassReportUploadsByName = next;
+            if (ts) {
+                setClassReportUploadsCloudTimestamp(ts);
+            }
+            lastSyncedClassReportUploadsJson = remoteStr;
+            refreshVisibleStudentClassReportUploadFeed();
+            await saveStudentClassReportUploads({ skipCloudPush: true });
             return;
         }
 
@@ -5643,14 +5684,14 @@ async function pollClassReportUploadsFromCloud() {
                 queueSaveClassReportUploadsToCloud();
             }
             if (ts) {
-                classReportUploadsCloudTimestamp = ts;
+                setClassReportUploadsCloudTimestamp(ts);
             }
             lastSyncedClassReportUploadsJson = localStr;
             return;
         }
 
         if (ts) {
-            classReportUploadsCloudTimestamp = ts;
+            setClassReportUploadsCloudTimestamp(ts);
         }
 
         studentClassReportUploadsByName = merged;
