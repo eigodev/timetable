@@ -2376,6 +2376,116 @@ function normalizePersistedClassReportUploads(rawUploads) {
     return next;
 }
 
+/**
+ * Union class-report file lists from two devices without dropping local-only rows.
+ * Remote entries are seeded first (stable order), then local-only ids are appended.
+ * Used by cloud poll so an empty/stale KV snapshot cannot wipe IndexedDB uploads.
+ */
+function mergeClassReportQuestionLists(localQs, remoteQs) {
+    const ql = Array.isArray(localQs) ? localQs : [];
+    const qr = Array.isArray(remoteQs) ? remoteQs : [];
+    const byId = new Map();
+    qr.forEach((q) => {
+        if (!q || typeof q !== 'object') return;
+        const id = String(q.id || '').trim();
+        if (!id) return;
+        byId.set(id, { ...q });
+    });
+    ql.forEach((q) => {
+        if (!q || typeof q !== 'object') return;
+        const id = String(q.id || '').trim();
+        if (!id) return;
+        if (!byId.has(id)) byId.set(id, { ...q });
+        else byId.set(id, { ...byId.get(id), ...q });
+    });
+    const order = [];
+    const seen = new Set();
+    qr.forEach((q) => {
+        const id = String(q?.id || '').trim();
+        if (id && byId.has(id) && !seen.has(id)) {
+            order.push(byId.get(id));
+            seen.add(id);
+        }
+    });
+    ql.forEach((q) => {
+        const id = String(q?.id || '').trim();
+        if (id && byId.has(id) && !seen.has(id)) {
+            order.push(byId.get(id));
+            seen.add(id);
+        }
+    });
+    return order;
+}
+
+function mergeClassReportUploadLists(localList, remoteList) {
+    const loc = Array.isArray(localList) ? localList : [];
+    const rem = Array.isArray(remoteList) ? remoteList : [];
+    const byId = new Map();
+    rem.forEach((item) => {
+        const n = normalizePersistedClassReportFile(item);
+        if (!n) return;
+        const id = String(n.id || '').trim();
+        if (!id) return;
+        byId.set(id, n);
+    });
+    loc.forEach((item) => {
+        const n = normalizePersistedClassReportFile(item);
+        if (!n) return;
+        const id = String(n.id || '').trim();
+        if (!id) return;
+        if (!byId.has(id)) {
+            byId.set(id, n);
+        } else {
+            const prev = byId.get(id);
+            const merged = {
+                ...prev,
+                ...n,
+                dataUrl: String(n.dataUrl || '').trim() || String(prev.dataUrl || '').trim(),
+                questions: mergeClassReportQuestionLists(n.questions, prev.questions),
+                relatedFiles: mergeClassReportUploadLists(n.relatedFiles, prev.relatedFiles)
+            };
+            const norm = normalizePersistedClassReportFile(merged);
+            if (norm) byId.set(id, norm);
+        }
+    });
+    const order = [];
+    const seen = new Set();
+    const takeOrder = (arr) => {
+        arr.forEach((item) => {
+            const n = normalizePersistedClassReportFile(item);
+            if (!n) return;
+            const id = String(n.id || '').trim();
+            if (!id) return;
+            if (byId.has(id) && !seen.has(id)) {
+                order.push(byId.get(id));
+                seen.add(id);
+            }
+        });
+    };
+    takeOrder(rem);
+    takeOrder(loc);
+    const tail = [];
+    [...rem, ...loc].forEach((item) => {
+        const n = normalizePersistedClassReportFile(item);
+        if (n && !String(n.id || '').trim()) tail.push(n);
+    });
+    return [...order, ...tail];
+}
+
+function mergeClassReportUploadMaps(localMap, remoteMap) {
+    const loc = localMap && typeof localMap === 'object' && !Array.isArray(localMap) ? localMap : {};
+    const rem = remoteMap && typeof remoteMap === 'object' && !Array.isArray(remoteMap) ? remoteMap : {};
+    const keys = new Set([...Object.keys(loc), ...Object.keys(rem)]);
+    const out = {};
+    keys.forEach((k) => {
+        const studentKey = String(k || '').trim();
+        if (!studentKey) return;
+        const mergedList = mergeClassReportUploadLists(loc[studentKey], rem[studentKey]);
+        if (mergedList.length) out[studentKey] = mergedList;
+    });
+    return out;
+}
+
 function refreshVisibleStudentClassReportUploadFeed() {
     const panel = document.getElementById('studentClassReportPanel');
     if (!panel || panel.hidden) return;
@@ -5500,13 +5610,35 @@ async function pollClassReportUploadsFromCloud() {
             return;
         }
 
+        const mergedRaw = mergeClassReportUploadMaps(studentClassReportUploadsByName, next);
+        const merged = normalizePersistedClassReportUploads(mergedRaw);
+        const mergedStr = JSON.stringify(merged);
+
+        // Local already has everything remote has (typical after upload + cloud lag, or empty KV).
+        // Push local back to KV instead of replacing memory with `{}` / a stale subset.
+        if (mergedStr === localStr) {
+            if (remoteStr !== localStr) {
+                queueSaveClassReportUploadsToCloud();
+            }
+            if (ts) {
+                classReportUploadsCloudTimestamp = ts;
+            }
+            lastSyncedClassReportUploadsJson = localStr;
+            return;
+        }
+
         if (ts) {
             classReportUploadsCloudTimestamp = ts;
         }
 
-        studentClassReportUploadsByName = next;
+        studentClassReportUploadsByName = merged;
         refreshVisibleStudentClassReportUploadFeed();
         await saveStudentClassReportUploads({ skipCloudPush: true });
+
+        if (mergedStr !== remoteStr) {
+            queueSaveClassReportUploadsToCloud();
+        }
+        lastSyncedClassReportUploadsJson = JSON.stringify(studentClassReportUploadsByName);
     } catch (error) {
         console.error('Class report uploads cloud poll error:', error);
     }
