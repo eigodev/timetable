@@ -5211,8 +5211,12 @@ function tickStudentClassReportUploadFeedPoll() {
     const panel = document.getElementById('studentClassReportPanel');
     if (!panel) return;
     const studentSession = !!String(loggedInStudentFullName || '').trim();
+    // Student devices rely on pollClassReportUploadsFromCloud (plus initial loadStudentClassReportUploads).
+    // Reloading IndexedDB here can race the async skipCloudPush save right after a cloud merge and
+    // overwrite memory with stale uploads before the DB write commits.
+    if (studentSession) return;
     const panelVisible = !panel.hidden;
-    if (!(studentSession || panelVisible)) return;
+    if (!panelVisible) return;
     loadStudentClassReportUploads({ migrate: false }).catch(() => {});
 }
 
@@ -5362,20 +5366,27 @@ async function pollClassReportUploadsFromCloud() {
         const data = await response.json();
         if (!data?.success) return;
         const ts = data.lastUpdated || null;
-        if (!ts || ts === classReportUploadsCloudTimestamp) return;
 
         const raw = data.uploads;
         const next = normalizePersistedClassReportUploads(
             raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
         );
 
-        classReportUploadsCloudTimestamp = ts;
-
         const localStr = JSON.stringify(studentClassReportUploadsByName);
         const remoteStr = JSON.stringify(next);
-        if (localStr === remoteStr) {
+
+        // Keep client revision in sync; avoid re-rendering when the payload already matches local.
+        // (Legacy KV rows may omit last_updated — comparing JSON handles that; do not bail on !ts.)
+        if (remoteStr === localStr) {
+            if (ts) {
+                classReportUploadsCloudTimestamp = ts;
+            }
             lastSyncedClassReportUploadsJson = localStr;
             return;
+        }
+
+        if (ts) {
+            classReportUploadsCloudTimestamp = ts;
         }
 
         studentClassReportUploadsByName = next;
