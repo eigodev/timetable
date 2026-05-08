@@ -43,6 +43,7 @@
         school: document.getElementById('school'),
         birthDate: document.getElementById('birthDate'),
         age: document.getElementById('age'),
+        teacher: document.getElementById('studentModalTeacher'),
         level: document.getElementById('level'),
         username: document.getElementById('studentModalUsername'),
         password: document.getElementById('studentModalPassword'),
@@ -124,6 +125,9 @@
             studentModalCloseTimer = null;
         }
         refreshSchoolOptions();
+        if (typeof window.refreshModernStudentTeacherSelect === 'function') {
+            window.refreshModernStudentTeacherSelect();
+        }
         overlay.classList.remove('is-closing');
         overlay.classList.add('is-open');
         overlay.setAttribute('aria-hidden', 'false');
@@ -368,6 +372,15 @@
             hasError = true;
         }
 
+        if (fields.teacher instanceof HTMLSelectElement) {
+            if (!String(fields.teacher.value || '').trim()) {
+                fields.teacher.setAttribute('aria-invalid', 'true');
+                const msg = fields.teacher.disabled ? 'Add a teacher profile before creating students.' : 'Please select a teacher.';
+                validationErrors.push(msg);
+                hasError = true;
+            }
+        }
+
         if (validationErrors.length > 0) {
             alert(validationErrors[0]);
         }
@@ -389,6 +402,7 @@
             school: fields.school.value.trim(),
             birthDate: fields.birthDate?.value || '',
             age: fields.age.value,
+            mentorTeacher: fields.teacher instanceof HTMLSelectElement ? fields.teacher.value.trim() : '',
             level: fields.level.value,
             username: fields.username.value.trim(),
             password: fields.password.value.trim()
@@ -468,6 +482,7 @@
         syncUsernameFromNameFields();
     });
     fields.level.addEventListener('change', () => fields.level.removeAttribute('aria-invalid'));
+    fields.teacher?.addEventListener('change', () => fields.teacher?.removeAttribute('aria-invalid'));
     fields.birthDate?.addEventListener('input', syncAgeFromBirthDate);
 
     form.addEventListener('submit', async (event) => {

@@ -220,7 +220,9 @@
     padding: 0 12px 0 38px;
 }
 
-.student-modal-card select#school {
+.student-modal-card select#school,
+.student-modal-card select#studentModalTeacher,
+.student-modal-card select#editStudentTeacher {
     padding: 0 0 0 35px;
 }
 
@@ -465,6 +467,23 @@
     gap: 12px 14px;
 }
 
+/** Add-student overlay row: birth · age · teacher · level */
+#studentModalOverlay .student-birth-age-level-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/** Edit-student modal uses the same four-column row */
+#editStudentModal .student-birth-age-level-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+    #studentModalOverlay .student-birth-age-level-row,
+    #editStudentModal .student-birth-age-level-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .student-modal-footer {
     margin: 0;
     padding: 0;
@@ -592,7 +611,9 @@
     height: 100%;
 }
 
-#school {
+#school,
+#studentModalTeacher,
+#editStudentTeacher {
     padding: 0px 0px 0px 35px;
 }
 

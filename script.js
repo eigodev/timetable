@@ -2179,38 +2179,110 @@ function refreshAddStudentTeacherSelect(selectedTeacher = '') {
     ph.selected = !hasMatch;
 }
 
-function refreshEditStudentTeacherSelect(selectedTeacher = '') {
-    const sel = document.getElementById('editStudentTeacher');
+/**
+ * Teachers eligible for assignment in the modern Add Student modal. Matches sidebar: coordinators
+ * (effective admin session) see all profiles; plain teachers see only themselves.
+ */
+/**
+ * Teachers shown in mentor dropdowns (add/edit student): coordinators / effective admins see everyone;
+ * plain teachers only see themselves (same rule as sidebar teacher list).
+ */
+function getTeachersForStudentMentorSelect() {
+    if (String(loggedInStudentFullName || '').trim()) return [];
+    const names = teachersList.map((t) => String(t || '').trim()).filter(Boolean);
+    if (!names.length) return [];
+    if (hasEffectiveAdminSession()) return [...names];
+    if (isTeacherLoggedIn && String(loggedInTeacherName || '').trim()) {
+        const lc = String(loggedInTeacherName || '').trim().toLowerCase();
+        return names.filter((n) => n.toLowerCase() === lc);
+    }
+    return [...names];
+}
+
+/**
+ * Shared mentor dropdown for modern add-student overlay and edit-student modal.
+ * @param {'add'|'edit'} mode
+ * @param {string} [preferredAssigned] Saved mentor name (edit); kept as option if absent from roster-eligible list.
+ */
+function fillStudentMentorSelect(sel, mode, preferredAssigned = '') {
     if (!sel || sel.tagName !== 'SELECT') return;
-    const want = String(selectedTeacher || '').trim();
-    const prevLower = want.toLowerCase();
-    sel.innerHTML = '';
+    const preferred = String(preferredAssigned || '').trim();
+    let choices = [...getTeachersForStudentMentorSelect()];
+
+    if (mode === 'edit' && preferred && !choices.some((n) => n.toLowerCase() === preferred.toLowerCase())) {
+        choices.push(preferred);
+    }
+
+    sel.replaceChildren();
+
+    if (choices.length === 0) {
+        const ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = 'No teacher profiles yet';
+        ph.disabled = true;
+        sel.appendChild(ph);
+        sel.disabled = true;
+        return;
+    }
+
+    if (choices.length === 1) {
+        const only = choices[0];
+        const o = document.createElement('option');
+        o.value = only;
+        o.textContent = only;
+        sel.appendChild(o);
+        sel.value = only;
+        sel.disabled = true;
+        return;
+    }
+
     const ph = document.createElement('option');
     ph.value = '';
     ph.textContent = 'Select a teacher';
     ph.disabled = true;
     ph.hidden = true;
     sel.appendChild(ph);
-    teachersList.forEach((raw) => {
-        const n = String(raw || '').trim();
-        if (!n) return;
+
+    choices.forEach((n) => {
         const o = document.createElement('option');
         o.value = n;
         o.textContent = n;
         sel.appendChild(o);
     });
-    const storedWant = String(want || '').trim();
-    if (storedWant && !teachersList.some((t) => String(t || '').trim().toLowerCase() === storedWant.toLowerCase())) {
-        const o = document.createElement('option');
-        o.value = storedWant;
-        o.textContent = storedWant;
-        sel.appendChild(o);
+
+    sel.disabled = false;
+
+    const preferredMatch = preferred
+        ? choices.find((n) => n.toLowerCase() === preferred.toLowerCase()) || ''
+        : '';
+
+    if (mode === 'edit') {
+        if (preferredMatch) {
+            sel.value = preferredMatch;
+        } else {
+            ph.selected = true;
+            sel.value = '';
+        }
+    } else {
+        const logged = String(loggedInTeacherName || '').trim().toLowerCase();
+        const pick = logged ? choices.find((n) => n.toLowerCase() === logged) || '' : '';
+        if (pick) {
+            sel.value = pick;
+        } else {
+            ph.selected = true;
+            sel.value = '';
+        }
     }
-    const match = teachersList.find((t) => String(t || '').trim().toLowerCase() === prevLower)
-        || (storedWant && storedWant.toLowerCase() === prevLower ? storedWant : null);
-    const hasMatch = !!match;
-    sel.value = hasMatch ? String(match) : '';
-    ph.selected = !hasMatch;
+}
+
+function refreshModernStudentTeacherSelect() {
+    fillStudentMentorSelect(document.getElementById('studentModalTeacher'), 'add');
+}
+
+window.refreshModernStudentTeacherSelect = refreshModernStudentTeacherSelect;
+
+function refreshEditStudentTeacherSelect(selectedTeacher = '') {
+    fillStudentMentorSelect(document.getElementById('editStudentTeacher'), 'edit', selectedTeacher);
 }
 
 function syncAddStudentModalThemeFromSchoolTitle(schoolTitleRaw) {
@@ -4185,6 +4257,14 @@ function persistClassReportRowField(tr, el) {
 function getStudentClassReportUploadFeed(studentName) {
     const key = String(studentName || '').trim();
     if (!key) return [];
+    const logged = String(loggedInStudentFullName || '').trim();
+    if (
+        logged &&
+        logged.toLowerCase() === key.toLowerCase() &&
+        !getStudentTeacherInfo(key).trim()
+    ) {
+        return [];
+    }
     if (!Array.isArray(studentClassReportUploadsByName[key])) {
         studentClassReportUploadsByName[key] = [];
     }
@@ -4572,6 +4652,28 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
     const changeFileBtn = panel.querySelector('.student-class-report-change-file-btn');
     const feedEl = panel.querySelector('.student-class-report-file-preview');
     const feed = getStudentClassReportUploadFeed(studentName);
+    const logged = String(loggedInStudentFullName || '').trim();
+    const needsMentorHint =
+        !!logged &&
+        logged.toLowerCase() === String(studentName || '').trim().toLowerCase() &&
+        !getStudentTeacherInfo(studentName).trim();
+
+    let assignHint = panel.querySelector('.student-class-report-assign-hint');
+    if (!assignHint) {
+        assignHint = document.createElement('p');
+        assignHint.className = 'student-class-report-assign-hint';
+        assignHint.setAttribute('role', 'status');
+        assignHint.hidden = true;
+        panel.appendChild(assignHint);
+    }
+    if (needsMentorHint) {
+        assignHint.textContent =
+            'You need a teacher assigned to your profile before class file uploads from your teacher can sync here.';
+        assignHint.hidden = false;
+    } else {
+        assignHint.textContent = '';
+        assignHint.hidden = true;
+    }
 
     if (feedEl) {
         feedEl.textContent = '';
@@ -5323,6 +5425,9 @@ async function pollRosterUpdates() {
         syncSpeakOnWeeklyToAllTeacherSchedules();
         renderSidebar();
         resyncSelectionAfterSidebarRender();
+        if (String(loggedInStudentFullName || '').trim()) {
+            void pollClassReportUploadsFromCloud();
+        }
     } catch (error) {
         console.error('Roster polling error:', error);
     }
@@ -5374,6 +5479,7 @@ async function pollClassReportUploadsFromCloud() {
 
         const localStr = JSON.stringify(studentClassReportUploadsByName);
         const remoteStr = JSON.stringify(next);
+        const canMergeForStudent = loggedInStudentCanMergeClassReportUploadsFromCloud();
 
         // Keep client revision in sync; avoid re-rendering when the payload already matches local.
         // (Legacy KV rows may omit last_updated — comparing JSON handles that; do not bail on !ts.)
@@ -5382,6 +5488,14 @@ async function pollClassReportUploadsFromCloud() {
                 classReportUploadsCloudTimestamp = ts;
             }
             lastSyncedClassReportUploadsJson = localStr;
+            return;
+        }
+
+        if (!canMergeForStudent) {
+            if (ts) {
+                classReportUploadsCloudTimestamp = ts;
+            }
+            refreshVisibleStudentClassReportUploadFeed();
             return;
         }
 
@@ -8118,6 +8232,13 @@ function getStudentTeacherInfo(studentName) {
     return mappedKey ? String(studentTeacherByName[mappedKey] || '').trim() : '';
 }
 
+/** Cloud class-report uploads are one shared map; students merge it only if they have an assigned teacher (mentor row). */
+function loggedInStudentCanMergeClassReportUploadsFromCloud() {
+    const s = String(loggedInStudentFullName || '').trim();
+    if (!s) return true;
+    return !!getStudentTeacherInfo(s).trim();
+}
+
 function saveStudentTeacherInfo(studentName, teacherRaw) {
     const name = String(studentName || '').trim();
     if (!name) return;
@@ -8130,21 +8251,11 @@ function saveStudentTeacherInfo(studentName, teacherRaw) {
 }
 
 /**
- * Assigned mentor for a newly created student: explicit form value first, then roster match for
- * `loggedInTeacherName`, then the only teacher profile when exactly one exists.
+ * Mentor for a newly created student: only when explicitly chosen (legacy add form or future payload).
+ * No default to the logged-in teacher or the single teacher profile — roster orgs assign many students without a tutor link.
  */
 function resolveMentorTeacherForNewStudent(preferredRaw) {
-    const fromForm = String(preferredRaw ?? '').trim();
-    if (fromForm) return fromForm;
-    const logged = String(loggedInTeacherName || '').trim();
-    if (logged && teachersList.length > 0) {
-        const found = teachersList.find((n) => String(n || '').trim().toLowerCase() === logged.toLowerCase());
-        if (found) return String(found).trim();
-    }
-    if (teachersList.length === 1) {
-        return String(teachersList[0] || '').trim();
-    }
-    return '';
+    return String(preferredRaw ?? '').trim();
 }
 
 /**
@@ -8480,6 +8591,23 @@ async function upsertStudentFromEditForm(action = 'save') {
         document.getElementById('editStudentLevel')?.focus();
         return;
     }
+
+    const mentorsAvailable = getTeachersForStudentMentorSelect();
+    let mentorResolved = String(document.getElementById('editStudentTeacher')?.value || '').trim();
+    if (mentorsAvailable.length === 0 && !mentorResolved) {
+        alert('Add at least one teacher profile before saving student data.');
+        document.getElementById('editStudentTeacher')?.focus();
+        return;
+    }
+    if (!mentorResolved && mentorsAvailable.length === 1) {
+        mentorResolved = mentorsAvailable[0];
+    }
+    if (mentorsAvailable.length > 1 && !mentorResolved) {
+        alert('Please select a teacher.');
+        document.getElementById('editStudentTeacher')?.focus();
+        return;
+    }
+
     if (birthDateValue) {
         const numericAge = calculatedAgeRaw === '60+' ? 61 : Number(calculatedAgeRaw);
         if (!Number.isFinite(numericAge) || numericAge < 18) {
@@ -8631,8 +8759,7 @@ async function upsertStudentFromEditForm(action = 'save') {
     if (originalName !== fullName) {
         delete studentPhonesByName[originalName];
     }
-    const teacherVal = document.getElementById('editStudentTeacher')?.value || '';
-    saveStudentTeacherInfo(fullName, teacherVal);
+    saveStudentTeacherInfo(fullName, mentorResolved);
     const existingPasswordHash =
         studentPasswordsByName[fullName]
         || studentPasswordsByName[originalName]
@@ -8774,6 +8901,11 @@ async function upsertStudentFromEditForm(action = 'save') {
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
+    const selfStudent = String(loggedInStudentFullName || '').trim();
+    if (selfStudent && fullName.trim().toLowerCase() === selfStudent.toLowerCase()) {
+        refreshVisibleStudentClassReportUploadFeed();
+        void pollClassReportUploadsFromCloud();
+    }
     closeEditStudentModal();
 }
 
@@ -9160,6 +9292,21 @@ async function createStudentFromModernModal(studentData) {
         showAppMessage('Please select the student level.');
         return false;
     }
+
+    let mentorPick = String(studentData?.mentorTeacher ?? '').trim();
+    const mentorsAvailable = getTeachersForStudentMentorSelect();
+    if (mentorsAvailable.length === 0) {
+        showAppMessage('Add at least one teacher profile before creating students.');
+        return false;
+    }
+    if (!mentorPick && mentorsAvailable.length === 1) {
+        mentorPick = mentorsAvailable[0];
+    }
+    if (mentorsAvailable.length > 1 && !mentorPick) {
+        showAppMessage('Please select a teacher.');
+        return false;
+    }
+
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ').trim();
     const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
         (n) => n.trim().toLowerCase() === fullName.toLowerCase()
@@ -9201,7 +9348,7 @@ async function createStudentFromModernModal(studentData) {
     roster.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     studentSchoolByName[fullName] = schoolName;
 
-    saveStudentTeacherInfo(fullName, resolveMentorTeacherForNewStudent(studentData?.mentorTeacher));
+    saveStudentTeacherInfo(fullName, resolveMentorTeacherForNewStudent(mentorPick));
 
     const phoneIso = String(studentData?.phoneCountry?.flag || DEFAULT_PHONE_COUNTRY_ISO).trim().toUpperCase();
     saveStudentPhoneInfo(fullName, phoneIso, studentData?.phoneNumber || '');
@@ -9776,12 +9923,7 @@ function openAddStudentModal(mode = 'school') {
     updateAddTeacherPhonePlaceholder();
     const addTeacherSelect = document.getElementById('addStudentMentor');
     if (addTeacherSelect) {
-        const shouldPrefillLoggedTeacher = (addModalMode === 'student-entry' || addModalMode === 'student-global')
-            && isTeacherLoggedIn
-            && !isAdminLoggedIn
-            && !String(loggedInStudentFullName || '').trim();
-        const defaultMentor = shouldPrefillLoggedTeacher ? String(loggedInTeacherName || '').trim() : '';
-        refreshAddStudentTeacherSelect(defaultMentor);
+        refreshAddStudentTeacherSelect('');
     }
     schoolInput.value = '';
     if (cityInput) cityInput.value = '';

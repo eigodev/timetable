@@ -6843,6 +6843,14 @@ tr td.add-teacher-availability-table-day {
     display: none !important;
 }
 
+.student-class-report-assign-hint {
+    margin: 6px 0 0;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: #64748b;
+    max-width: 40rem;
+}
+
 .student-class-report-file-preview::-webkit-scrollbar {
     width: 0;
     height: 0;

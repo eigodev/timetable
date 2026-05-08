@@ -76,7 +76,7 @@
                         <div id="addStudentMentorRow" class="add-student-row-mentor-theme is-hidden" aria-hidden="true">
                             <div class="add-student-mentor-wrap is-hidden" id="addStudentMentorWrap" aria-hidden="true">
                                 <label class="add-student-label" for="addStudentMentor">
-                                    <span>Teacher</span>
+                                    <span>Teacher (optional)</span>
                                     <select id="addStudentMentor" name="teacher" aria-label="Teacher"></select>
                                 </label>
                             </div>

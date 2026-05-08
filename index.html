@@ -176,7 +176,6 @@
             <form id="editStudentForm" class="edit-student-form" novalidate>
                 <input type="hidden" id="editStudentOriginalName" name="originalName">
                 <input type="hidden" id="editStudentOriginalCategory" name="originalCategory">
-                <select id="editStudentTeacher" name="teacher" hidden></select>
                 <input type="hidden" id="editStudentCity" name="city">
                 <input type="hidden" id="editStudentCountry" name="country">
                 <input type="hidden" id="editStudentEmail" name="studentEmail">
@@ -285,6 +284,18 @@
                                     </svg>
                                 </span>
                                 <input id="editStudentAge" name="studentAge" type="text" readonly placeholder="Calculated automatically">
+                            </div>
+                        </div>
+                        <div class="form-field">
+                            <label for="editStudentTeacher">Teacher</label>
+                            <div class="select-with-icon">
+                                <span class="input-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none">
+                                        <circle cx="12" cy="8" r="3.2" stroke="currentColor" stroke-width="1.8"></circle>
+                                        <path d="M3.5 18c1.4-2.5 3.2-3.8 5.5-3.8s4.1 1.3 5.5 3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                                    </svg>
+                                </span>
+                                <select id="editStudentTeacher" name="teacher" aria-label="Assigned teacher"></select>
                             </div>
                         </div>
                         <div class="form-field">
@@ -808,6 +819,18 @@
                                     </svg>
                                 </span>
                                 <input id="age" name="age" type="text" readonly placeholder="Calculated automatically">
+                            </div>
+                        </div>
+                        <div class="form-field">
+                            <label for="studentModalTeacher">Teacher</label>
+                            <div class="select-with-icon">
+                                <span class="input-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none">
+                                        <circle cx="12" cy="8" r="3.2" stroke="currentColor" stroke-width="1.8"></circle>
+                                        <path d="M3.5 18c1.4-2.5 3.2-3.8 5.5-3.8s4.1 1.3 5.5 3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                                    </svg>
+                                </span>
+                                <select id="studentModalTeacher" name="mentorTeacher" aria-label="Assigned teacher"></select>
                             </div>
                         </div>
                         <div class="form-field">
