@@ -5482,6 +5482,9 @@ function setClassReportUploadsCloudTimestamp(nextTs) {
     }
 }
 
+/** True while a debounced or in-flight KV POST for class-report uploads runs; avoids polling stale GET + merge undoing deletes. */
+let classReportUploadsKvOutboundBusy = false;
+
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object') return;
     if (isSavingRoster) {
@@ -5564,6 +5567,7 @@ async function pollRosterUpdates() {
 }
 
 async function saveClassReportUploadsToCloud() {
+    classReportUploadsKvOutboundBusy = true;
     try {
         const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
             method: 'POST',
@@ -5586,10 +5590,13 @@ async function saveClassReportUploadsToCloud() {
         }
     } catch (error) {
         console.error('Error saving class report uploads to cloud:', error);
+    } finally {
+        classReportUploadsKvOutboundBusy = false;
     }
 }
 
 function queueSaveClassReportUploadsToCloud() {
+    classReportUploadsKvOutboundBusy = true;
     if (classReportUploadsCloudSaveTimer) {
         clearTimeout(classReportUploadsCloudSaveTimer);
     }
@@ -5600,6 +5607,7 @@ function queueSaveClassReportUploadsToCloud() {
 }
 
 function flushQueuedClassReportUploadsToCloud() {
+    classReportUploadsKvOutboundBusy = true;
     if (classReportUploadsCloudSaveTimer) {
         clearTimeout(classReportUploadsCloudSaveTimer);
         classReportUploadsCloudSaveTimer = null;
@@ -5609,6 +5617,10 @@ function flushQueuedClassReportUploadsToCloud() {
 
 async function pollClassReportUploadsFromCloud() {
     try {
+        if (classReportUploadsKvOutboundBusy) {
+            refreshVisibleStudentClassReportUploadFeed();
+            return;
+        }
         const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT + '?t=' + Date.now(), {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
