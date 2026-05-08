@@ -620,7 +620,9 @@ function loadRosterFromStorage() {
 
 async function loadRosterFromCloud() {
     try {
-        const response = await fetch('/api/roster', {
+        const rosterUrl = absoluteHttpApiUrl('/api/roster');
+        if (!rosterUrl) return null;
+        const response = await fetch(rosterUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -2400,14 +2402,80 @@ function memoryToManifest() {
     return { students: memoryToStudentManifestBuckets() };
 }
 
+/** Match `coerceManifest` in `functions/api/class-report-uploads.js` (+ key order independence) so poll skips stay correct. */
+const MANIFEST_FP_MAX_UPLOADS = 40;
+const MANIFEST_FP_MAX_RELATED = 20;
+
+function canonicalManifestFingerprintJSON(value) {
+    if (value === null || value === undefined) return 'null';
+    const t = typeof value;
+    if (t === 'string' || t === 'number' || t === 'boolean') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+        return '[' + value.map((el) => canonicalManifestFingerprintJSON(el)).join(',') + ']';
+    }
+    if (t === 'object') {
+        return (
+            '{' +
+            Object.keys(value)
+                .sort()
+                .map((key) => JSON.stringify(key) + ':' + canonicalManifestFingerprintJSON(value[key]))
+                .join(',') +
+            '}'
+        );
+    }
+    return JSON.stringify(String(value));
+}
+
+/** Flatten manifest students to server-shaped rows for a stable fingerprint. */
+function normalizeManifestBucketsForFingerprint(studentsRecord) {
+    const out = {};
+    Object.keys(studentsRecord || {})
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        .forEach((studentKey) => {
+            const key = String(studentKey || '').trim();
+            const uploads = studentsRecord[key];
+            if (!key || !Array.isArray(uploads)) return;
+            const rows = uploads
+                .slice(0, MANIFEST_FP_MAX_UPLOADS)
+                .map((upload) => {
+                    if (!upload || typeof upload !== 'object' || upload.kind === 'question') return null;
+                    const id = String(upload.id || '').trim();
+                    if (!id) return null;
+                    const rfIn = Array.isArray(upload.relatedFiles) ? upload.relatedFiles : [];
+                    const relatedFiles = rfIn.slice(0, MANIFEST_FP_MAX_RELATED).map((r) => {
+                        if (!r || typeof r !== 'object') return null;
+                        const rid = String(r.id || '').trim();
+                        if (!rid) return null;
+                        return {
+                            id: rid,
+                            name: String(r.name || 'Related file').slice(0, 380),
+                            type: String(r.type || '').toLowerCase().slice(0, 120),
+                        };
+                    }).filter(Boolean);
+                    const questionsRaw = Array.isArray(upload.questions) ? upload.questions : [];
+                    const questions = questionsRaw.map((q, index) => ({
+                        id: String(q?.id || `q_${id}_${index}`).slice(0, 140),
+                        speaker: q?.speaker === 'student' ? 'student' : 'teacher',
+                        text: String(q?.text || q?.question || '').slice(0, 8000),
+                    }));
+                    return {
+                        id,
+                        name: String(upload.name || 'Uploaded file').slice(0, 380),
+                        type: String(upload.type || '').toLowerCase().slice(0, 120),
+                        relatedFiles,
+                        questions,
+                    };
+                })
+                .filter(Boolean);
+            if (rows.length) out[key] = rows;
+        });
+    return { students: out };
+}
+
 function stableStringifyManifestStudents(studentsRecord) {
-    const keys = Object.keys(studentsRecord || {}).sort();
-    const canon = {};
-    keys.forEach((k) => {
-        canon[k] = studentsRecord[k];
-    });
     try {
-        return JSON.stringify({ students: canon });
+        const normalized = normalizeManifestBucketsForFingerprint(studentsRecord);
+        return canonicalManifestFingerprintJSON(normalized);
     } catch {
         return '';
     }
@@ -2539,11 +2607,15 @@ async function applyServerAssetBundlesToMemory(map, assets) {
 let lastRemoteManifestFingerprint = '';
 
 let classReportUploadPushInFlight = 0;
+/** Serialized cloud pulls so overlapping polls cannot run `applyRemoteManifestPayload` concurrently. */
+let classReportUploadPullInFlight = false;
 
 async function fetchClassReportUploadAssetsByIds(ids) {
     const idList = (Array.isArray(ids) ? ids : []).slice(0, 96);
     if (!idList.length) return {};
-    const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+    const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+    if (!url) return {};
+    const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-cache',
@@ -2597,8 +2669,10 @@ async function renameClassReportStudentBucketOnServer(fromStudent, toStudent) {
     const fromName = String(fromStudent || '').trim();
     const toName = String(toStudent || '').trim();
     if (!fromName || !toName || fromName === toName) return false;
+    const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+    if (!url) return false;
     try {
-        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2619,7 +2693,9 @@ async function renameClassReportStudentBucketOnServer(fromStudent, toStudent) {
 
 async function patchClassReportUploadQuestionsOnServer(studentKey, uploadId, questionsPayload) {
     try {
-        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+        const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!url) return false;
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2675,7 +2751,12 @@ async function flushClassReportReplaceManifestFromMemory() {
     if (!canEditFeed()) return;
     classReportUploadPushInFlight++;
     try {
-        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+        const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!url) {
+            console.warn('replaceManifest: page must be served over http(s)');
+            return;
+        }
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3061,6 +3142,12 @@ function getStudentOverlayStates(studentName) {
     };
 }
 
+/** States authored on the teacher grid — must not be replaced by SpeakOn/student overlays when syncing to KV (matches `BOOKED_CLASS_SLOT_STATE` + tutor-only slots). */
+function isTeacherExclusiveScheduleOverlayState(state) {
+    const s = String(state || '').trim().toLowerCase();
+    return s === 'available' || s === 'unavailable' || s === 'rescheduled' || s === 'booked';
+}
+
 /**
  * Teacher schedules aggregate class/extra overlays from all student grids.
  * SpeakOn weekly template remains supported as fallback.
@@ -3147,6 +3234,7 @@ function applyAllSpeakOnStudentColorsToTeacherScheduleCopy(sched) {
     }
 
     Object.keys(keyBest).forEach((k) => {
+        if (isTeacherExclusiveScheduleOverlayState(out[k])) return;
         out[k] = keyBest[k];
     });
     return out;
@@ -4652,35 +4740,40 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
 
     classReportUploadPushInFlight++;
     try {
-        const mainB64 = await ClassReportUploadsStore.blobToPureBase64(file);
-        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'putUpload',
-                student: key,
-                mainBase64: mainB64,
-                upload: {
-                    id,
-                    name: file.name || 'Uploaded file',
-                    type: mime,
-                    questions: [],
-                    relatedFiles: []
-                }
-            })
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.success) {
-            console.error('Class report upload failed:', data?.error || res.status, data?.code || '');
-            const msg =
-                data?.error ||
-                (res.status === 413 ? 'File is too large for cloud sync.' : 'Could not sync file.');
-            alert(`${msg}`);
-            return false;
+        const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!apiUrl) {
+            console.warn('Class report uploads need http(s) — file saved locally only.');
+        } else {
+            const mainB64 = await ClassReportUploadsStore.blobToPureBase64(file);
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'putUpload',
+                    student: key,
+                    mainBase64: mainB64,
+                    upload: {
+                        id,
+                        name: file.name || 'Uploaded file',
+                        type: mime,
+                        questions: [],
+                        relatedFiles: []
+                    }
+                })
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data?.success) {
+                console.error('Class report upload failed:', data?.error || res.status, data?.code || '');
+                const msg =
+                    data?.error ||
+                    (res.status === 413 ? 'File is too large for cloud sync.' : 'Could not sync file.');
+                alert(`${msg}`);
+                return false;
+            }
+            if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+            await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+            lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
         }
-        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
-        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
-        lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
     } finally {
         classReportUploadPushInFlight--;
     }
@@ -4720,23 +4813,28 @@ function removeStudentClassReportUpload(studentName, uploadId) {
     classReportUploadPushInFlight++;
     void (async () => {
         try {
-            const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'deleteUpload',
-                    student: key,
-                    uploadId: String(uploadId || '').trim()
-                })
-            });
-            const data = await res.json().catch(() => null);
-            if (!res.ok || !data?.success) {
-                console.error('deleteUpload failed', data?.error);
-                return;
+            const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+            if (apiUrl) {
+                const res = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'deleteUpload',
+                        student: key,
+                        uploadId: String(uploadId || '').trim()
+                    })
+                });
+                const data = await res.json().catch(() => null);
+                if (!res.ok || !data?.success) {
+                    console.error('deleteUpload failed', data?.error);
+                } else {
+                    if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+                    await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+                    lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+                }
+            } else {
+                console.warn('deleteUpload skipped: serve app over http(s) for cloud sync');
             }
-            if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
-            await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
-            lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
         } finally {
             classReportUploadPushInFlight--;
         }
@@ -4775,7 +4873,12 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
     classReportUploadPushInFlight++;
     try {
         const b64 = await ClassReportUploadsStore.blobToPureBase64(file);
-        const res = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT, {
+        const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!apiUrl) {
+            alert('Serve the app over http(s) to sync related files.');
+            return;
+        }
+        const res = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -5686,6 +5789,26 @@ function withUnavailableStudentNamesMeta(teacherName, schedule) {
 // Cloudflare API endpoint
 const API_ENDPOINT = '/api/schedules';
 
+/**
+ * Resolve a root-relative `/api/...` path on the site's http(s) origin.
+ * From `file:///C:/folder/index.html`, paths like `/api/roster` become `file:///C:/api/...`,
+ * which shows up as bogus "CORS" failures in DevTools Network.
+ *
+ * Returns null unless the document is loaded over http: or https: (serve via Cloudflare Pages
+ * or a local dev server such as `wrangler pages dev`, not raw file:// ).
+ */
+function absoluteHttpApiUrl(pathnameAndSearch) {
+    if (typeof location === 'undefined' || typeof window === 'undefined') return null;
+    if (!/^https?:$/i.test(String(location.protocol || ''))) return null;
+    const raw = String(pathnameAndSearch || '').trim();
+    if (!raw.startsWith('/')) return null;
+    try {
+        return new URL(raw, window.location.origin).href;
+    } catch {
+        return null;
+    }
+}
+
 // Polling interval for checking updates (in milliseconds)
 const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
 /** Class-report uploads KV sync runs on its own interval so feed updates feel snappier than schedule polling. */
@@ -5747,13 +5870,15 @@ function maybeAdvanceClassReportUploadsCloudTsFromPoll(remoteTs) {
 
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object') return;
+    const rosterUrl = absoluteHttpApiUrl('/api/roster');
+    if (!rosterUrl) return;
     if (isSavingRoster) {
         pendingRosterPayload = rosterPayload;
         return;
     }
     isSavingRoster = true;
     try {
-        const response = await fetch('/api/roster', {
+        const response = await fetch(rosterUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -5789,8 +5914,18 @@ function queueSaveRosterToCloud(rosterPayload) {
 
 async function pollRosterUpdates() {
     if (isSavingRoster) return;
+    const rosterPollBase = absoluteHttpApiUrl('/api/roster');
+    if (!rosterPollBase) return;
+    let rosterPollUrl;
     try {
-        const response = await fetch('/api/roster?t=' + Date.now(), {
+        const u = new URL(rosterPollBase);
+        u.searchParams.set('t', String(Date.now()));
+        rosterPollUrl = u.href;
+    } catch {
+        rosterPollUrl = rosterPollBase + (rosterPollBase.includes('?') ? '&' : '?') + 't=' + Date.now();
+    }
+    try {
+        const response = await fetch(rosterPollUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -5798,12 +5933,16 @@ async function pollRosterUpdates() {
             cache: 'no-cache',
         });
         if (!response.ok) return;
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
         if (!data?.success) return;
+
         const remoteTimestamp = data?.lastUpdated || null;
         if (!remoteTimestamp || remoteTimestamp === rosterLastUpdateTimestamp) return;
-        rosterLastUpdateTimestamp = remoteTimestamp;
-        if (!data?.roster || typeof data.roster !== 'object') return;
+
+        if (!data.roster || typeof data.roster !== 'object') {
+            console.warn('Roster poll: missing or invalid roster payload, skipping.');
+            return;
+        }
 
         let localRosterRaw = '';
         try {
@@ -5812,13 +5951,22 @@ async function pollRosterUpdates() {
             console.error('Error reading local roster cache:', error);
         }
         const remoteRosterRaw = JSON.stringify(data.roster);
-        if (localRosterRaw === remoteRosterRaw) return;
+
+        /** Student feed can change when roster metadata changes without localStorage divergence. */
+        const studentLoggedIn = String(loggedInStudentFullName || '').trim();
+
+        if (localRosterRaw === remoteRosterRaw) {
+            rosterLastUpdateTimestamp = remoteTimestamp;
+            if (studentLoggedIn) void pollClassReportUploadsFromCloud();
+            return;
+        }
 
         await initRoster(data.roster);
+        rosterLastUpdateTimestamp = remoteTimestamp;
         syncSpeakOnWeeklyToAllTeacherSchedules();
         renderSidebar();
         resyncSelectionAfterSidebarRender();
-        if (String(loggedInStudentFullName || '').trim()) {
+        if (studentLoggedIn) {
             void pollClassReportUploadsFromCloud();
         }
     } catch (error) {
@@ -5827,23 +5975,54 @@ async function pollRosterUpdates() {
 }
 
 async function pollClassReportUploadsFromCloud() {
+    if (classReportUploadPullInFlight) return;
+    if (classReportUploadPushInFlight > 0) {
+        return;
+    }
+
+    const baseApi = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+    if (!baseApi) return;
+
+    let pollUrl;
     try {
-        if (classReportUploadPushInFlight > 0) {
-            return;
-        }
-        const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT + '?t=' + Date.now(), {
+        const u = new URL(baseApi);
+        u.searchParams.set('t', String(Date.now()));
+        pollUrl = u.href;
+    } catch {
+        pollUrl =
+            baseApi.indexOf('?') !== -1
+                ? baseApi + '&t=' + Date.now()
+                : baseApi + '?t=' + Date.now();
+    }
+
+    classReportUploadPullInFlight = true;
+    try {
+        const response = await fetch(pollUrl, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
             cache: 'no-cache',
         });
         if (!response.ok) return;
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
         if (!data?.success) return;
         const ts = data.lastUpdated || null;
-        const manifest =
+        let manifest =
             data.manifest && typeof data.manifest === 'object' && !Array.isArray(data.manifest)
                 ? data.manifest
                 : { students: {} };
+        // Tolerate `{ StudentName: uploads[] }` payloads with no `students` key (not used by current GET).
+        if (
+            !Object.prototype.hasOwnProperty.call(manifest, 'students') &&
+            typeof manifest === 'object' &&
+            !Array.isArray(manifest)
+        ) {
+            const looksLikeBareBuckets = Object.values(manifest).every(
+                (v) => v == null || Array.isArray(v)
+            );
+            if (looksLikeBareBuckets && Object.keys(manifest).length > 0) {
+                manifest = { students: { ...manifest } };
+            }
+        }
         const buckets = manifest.students && typeof manifest.students === 'object' ? manifest.students : {};
         const fpRemote = stableStringifyManifestStudents(buckets);
 
@@ -5860,6 +6039,8 @@ async function pollClassReportUploadsFromCloud() {
         await applyRemoteManifestPayload(manifest, ts);
     } catch (error) {
         console.error('Class report uploads cloud poll error:', error);
+    } finally {
+        classReportUploadPullInFlight = false;
     }
 }
 
@@ -5889,7 +6070,19 @@ async function loadAllSchedules() {
         const skipCloudClobberPendingUpload =
             isSchedulePendingCloudUpload() && Object.keys(teacherSchedules || {}).length > 0;
 
-        const response = await fetch(API_ENDPOINT, {
+        const schedulesUrl = absoluteHttpApiUrl(API_ENDPOINT);
+        if (!schedulesUrl) {
+            updateSyncStatus(
+                'local-only',
+                '⚠ Open via http/https (Pages or local server) for cloud sync — localStorage only'
+            );
+            loadAllSchedulesLocal();
+            startPolling();
+            void pollClassReportUploadsFromCloud();
+            return;
+        }
+
+        const response = await fetch(schedulesUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -5999,7 +6192,19 @@ function startPolling() {
     pollTimer = setInterval(async () => {
         if (!isSaving) {
             try {
-                const response = await fetch(API_ENDPOINT + '?t=' + Date.now(), {
+                const schedBase = absoluteHttpApiUrl(API_ENDPOINT);
+                if (!schedBase) {
+                    return;
+                }
+                let schedPollUrl;
+                try {
+                    const u = new URL(schedBase);
+                    u.searchParams.set('t', String(Date.now()));
+                    schedPollUrl = u.href;
+                } catch {
+                    schedPollUrl = schedBase + (schedBase.includes('?') ? '&' : '?') + 't=' + Date.now();
+                }
+                const response = await fetch(schedPollUrl, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
@@ -6008,43 +6213,47 @@ function startPolling() {
                 });
 
                 if (response.ok) {
-                    const data = await response.json();
+                    const data = await response.json().catch(() => null);
 
-                    if (data.success && data.schedules) {
-                        // Always update timestamp (even if data hasn't changed)
-                        const timestampChanged = data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp;
+                    if (data?.success) {
+                        const schedules = data.schedules;
+                        const hasScheduleMap =
+                            schedules != null &&
+                            typeof schedules === 'object' &&
+                            !Array.isArray(schedules);
 
-                        // Compare data to see if it changed
-                        const localSchedulesStr = JSON.stringify(teacherSchedules);
-                        const remoteSchedulesStr = JSON.stringify(data.schedules);
-                        const dataChanged = localSchedulesStr !== remoteSchedulesStr;
+                        if (hasScheduleMap) {
+                            const timestampChanged = data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp;
 
-                        // Update if timestamp changed (means someone else made changes)
-                        if (timestampChanged) {
-                            console.log('Timestamp changed - checking for updates');
+                            const localSchedulesStr = JSON.stringify(teacherSchedules);
+                            const remoteSchedulesStr = JSON.stringify(schedules);
+                            const dataChanged = localSchedulesStr !== remoteSchedulesStr;
 
-                            if (dataChanged) {
-                                if (isSchedulePendingCloudUpload()) {
-                                    void saveAllSchedules();
+                            if (timestampChanged) {
+                                console.log('Timestamp changed - checking for updates');
+
+                                if (dataChanged) {
+                                    if (isSchedulePendingCloudUpload()) {
+                                        void saveAllSchedules();
+                                    } else {
+                                        console.log('Data changed - updating from cloud');
+                                        Object.assign(teacherSchedules, schedules);
+                                        syncSpeakOnWeeklyToAllTeacherSchedules();
+
+                                        updateSyncStatus('synced', '✓ Updated from cloud');
+                                        setTimeout(() => {
+                                            updateSyncStatus('synced', 'Cloud sync active');
+                                        }, 2000);
+                                    }
+                                    lastUpdateTimestamp = data.lastUpdated;
                                 } else {
-                                    console.log('Data changed - updating from cloud');
-                                    Object.assign(teacherSchedules, data.schedules);
-                                    syncSpeakOnWeeklyToAllTeacherSchedules();
-
-                                    updateSyncStatus('synced', '✓ Updated from cloud');
-                                    setTimeout(() => {
-                                        updateSyncStatus('synced', 'Cloud sync active');
-                                    }, 2000);
+                                    lastUpdateTimestamp = data.lastUpdated;
+                                    console.log('Timestamp updated, data unchanged');
                                 }
-                                lastUpdateTimestamp = data.lastUpdated;
-                            } else {
-                                lastUpdateTimestamp = data.lastUpdated;
-                                console.log('Timestamp updated, data unchanged');
                             }
+                        } else if (data.lastUpdated) {
+                            lastUpdateTimestamp = data.lastUpdated;
                         }
-                    } else if (data.success && !data.schedules) {
-                        // Empty schedules - update timestamp
-                        lastUpdateTimestamp = data.lastUpdated;
                     }
                 } else {
                     console.error('Polling failed with status:', response.status);
@@ -6132,7 +6341,14 @@ async function performSave() {
 
         console.log('Saving schedules to cloud...', Object.keys(teacherSchedules).length, 'teachers');
 
-        const response = await fetch(API_ENDPOINT, {
+        const postUrl = absoluteHttpApiUrl(API_ENDPOINT);
+        if (!postUrl) {
+            saveAllSchedulesLocal();
+            updateSyncStatus('local-only', '⚠ Served from file — saved locally only');
+            return;
+        }
+
+        const response = await fetch(postUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
