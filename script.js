@@ -3398,7 +3398,7 @@ function scrollSidebarStudentIntoViewFromCalendarChip(studentId) {
 
 function getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state) {
     const normalized = String(state || '').trim().toLowerCase();
-    if (normalized !== 'unavailable' && normalized !== 'rescheduled') return '';
+    if (normalized !== 'unavailable' && normalized !== 'rescheduled' && normalized !== BOOKED_CLASS_SLOT_STATE) return '';
     const key = `${day}-${hour}`;
     if (loggedInStudentFullName) {
         return String(studentVisibleRescheduledNamesBySlot[key] || '').trim();
@@ -3428,6 +3428,36 @@ function isTeacherGreenCellContextMenuEnabled(day, hour) {
     if (isLoggedInStudentCalendarReadOnly()) return false;
     const state = String(getSlotState(day, hour) || '').trim().toLowerCase();
     return state === 'available';
+}
+
+/**
+ * Book a green (available) tutor slot for a student: yellow `booked` cell + name in `__unavailableStudentNames`.
+ * Returns false when the slot cannot be booked or the user may not edit.
+ */
+function teacherBookGreenSlotForStudent(day, hour, studentName) {
+    if (isLoggedInStudentCalendarReadOnly()) {
+        showAppMessage('View only — your teacher manages this schedule.');
+        return false;
+    }
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
+    const nm = String(studentName || '').trim();
+    if (!nm) return false;
+    const slotKey = `${day}-${hour}`;
+    const cur = String(getSlotState(day, hour) || '').trim().toLowerCase();
+    if (cur !== 'available') {
+        showAppMessage('This slot is already booked or not available.');
+        return false;
+    }
+    if (isSchoolManagedTeacherSlotLocked(day, hour)) {
+        showAppMessage('This class is managed by Schools and cannot be edited here.');
+        return false;
+    }
+    if (!teacherUnavailableStudentNamesByTeacher[currentTeacher]) {
+        teacherUnavailableStudentNamesByTeacher[currentTeacher] = {};
+    }
+    teacherUnavailableStudentNamesByTeacher[currentTeacher][slotKey] = nm;
+    setSlotState(day, hour, BOOKED_CLASS_SLOT_STATE);
+    return true;
 }
 
 function handleTeacherGreenContextMenuAction(action) {
@@ -3460,7 +3490,7 @@ function handleTeacherGreenContextMenuAction(action) {
         return;
     }
     if (action === 'set-class-reposition') {
-        showAppMessage(`Set Class/Reposition flow for ${day} at ${formatHour(hour)} will be added next.`);
+        showBookClassStudentsSubmenuForAllStudents();
         return;
     }
     if (action === 'reserve') {
@@ -3472,14 +3502,14 @@ function handleTeacherGreenContextMenuAction(action) {
         return;
     }
     if (action === 'clear') {
-        // Intentionally no-op for now.
+        setSlotState(day, hour, null);
         return;
     }
 }
 
 function applyStateVisualToSlot(slot, state) {
     if (!slot) return;
-    slot.classList.remove('state-available', 'state-unavailable', 'state-school');
+    slot.classList.remove('state-available', 'state-unavailable', 'state-school', 'state-booked');
     slot.style.removeProperty('--slot-school-bg');
     slot.style.removeProperty('--slot-school-border');
     slot.style.removeProperty('--slot-school-shadow');
@@ -3487,6 +3517,10 @@ function applyStateVisualToSlot(slot, state) {
     const normalized = String(state || '').trim().toLowerCase();
     if (normalized === 'available') {
         slot.classList.add('state-available');
+        return;
+    }
+    if (normalized === BOOKED_CLASS_SLOT_STATE) {
+        slot.classList.add('state-booked');
         return;
     }
     if (normalized === 'unavailable' || normalized === 'rescheduled') {
@@ -3810,7 +3844,7 @@ function getScheduledTeacherHoursForDay(dayName) {
         if (!state || state === 'available') continue;
         entries.push({
             hour,
-            isReposition: state === 'unavailable' || state === 'rescheduled'
+            isReposition: state === 'unavailable' || state === 'rescheduled' || state === BOOKED_CLASS_SLOT_STATE
         });
     }
     return entries;
@@ -5588,6 +5622,8 @@ let slotStates = {};
 
 // Left-click toggles only availability (no red step)
 const STATE_CYCLE = [null, 'available'];
+/** Tutor/teacher grid: booked class slot (yellow); assigned name in `__unavailableStudentNames` meta. */
+const BOOKED_CLASS_SLOT_STATE = 'booked';
 
 // Context menu
 let contextMenu = null;
@@ -8094,14 +8130,13 @@ function submitStudentRepositionBooking() {
     const tutorRawSchedule = teacherSchedules[tutorName]
         ? getScheduleSlotMapWithoutMeta(teacherSchedules[tutorName])
         : {};
-    tutorRawSchedule[slotKey] = 'unavailable';
+    tutorRawSchedule[slotKey] = BOOKED_CLASS_SLOT_STATE;
     teacherSchedules[tutorName] = withUnavailableStudentNamesMeta(tutorName, tutorRawSchedule);
+    markSchedulePendingCloudUpload();
+    saveAllSchedulesLocal();
     saveAllSchedules();
 
     if (currentTeacher && String(currentTeacher).trim().toLowerCase() === studentName.toLowerCase()) {
-        // Optimistic UI: show booking immediately in the student calendar.
-        slotStates[slotKey] = 'rescheduled';
-        studentVisibleRescheduledNamesBySlot[slotKey] = studentName;
         loadTeacherSchedule(currentTeacher);
         refreshCalendarDisplay();
         updateSummary();
@@ -11953,6 +11988,10 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
                 // Student view should always display all rescheduled slots globally.
                 merged[key] = 'rescheduled';
                 visibleRescheduledNames[key] = rescheduledStudentName;
+            } else if (tLow === BOOKED_CLASS_SLOT_STATE) {
+                merged[key] = BOOKED_CLASS_SLOT_STATE;
+                const nm = String(tutorUnavailableMeta[key] || '').trim();
+                if (nm) visibleRescheduledNames[key] = nm;
             } else if (sLow && sLow !== 'available') {
                 merged[key] = s;
             } else if (tLow === 'available') {
@@ -12162,17 +12201,11 @@ function initCalendar() {
             contextMenu.dataset.selectedStudent = String(studentItem.dataset.student || '').trim();
             if (currentContextMenuMode === 'teacher-green' && currentSlot && currentTeacher) {
                 const selectedStudentName = String(studentItem.dataset.student || '').trim();
-                if (selectedStudentName) {
-                    const slotKey = `${currentSlot.day}-${currentSlot.hour}`;
-                    if (!teacherUnavailableStudentNamesByTeacher[currentTeacher]) {
-                        teacherUnavailableStudentNamesByTeacher[currentTeacher] = {};
-                    }
-                    teacherUnavailableStudentNamesByTeacher[currentTeacher][slotKey] = selectedStudentName;
-                    setSlotState(currentSlot.day, currentSlot.hour, 'unavailable');
+                if (selectedStudentName && teacherBookGreenSlotForStudent(currentSlot.day, currentSlot.hour, selectedStudentName)) {
+                    hideContextMenu();
                 }
-                hideContextMenu();
+                return;
             }
-            return;
         }
         const item = e.target.closest('.context-menu-item, .context-submenu-item');
         if (!item || !contextMenu.contains(item)) return;
@@ -12189,6 +12222,9 @@ function initCalendar() {
             handleTeacherGreenContextMenuAction(action);
             if (action === 'book-school') {
                 hideContextMenu();
+                return;
+            }
+            if (action === 'set-class-reposition') {
                 return;
             }
             hideContextMenu();
@@ -12361,7 +12397,13 @@ function getNextDateForDayAndHour(dayName, hour, now = new Date()) {
 
 function isClassLikeSlotState(state) {
     const normalized = String(state || '').trim().toLowerCase();
-    if (!normalized || normalized === 'available' || normalized === 'unavailable' || normalized === 'rescheduled') {
+    if (
+        !normalized ||
+        normalized === 'available' ||
+        normalized === 'unavailable' ||
+        normalized === 'rescheduled' ||
+        normalized === BOOKED_CLASS_SLOT_STATE
+    ) {
         return false;
     }
     return !!resolveSchoolTokenInfoFromState(normalized);
@@ -12557,7 +12599,11 @@ function setSlotState(day, hour, state) {
     }
 
     const normalizedState = String(state || '').trim().toLowerCase();
-    if (normalizedState !== 'unavailable') {
+    if (
+        normalizedState !== 'unavailable' &&
+        normalizedState !== 'rescheduled' &&
+        normalizedState !== BOOKED_CLASS_SLOT_STATE
+    ) {
         const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
         if (byTeacher && Object.prototype.hasOwnProperty.call(byTeacher, key)) {
             delete byTeacher[key];
@@ -12896,6 +12942,36 @@ function showBookClassStudentsSubmenu(schoolTitle) {
     refreshStudentListScrollIndicatorsAfterLayout();
 }
 
+function showBookClassStudentsSubmenuForAllStudents() {
+    if (!contextMenu) return;
+    const studentsMenu = contextMenu.querySelector('.context-students-submenu');
+    const titleEl = contextMenu.querySelector('.context-students-submenu-title');
+    const listEl = contextMenu.querySelector('.context-students-submenu-list');
+    if (!studentsMenu || !titleEl || !listEl) return;
+    delete contextMenu.dataset.selectedSchool;
+    const schoolButtons = contextMenu.querySelectorAll('.context-submenu-item[data-school]');
+    schoolButtons.forEach((btn) => btn.classList.remove('is-selected'));
+    const names = getAllRosterStudentNamesSorted();
+    titleEl.textContent = 'All students';
+    if (names.length === 0) {
+        listEl.innerHTML = '<div class="context-submenu-empty">No students found</div>';
+    } else {
+        listEl.innerHTML = names
+            .map((name) => {
+                const safe = escapeHtmlAttr(String(name || '').trim());
+                return `<button type="button" class="context-submenu-student-item" data-student="${safe}">${safe}</button>`;
+            })
+            .join('');
+    }
+    studentsMenu.hidden = false;
+    contextMenu.classList.add('context-menu--book-submenu-expanded');
+    requestAnimationFrame(() => {
+        positionIndependentStudentsSubmenu();
+        updateStudentListScrollIndicators();
+    });
+    refreshStudentListScrollIndicatorsAfterLayout();
+}
+
 function refreshContextMenuTheme() {
     if (!contextMenu) return;
     contextMenu.classList.remove('context-menu--book-submenu-open');
@@ -12923,8 +12999,8 @@ function refreshContextMenuTheme() {
                 <div class="context-menu-group-title">Schedule</div>
                 <div class="context-menu-item-with-submenu">
                     <button type="button" class="context-menu-item context-menu-item--stacked context-menu-item--has-submenu context-menu-item--chevron-row">
-                        <span class="context-menu-label">Book Class</span>
-                        <span class="context-menu-chevron-btn context-menu-chevron-btn--trigger" role="button" tabindex="0" aria-label="Open schools submenu">
+                        <span class="context-menu-label">Book class (Reposition)</span>
+                        <span class="context-menu-chevron-btn context-menu-chevron-btn--trigger" role="button" tabindex="0" aria-label="Open schools submenu to pick a student">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--right">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                             </svg>
@@ -12954,7 +13030,7 @@ function refreshContextMenuTheme() {
                     </div>
                 </div>
                 <button type="button" class="context-menu-item context-menu-item--stacked context-menu-item--chevron-row" data-action="set-class-reposition">
-                    <span class="context-menu-label">Set Class</span>
+                    <span class="context-menu-label">All students…</span>
                     <span class="context-menu-chevron-btn" aria-hidden="true">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--right">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

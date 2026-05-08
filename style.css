@@ -7989,8 +7989,17 @@ header h1 {
     color: #69500f;
 }
 
-/* Unavailable/rescheduled cells without in-cell names keep a readable default; names use .time-slot-student-names only. */
-.time-slot.state-unavailable:not(.time-slot--with-student-names) {
+/* Teacher-/student-initiated bookings (explicit `booked` state); unavailable keeps legacy repaint slots. */
+.time-slot.state-booked {
+    background: #e8d040;
+    border-color: #6b5a09;
+    box-shadow: 0 2px 8px rgba(130, 100, 20, 0.35);
+    color: #423406;
+}
+
+/* Unavailable/booked/rescheduled cells without in-cell names keep a readable default; names use .time-slot-student-names only. */
+.time-slot.state-unavailable:not(.time-slot--with-student-names),
+.time-slot.state-booked:not(.time-slot--with-student-names) {
     font-size: 0.65rem;
 }
 
