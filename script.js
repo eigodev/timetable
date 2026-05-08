@@ -2601,8 +2601,14 @@ function loadStudentClassReportUploads(opts = {}) {
 
 function saveStudentClassReportUploads(opts = {}) {
     const skipCloudPush = opts.skipCloudPush === true;
+    const eagerCloudFlush = opts.eagerCloudFlush === true;
     const maybeQueueCloud = () => {
-        if (!skipCloudPush) queueSaveClassReportUploadsToCloud();
+        if (skipCloudPush) return;
+        if (eagerCloudFlush) {
+            flushQueuedClassReportUploadsToCloud();
+        } else {
+            queueSaveClassReportUploadsToCloud();
+        }
     };
 
     if (!window.indexedDB) {
@@ -3941,7 +3947,7 @@ function renameStudentClassReportRows(oldName, newName) {
     if (studentClassReportUploadsByName[oldName]) {
         studentClassReportUploadsByName[newName] = studentClassReportUploadsByName[oldName];
         delete studentClassReportUploadsByName[oldName];
-        void saveStudentClassReportUploads();
+        void saveStudentClassReportUploads({ eagerCloudFlush: true });
     }
 }
 
@@ -4365,17 +4371,20 @@ function persistClassReportRowField(tr, el) {
     }
 }
 
+function findClassReportUploadStorageKey(studentName) {
+    const trimmed = String(studentName || '').trim();
+    if (!trimmed) return '';
+    const map = studentClassReportUploadsByName || {};
+    if (Array.isArray(map[trimmed])) return trimmed;
+    const lc = trimmed.toLowerCase();
+    const hit = Object.keys(map).find((k) => String(k || '').trim().toLowerCase() === lc);
+    return hit || trimmed;
+}
+
 function getStudentClassReportUploadFeed(studentName) {
-    const key = String(studentName || '').trim();
-    if (!key) return [];
-    const logged = String(loggedInStudentFullName || '').trim();
-    if (
-        logged &&
-        logged.toLowerCase() === key.toLowerCase() &&
-        !getStudentTeacherInfo(key).trim()
-    ) {
-        return [];
-    }
+    const rawKey = String(studentName || '').trim();
+    if (!rawKey) return [];
+    const key = findClassReportUploadStorageKey(rawKey);
     if (!Array.isArray(studentClassReportUploadsByName[key])) {
         studentClassReportUploadsByName[key] = [];
     }
@@ -4448,7 +4457,7 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
         questions: [],
         relatedFiles: []
     });
-    await saveStudentClassReportUploads();
+    await saveStudentClassReportUploads({ eagerCloudFlush: true });
     const browseInput = panel.querySelector('#studentClassReportUploadInput');
     if (browseInput) browseInput.value = '';
     renderStudentClassReportUploadFeed(panel, key);
@@ -4483,7 +4492,7 @@ function removeStudentClassReportUpload(studentName, uploadId) {
             if (file?.url && String(file.url).startsWith('blob:')) URL.revokeObjectURL(file.url);
         });
     }
-    void saveStudentClassReportUploads();
+    void saveStudentClassReportUploads({ eagerCloudFlush: true });
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
 }
 
@@ -4507,7 +4516,7 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
         type: String(file.type || '').toLowerCase(),
         dataUrl
     });
-    await saveStudentClassReportUploads();
+    await saveStudentClassReportUploads({ eagerCloudFlush: true });
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
 }
 
@@ -4763,11 +4772,6 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
     const changeFileBtn = panel.querySelector('.student-class-report-change-file-btn');
     const feedEl = panel.querySelector('.student-class-report-file-preview');
     const feed = getStudentClassReportUploadFeed(studentName);
-    const logged = String(loggedInStudentFullName || '').trim();
-    const needsMentorHint =
-        !!logged &&
-        logged.toLowerCase() === String(studentName || '').trim().toLowerCase() &&
-        !getStudentTeacherInfo(studentName).trim();
 
     let assignHint = panel.querySelector('.student-class-report-assign-hint');
     if (!assignHint) {
@@ -4777,14 +4781,8 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
         assignHint.hidden = true;
         panel.appendChild(assignHint);
     }
-    if (needsMentorHint) {
-        assignHint.textContent =
-            'You need a teacher assigned to your profile before class file uploads from your teacher can sync here.';
-        assignHint.hidden = false;
-    } else {
-        assignHint.textContent = '';
-        assignHint.hidden = true;
-    }
+    assignHint.textContent = '';
+    assignHint.hidden = true;
 
     if (feedEl) {
         feedEl.textContent = '';
@@ -5551,7 +5549,16 @@ async function saveClassReportUploadsToCloud() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ uploads: studentClassReportUploadsByName }),
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+            let detail = '';
+            try {
+                detail = await response.text();
+            } catch {
+                detail = '';
+            }
+            console.error('Class report uploads cloud save failed:', response.status, detail);
+            return;
+        }
         const data = await response.json();
         if (data?.success && data.lastUpdated) {
             classReportUploadsCloudTimestamp = data.lastUpdated;
@@ -5571,6 +5578,14 @@ function queueSaveClassReportUploadsToCloud() {
     }, 700);
 }
 
+function flushQueuedClassReportUploadsToCloud() {
+    if (classReportUploadsCloudSaveTimer) {
+        clearTimeout(classReportUploadsCloudSaveTimer);
+        classReportUploadsCloudSaveTimer = null;
+    }
+    void saveClassReportUploadsToCloud();
+}
+
 async function pollClassReportUploadsFromCloud() {
     try {
         const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT + '?t=' + Date.now(), {
@@ -5583,7 +5598,14 @@ async function pollClassReportUploadsFromCloud() {
         if (!data?.success) return;
         const ts = data.lastUpdated || null;
 
-        const raw = data.uploads;
+        let raw = data.uploads;
+        if (typeof raw === 'string') {
+            try {
+                raw = JSON.parse(raw);
+            } catch {
+                raw = null;
+            }
+        }
         const next = normalizePersistedClassReportUploads(
             raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
         );
@@ -5761,63 +5783,60 @@ function startPolling() {
     
     // Poll every few seconds for updates
     pollTimer = setInterval(async () => {
-        // Don't poll while we're saving
-        if (isSaving) {
-            return;
-        }
-        
-        try {
-            const response = await fetch(API_ENDPOINT + '?t=' + Date.now(), {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                cache: 'no-cache',
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                if (data.success && data.schedules) {
-                    // Always update timestamp (even if data hasn't changed)
-                    const timestampChanged = data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp;
-                    
-                    // Compare data to see if it changed
-                    const localSchedulesStr = JSON.stringify(teacherSchedules);
-                    const remoteSchedulesStr = JSON.stringify(data.schedules);
-                    const dataChanged = localSchedulesStr !== remoteSchedulesStr;
-                    
-                    // Update if timestamp changed (means someone else made changes)
-                    if (timestampChanged) {
-                        console.log('Timestamp changed - checking for updates');
-                        
-                        if (dataChanged) {
-                            console.log('Data changed - updating from cloud');
-                            // Update local schedules with remote data
-                            Object.assign(teacherSchedules, data.schedules);
-                            lastUpdateTimestamp = data.lastUpdated;
-                            syncSpeakOnWeeklyToAllTeacherSchedules();
-                            
-                            updateSyncStatus('synced', '✓ Updated from cloud');
-                            setTimeout(() => {
-                                updateSyncStatus('synced', 'Cloud sync active');
-                            }, 2000);
-                        } else {
-                            // Timestamp changed but data is same - just update timestamp
-                            lastUpdateTimestamp = data.lastUpdated;
-                            console.log('Timestamp updated, data unchanged');
+        if (!isSaving) {
+            try {
+                const response = await fetch(API_ENDPOINT + '?t=' + Date.now(), {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    cache: 'no-cache',
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success && data.schedules) {
+                        // Always update timestamp (even if data hasn't changed)
+                        const timestampChanged = data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp;
+
+                        // Compare data to see if it changed
+                        const localSchedulesStr = JSON.stringify(teacherSchedules);
+                        const remoteSchedulesStr = JSON.stringify(data.schedules);
+                        const dataChanged = localSchedulesStr !== remoteSchedulesStr;
+
+                        // Update if timestamp changed (means someone else made changes)
+                        if (timestampChanged) {
+                            console.log('Timestamp changed - checking for updates');
+
+                            if (dataChanged) {
+                                console.log('Data changed - updating from cloud');
+                                // Update local schedules with remote data
+                                Object.assign(teacherSchedules, data.schedules);
+                                lastUpdateTimestamp = data.lastUpdated;
+                                syncSpeakOnWeeklyToAllTeacherSchedules();
+
+                                updateSyncStatus('synced', '✓ Updated from cloud');
+                                setTimeout(() => {
+                                    updateSyncStatus('synced', 'Cloud sync active');
+                                }, 2000);
+                            } else {
+                                // Timestamp changed but data is same - just update timestamp
+                                lastUpdateTimestamp = data.lastUpdated;
+                                console.log('Timestamp updated, data unchanged');
+                            }
                         }
+                    } else if (data.success && !data.schedules) {
+                        // Empty schedules - update timestamp
+                        lastUpdateTimestamp = data.lastUpdated;
                     }
-                } else if (data.success && !data.schedules) {
-                    // Empty schedules - update timestamp
-                    lastUpdateTimestamp = data.lastUpdated;
+                } else {
+                    console.error('Polling failed with status:', response.status);
                 }
-            } else {
-                console.error('Polling failed with status:', response.status);
+            } catch (error) {
+                // Silent error - don't show error for polling failures
+                console.error('Polling error:', error);
             }
-        } catch (error) {
-            // Silent error - don't show error for polling failures
-            console.error('Polling error:', error);
         }
         await pollRosterUpdates();
         await pollClassReportUploadsFromCloud();
@@ -8174,7 +8193,7 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentCityByName[removedName];
     delete studentCountryByName[removedName];
     saveStudentClassReportRows();
-    void saveStudentClassReportUploads();
+    void saveStudentClassReportUploads({ eagerCloudFlush: true });
     syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
@@ -8367,11 +8386,9 @@ function getStudentTeacherInfo(studentName) {
     return mappedKey ? String(studentTeacherByName[mappedKey] || '').trim() : '';
 }
 
-/** Cloud class-report uploads are one shared map; students merge it only if they have an assigned teacher (mentor row). */
+/** Teachers and students both need cloud merge so class-report files can load on any device. */
 function loggedInStudentCanMergeClassReportUploadsFromCloud() {
-    const s = String(loggedInStudentFullName || '').trim();
-    if (!s) return true;
-    return !!getStudentTeacherInfo(s).trim();
+    return true;
 }
 
 function saveStudentTeacherInfo(studentName, teacherRaw) {
