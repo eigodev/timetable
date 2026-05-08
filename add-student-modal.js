@@ -505,11 +505,22 @@
 
         const studentData = getStudentPayload();
         studentData.externalFollowUpLink = linkParsed.href;
-        if (typeof window.createStudentFromModernModal === 'function') {
+        if (typeof window.createStudentFromModernModal !== 'function') {
+            const msg =
+                'Could not save this student because the save handler failed to load. Try refreshing the page.';
+            if (typeof window.showAppMessage === 'function') window.showAppMessage(msg);
+            else alert(msg);
+            return;
+        }
+        try {
             const saved = await window.createStudentFromModernModal(studentData);
             if (!saved) return;
-        } else {
-            console.log('Student created:', studentData);
+        } catch (err) {
+            console.error(err);
+            const msg = 'Something went wrong while saving the student. Please try again.';
+            if (typeof window.showAppMessage === 'function') window.showAppMessage(msg);
+            else alert(msg);
+            return;
         }
 
         closeModal();

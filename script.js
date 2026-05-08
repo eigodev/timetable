@@ -2232,7 +2232,8 @@ function fillStudentMentorSelect(sel, mode, preferredAssigned = '') {
         o.textContent = only;
         sel.appendChild(o);
         sel.value = only;
-        sel.disabled = true;
+        // Keep enabled so the selected mentor value stays readable reliably across browsers/forms.
+        sel.disabled = false;
         return;
     }
 
@@ -7643,6 +7644,8 @@ function closeAppMessageModal() {
 function showAppMessage(message, title = 'Notice') {
     openAppMessageModal(title, message);
 }
+
+window.showAppMessage = showAppMessage;
 
 function setupAppMessageModal() {
     const modal = document.getElementById('appMessageModal');
