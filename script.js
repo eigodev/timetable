@@ -2488,9 +2488,66 @@ function mergeClassReportUploadMaps(localMap, remoteMap) {
     return out;
 }
 
-function refreshVisibleStudentClassReportUploadFeed() {
+function studentClassReportPanelHasTypingFocus(panel) {
+    const p = panel || document.getElementById('studentClassReportPanel');
+    if (!p || p.hidden) return false;
+    const ae = document.activeElement;
+    if (!ae || !p.contains(ae)) return false;
+    const tag = String(ae.tagName || '').toUpperCase();
+    if (tag === 'TEXTAREA') return true;
+    if (tag === 'SELECT') return true;
+    if (ae.isContentEditable || (ae.closest && ae.closest('[contenteditable="true"]'))) return true;
+    if (tag === 'INPUT') {
+        const typ = String(ae.type || '').toLowerCase();
+        if (
+            typ === 'checkbox'
+            || typ === 'radio'
+            || typ === 'button'
+            || typ === 'submit'
+            || typ === 'reset'
+            || typ === 'hidden'
+            || typ === 'file'
+        ) {
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+function attachClassReportFeedReflowAfterFocusLeavesPanel(panel) {
+    if (!panel || panel.dataset.classReportReflowBlurBound === '1') return;
+    panel.dataset.classReportReflowBlurBound = '1';
+    const flush = () => {
+        queueMicrotask(() => {
+            if (!panel.isConnected) return;
+            if (studentClassReportPanelHasTypingFocus(panel)) return;
+            panel.removeEventListener('focusout', flush, true);
+            panel._classReportFeedFocusFlush = null;
+            panel.dataset.classReportReflowBlurBound = '';
+            refreshVisibleStudentClassReportUploadFeed({ forceReflow: true });
+        });
+    };
+    panel._classReportFeedFocusFlush = flush;
+    panel.addEventListener('focusout', flush, true);
+}
+
+/** @param {{ forceReflow?: boolean }} [opts] */
+function refreshVisibleStudentClassReportUploadFeed(opts = {}) {
     const panel = document.getElementById('studentClassReportPanel');
     if (!panel || panel.hidden) return;
+    const forceReflow = opts.forceReflow === true;
+    if (!forceReflow && studentClassReportPanelHasTypingFocus(panel)) {
+        attachClassReportFeedReflowAfterFocusLeavesPanel(panel);
+        return;
+    }
+    const prevFlush =
+        typeof panel._classReportFeedFocusFlush === 'function' ? panel._classReportFeedFocusFlush : null;
+    if (prevFlush) {
+        panel.removeEventListener('focusout', prevFlush, true);
+        panel._classReportFeedFocusFlush = null;
+    }
+    panel.dataset.classReportReflowBlurBound = '';
     const loggedStudent = String(loggedInStudentFullName || '').trim();
     let studentName = loggedStudent;
     if (!studentName) {
@@ -4542,7 +4599,8 @@ function addQuestionToLatestStudentClassReportUpload(studentName) {
             text: ''
         });
     }
-    void saveStudentClassReportUploads();
+    void saveStudentClassReportUploads({ skipCloudPush: true });
+    scheduleClassReportTypingCloudFlush();
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
     requestAnimationFrame(() => {
         const panel = document.getElementById('studentClassReportPanel');
@@ -4575,7 +4633,8 @@ function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQ
         text: ''
     };
     upload.questions.splice(currentIndex >= 0 ? currentIndex + 1 : upload.questions.length, 0, nextQuestion);
-    void saveStudentClassReportUploads();
+    void saveStudentClassReportUploads({ skipCloudPush: true });
+    scheduleClassReportTypingCloudFlush();
     renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
     requestAnimationFrame(() => {
         const panel = document.getElementById('studentClassReportPanel');
@@ -4735,7 +4794,8 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
                     return;
                 }
                 question.text = input.value;
-                void saveStudentClassReportUploads();
+                void saveStudentClassReportUploads({ skipCloudPush: true });
+                scheduleClassReportTypingCloudFlush();
             });
 
             const addLineBtn = document.createElement('button');
@@ -5408,7 +5468,7 @@ const CLASS_REPORT_UPLOADS_API_ENDPOINT = '/api/class-report-uploads';
 // Polling interval for checking updates (in milliseconds)
 const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
 /** Class-report uploads KV sync runs on its own interval so feed updates feel snappier than schedule polling. */
-const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 900;
+const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 600;
 
 // Track if we're currently saving
 let isSaving = false;
@@ -5473,6 +5533,17 @@ try {
     classReportUploadsCloudTimestamp = null;
 }
 let classReportUploadsCloudSaveTimer = null;
+let classReportTypingCloudFlushTimer = null;
+
+function scheduleClassReportTypingCloudFlush() {
+    if (classReportTypingCloudFlushTimer) {
+        window.clearTimeout(classReportTypingCloudFlushTimer);
+    }
+    classReportTypingCloudFlushTimer = window.setTimeout(() => {
+        classReportTypingCloudFlushTimer = null;
+        flushQueuedClassReportUploadsToCloud();
+    }, 100);
+}
 
 function setClassReportUploadsCloudTimestamp(nextTs) {
     if (nextTs == null || !String(nextTs).trim()) return;
@@ -5630,7 +5701,6 @@ function flushQueuedClassReportUploadsToCloud() {
 async function pollClassReportUploadsFromCloud() {
     try {
         if (classReportUploadsKvOutboundBusy) {
-            refreshVisibleStudentClassReportUploadFeed();
             return;
         }
         const response = await fetch(CLASS_REPORT_UPLOADS_API_ENDPOINT + '?t=' + Date.now(), {
@@ -5660,7 +5730,6 @@ async function pollClassReportUploadsFromCloud() {
         const storedTs = classReportUploadsCloudTimestamp;
         /** Edge/read lag: KV may return JSON older than last successful POST; never merge/replace downward. */
         if (storedTs && ts && String(ts).trim() && String(ts) < String(storedTs)) {
-            refreshVisibleStudentClassReportUploadFeed();
             return;
         }
 
