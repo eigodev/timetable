@@ -5407,6 +5407,8 @@ const CLASS_REPORT_UPLOADS_API_ENDPOINT = '/api/class-report-uploads';
 
 // Polling interval for checking updates (in milliseconds)
 const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
+/** Class-report uploads KV sync runs on its own interval so feed updates feel snappier than schedule polling. */
+const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 900;
 
 // Track if we're currently saving
 let isSaving = false;
@@ -5419,6 +5421,7 @@ let saveTimer = null;
 
 // Polling timer for checking updates
 let pollTimer = null;
+let classReportUploadCloudPollTimer = null;
 
 function tickStudentClassReportUploadFeedPoll() {
     const panel = document.getElementById('studentClassReportPanel');
@@ -5479,6 +5482,15 @@ function setClassReportUploadsCloudTimestamp(nextTs) {
         localStorage.setItem(CLASS_REPORT_UPLOADS_CLOUD_TS_STORAGE_KEY, s);
     } catch {
         /* private mode / quota */
+    }
+}
+
+function maybeAdvanceClassReportUploadsCloudTsFromPoll(remoteTs) {
+    if (!remoteTs || !String(remoteTs).trim()) return;
+    const s = String(remoteTs).trim();
+    const cur = classReportUploadsCloudTimestamp;
+    if (!cur || String(s) > String(cur)) {
+        setClassReportUploadsCloudTimestamp(s);
     }
 }
 
@@ -5603,7 +5615,7 @@ function queueSaveClassReportUploadsToCloud() {
     classReportUploadsCloudSaveTimer = setTimeout(() => {
         classReportUploadsCloudSaveTimer = null;
         void saveClassReportUploadsToCloud();
-    }, 700);
+    }, 350);
 }
 
 function flushQueuedClassReportUploadsToCloud() {
@@ -5645,39 +5657,42 @@ async function pollClassReportUploadsFromCloud() {
 
         const localStr = JSON.stringify(studentClassReportUploadsByName);
         const remoteStr = JSON.stringify(next);
+        const storedTs = classReportUploadsCloudTimestamp;
+        /** Edge/read lag: KV may return JSON older than last successful POST; never merge/replace downward. */
+        if (storedTs && ts && String(ts).trim() && String(ts) < String(storedTs)) {
+            refreshVisibleStudentClassReportUploadFeed();
+            return;
+        }
+
         const canMergeForStudent = loggedInStudentCanMergeClassReportUploadsFromCloud();
 
         // Keep client revision in sync; avoid re-rendering when the payload already matches local.
         // (Legacy KV rows may omit last_updated — comparing JSON handles that; do not bail on !ts.)
         if (remoteStr === localStr) {
-            if (ts) {
-                setClassReportUploadsCloudTimestamp(ts);
-            }
+            maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
             lastSyncedClassReportUploadsJson = localStr;
             return;
         }
 
         if (!canMergeForStudent) {
-            if (ts) {
-                setClassReportUploadsCloudTimestamp(ts);
-            }
+            maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
             refreshVisibleStudentClassReportUploadFeed();
             return;
         }
 
         /** Newer KV revision ⇒ apply full remote snapshot so removed files/students disappear (merge alone is union-only). */
-        const storedTs = classReportUploadsCloudTimestamp;
+        const storedTsCompare = classReportUploadsCloudTimestamp;
         const remoteRevIsAhead =
             ts &&
             remoteStr !== localStr &&
-            (storedTs
-                ? String(ts) > String(storedTs)
+            (storedTsCompare
+                ? String(ts) > String(storedTsCompare)
                 : Object.keys(next).length > 0 || Object.keys(studentClassReportUploadsByName).length === 0);
 
         if (remoteRevIsAhead) {
             studentClassReportUploadsByName = next;
             if (ts) {
-                setClassReportUploadsCloudTimestamp(ts);
+                maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
             }
             lastSyncedClassReportUploadsJson = remoteStr;
             refreshVisibleStudentClassReportUploadFeed();
@@ -5695,17 +5710,12 @@ async function pollClassReportUploadsFromCloud() {
             if (remoteStr !== localStr) {
                 queueSaveClassReportUploadsToCloud();
             }
-            if (ts) {
-                setClassReportUploadsCloudTimestamp(ts);
-            }
+            maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
             lastSyncedClassReportUploadsJson = localStr;
             return;
         }
 
-        if (ts) {
-            setClassReportUploadsCloudTimestamp(ts);
-        }
-
+        maybeAdvanceClassReportUploadsCloudTsFromPoll(ts);
         studentClassReportUploadsByName = merged;
         refreshVisibleStudentClassReportUploadFeed();
         await saveStudentClassReportUploads({ skipCloudPush: true });
@@ -5830,10 +5840,21 @@ function startPolling() {
     // Clear any existing polling
     if (pollTimer) {
         clearInterval(pollTimer);
+        pollTimer = null;
     }
-    
-    console.log('Starting polling for updates every', POLL_INTERVAL / 1000, 'seconds');
-    
+    if (classReportUploadCloudPollTimer) {
+        clearInterval(classReportUploadCloudPollTimer);
+        classReportUploadCloudPollTimer = null;
+    }
+
+    console.log(
+        'Starting polling: schedules every',
+        POLL_INTERVAL / 1000,
+        's, class-report uploads every',
+        CLASS_REPORT_UPLOAD_CLOUD_POLL_MS / 1000,
+        's'
+    );
+
     // Poll every few seconds for updates
     pollTimer = setInterval(async () => {
         if (!isSaving) {
@@ -5892,8 +5913,11 @@ function startPolling() {
             }
         }
         await pollRosterUpdates();
-        await pollClassReportUploadsFromCloud();
     }, POLL_INTERVAL);
+
+    classReportUploadCloudPollTimer = window.setInterval(() => {
+        void pollClassReportUploadsFromCloud();
+    }, CLASS_REPORT_UPLOAD_CLOUD_POLL_MS);
 }
 
 // Load from localStorage (fallback)
