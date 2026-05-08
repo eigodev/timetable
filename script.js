@@ -157,6 +157,10 @@ let schoolSettingsColorTarget = '';
 let schoolSettingsColorPopupHideTimer = null;
 let addSchoolColorTarget = '';
 let addSchoolColorPopupHideTimer = null;
+/** Appended under `<body>` while open — add-modal-dialog uses transform (modal animation), which traps `fixed` descendants and `overflow:hidden` clips them. */
+let addSchoolColorPopupRestoreParent = null;
+/** @type {ChildNode | null} */
+let addSchoolColorPopupRestoreBefore = null;
 let calendarToolbarExternalLink = '';
 /** @type {Record<string, { classDay: string, classHour: string, extraDay: string, extraHour: string }>} */
 let speakonStudentWeeklyClass = {};
@@ -191,6 +195,7 @@ let googleMeetSelectedStudentNames = new Set();
 /** @type {Record<string, string>} student display name → Meet URL */
 let studentGoogleMeetLinksByName = {};
 let googleMeetLinkPopoverStudent = '';
+let googleMeetStudentLinkPopoverHideTimer = null;
 /** @type {Record<string, string>} synthetic student id -> student name */
 let googleMeetLinksStudentNameById = {};
 let googleMeetLinksAddDialogStudentId = '';
@@ -368,7 +373,7 @@ function setupGlobalEscapeToDismissOverlays() {
             }
 
             const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
-            if (addSchoolColorPopup && !addSchoolColorPopup.hidden && addSchoolColorPopup.classList.contains('is-open')) {
+            if (addSchoolColorPopup && !addSchoolColorPopup.hidden) {
                 e.preventDefault();
                 closeAddSchoolColorPopup();
                 return;
@@ -520,11 +525,12 @@ function setupGlobalPointerDownToDismissOverlays() {
             }
 
             const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
-            if (addSchoolColorPopup && !addSchoolColorPopup.hidden && addSchoolColorPopup.classList.contains('is-open')) {
-                if (!addSchoolColorPopup.contains(target)) {
-                    closeAddSchoolColorPopup();
+            /** Picker lives under `<body>` while open; it is outside `[role="dialog"]`, so we must bail before modalDismissOrder closes `#addModal`. */
+            if (addSchoolColorPopup && !addSchoolColorPopup.hidden) {
+                if (target instanceof Element && addSchoolColorPopup.contains(target)) {
+                    return;
                 }
-                return;
+                closeAddSchoolColorPopup();
             }
 
             if (contextMenu && contextMenu.classList.contains('show')) {
@@ -991,17 +997,50 @@ function getAddSchoolBillingConfigFromForm(modelRaw) {
     return null;
 }
 
+function portalAddSchoolColorPopupToBody(popup) {
+    if (!(popup instanceof HTMLElement)) return;
+    if (popup.parentNode === document.body) return;
+    addSchoolColorPopupRestoreParent = popup.parentNode;
+    addSchoolColorPopupRestoreBefore = popup.nextSibling;
+    document.body.appendChild(popup);
+}
+
+function restoreAddSchoolColorPopupFromBody(popup) {
+    if (!(popup instanceof HTMLElement)) return;
+    if (!addSchoolColorPopupRestoreParent) return;
+    const parent = addSchoolColorPopupRestoreParent;
+    const before = addSchoolColorPopupRestoreBefore;
+    addSchoolColorPopupRestoreParent = null;
+    addSchoolColorPopupRestoreBefore = null;
+    try {
+        if (before instanceof Node && before.parentNode === parent) {
+            parent.insertBefore(popup, before);
+        } else {
+            parent.appendChild(popup);
+        }
+    } catch {
+        if (!popup.parentNode) document.body.appendChild(popup);
+    }
+}
+
 function closeAddSchoolColorPopup() {
     const popup = document.getElementById('addSchoolColorPopup');
+    const options = document.getElementById('addSchoolColorPopupOptions');
     if (!popup) return;
     popup.classList.remove('is-open');
     popup.setAttribute('aria-hidden', 'true');
+    options?.style.removeProperty('max-height');
     if (addSchoolColorPopupHideTimer) {
         clearTimeout(addSchoolColorPopupHideTimer);
         addSchoolColorPopupHideTimer = null;
     }
     addSchoolColorPopupHideTimer = window.setTimeout(() => {
         popup.hidden = true;
+        popup.style.removeProperty('position');
+        popup.style.removeProperty('left');
+        popup.style.removeProperty('top');
+        popup.style.removeProperty('z-index');
+        restoreAddSchoolColorPopupFromBody(popup);
         addSchoolColorPopupHideTimer = null;
     }, 200);
     addSchoolColorTarget = '';
@@ -1049,9 +1088,15 @@ function openAddSchoolColorPopup(target, anchorEl) {
         options.appendChild(section);
     });
 
-    const dialogRect = dialog.getBoundingClientRect();
+    portalAddSchoolColorPopupToBody(popup);
+
+    /** Fixed viewport coordinates while open (picker is under `<body>`). */
     const anchorRect = anchorEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     popup.hidden = false;
+    popup.style.position = 'fixed';
+    popup.style.zIndex = '2500';
     if (addSchoolColorPopupHideTimer) {
         clearTimeout(addSchoolColorPopupHideTimer);
         addSchoolColorPopupHideTimer = null;
@@ -1061,12 +1106,11 @@ function openAddSchoolColorPopup(target, anchorEl) {
     const popupHeight = popup.offsetHeight || 220;
     const horizontalPad = 10;
     const verticalPad = 10;
-    const anchorLeft = anchorRect.left - dialogRect.left;
-    let left = anchorLeft - 4;
-    left = Math.max(horizontalPad, Math.min(left, dialogRect.width - popupWidth - horizontalPad));
-    const anchorBottom = anchorRect.bottom - dialogRect.top;
-    const anchorTop = anchorRect.top - dialogRect.top;
-    const availableBelow = Math.max(0, dialogRect.height - anchorBottom - verticalPad - 8);
+    let left = anchorRect.left - 4;
+    left = Math.max(horizontalPad, Math.min(left, vw - popupWidth - horizontalPad));
+    const anchorBottom = anchorRect.bottom;
+    const anchorTop = anchorRect.top;
+    const availableBelow = Math.max(0, vh - anchorBottom - verticalPad - 8);
     const availableAbove = Math.max(0, anchorTop - verticalPad - 8);
     const minPopupHeight = 140;
     let top = anchorBottom + 8;
@@ -1078,7 +1122,8 @@ function openAddSchoolColorPopup(target, anchorEl) {
         options.style.maxHeight = `${Math.round(targetHeight)}px`;
     }
 
-    top = Math.max(verticalPad, Math.min(top, dialogRect.height - popupHeight - verticalPad));
+    const finalH = popup.offsetHeight || popupHeight;
+    top = Math.max(verticalPad, Math.min(top, vh - finalH - verticalPad));
     popup.style.left = `${Math.round(left)}px`;
     popup.style.top = `${Math.round(top)}px`;
     requestAnimationFrame(() => popup.classList.add('is-open'));
@@ -2808,6 +2853,7 @@ function syncSpeakOnWeeklyToAllTeacherSchedules() {
 let calendarStudentPopoverOpen = false;
 let calendarStudentNamesInCellsVisible = false;
 let calendarLinkPopoverOpen = false;
+let calendarLinkPopoverHideTimer = null;
 let calendarNameVisibleSchoolKeys = new Set();
 let calendarSchoolFilterDefaulted = false;
 let calendarStudentPopoverHideTimer = null;
@@ -3565,8 +3611,28 @@ function toggleCalendarPromptPopover(anchorEl) {
 
 function closeCalendarLinkPopover() {
     const pop = document.getElementById('calendarLinkPopover');
-    if (pop) pop.hidden = true;
+    if (calendarLinkPopoverHideTimer) {
+        clearTimeout(calendarLinkPopoverHideTimer);
+        calendarLinkPopoverHideTimer = null;
+    }
     calendarLinkPopoverOpen = false;
+    if (!pop) return;
+    pop.classList.remove('calendar-link-popover--enter');
+    if (!pop.hidden) {
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            pop.hidden = true;
+            pop.classList.remove('calendar-link-popover--leave');
+            return;
+        }
+        pop.classList.add('calendar-link-popover--leave');
+        calendarLinkPopoverHideTimer = window.setTimeout(() => {
+            pop.hidden = true;
+            pop.classList.remove('calendar-link-popover--leave');
+            calendarLinkPopoverHideTimer = null;
+        }, MODAL_CLOSE_ANIMATION_MS);
+    } else {
+        pop.classList.remove('calendar-link-popover--leave');
+    }
 }
 
 function openCalendarLinkPopover(anchorEl) {
@@ -3575,8 +3641,18 @@ function openCalendarLinkPopover(anchorEl) {
     if (!pop || !input) return;
     closeCalendarStudentNamesPopover();
     closeCalendarPromptPopover();
+    if (calendarLinkPopoverHideTimer) {
+        clearTimeout(calendarLinkPopoverHideTimer);
+        calendarLinkPopoverHideTimer = null;
+    }
     input.value = String(calendarToolbarExternalLink || '').trim();
     pop.hidden = false;
+    pop.classList.remove('calendar-link-popover--leave');
+    pop.classList.remove('calendar-link-popover--enter');
+    void pop.offsetWidth;
+    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        pop.classList.add('calendar-link-popover--enter');
+    }
     calendarLinkPopoverOpen = true;
     positionCalendarLinkPopover(anchorEl);
     requestAnimationFrame(() => positionCalendarLinkPopover(anchorEl));
@@ -9925,13 +10001,30 @@ function findGoogleMeetStudentIndicator(studentName) {
     return null;
 }
 
-function closeGoogleMeetStudentLinkPopover() {
+function closeGoogleMeetStudentLinkPopover(immediate = false) {
     googleMeetLinkPopoverStudent = '';
     const pop = document.getElementById('googleMeetStudentLinkPopover');
-    if (pop) {
-        pop.classList.remove('google-meet-student-link-popover--enter');
+    if (!pop) return;
+    const finishHidden = () => {
         pop.hidden = true;
         pop.setAttribute('aria-hidden', 'true');
+        pop.classList.remove('google-meet-student-link-popover--leave');
+        googleMeetStudentLinkPopoverHideTimer = null;
+    };
+    if (googleMeetStudentLinkPopoverHideTimer) {
+        clearTimeout(googleMeetStudentLinkPopoverHideTimer);
+        googleMeetStudentLinkPopoverHideTimer = null;
+    }
+    pop.classList.remove('google-meet-student-link-popover--enter');
+    if (immediate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        finishHidden();
+        return;
+    }
+    if (!pop.hidden) {
+        pop.classList.add('google-meet-student-link-popover--leave');
+        googleMeetStudentLinkPopoverHideTimer = window.setTimeout(finishHidden, MODAL_CLOSE_ANIMATION_MS);
+    } else {
+        finishHidden();
     }
 }
 
@@ -9948,7 +10041,7 @@ function openGoogleMeetStudentLinkPopover(studentName, anchorRef) {
         denyStudentAction('Permission denied: students cannot manage Google Meet links.');
         return;
     }
-    closeGoogleMeetStudentLinkPopover();
+    closeGoogleMeetStudentLinkPopover(true);
     const pop = document.getElementById('googleMeetStudentLinkPopover');
     const sub = document.getElementById('googleMeetStudentLinkPopoverStudentName');
     const input = document.getElementById('googleMeetStudentLinkPopoverInput');

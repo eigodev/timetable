@@ -1087,6 +1087,10 @@ body {
     animation: google-meet-link-popover-in 220ms ease both;
 }
 
+.google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--leave {
+    animation: google-meet-link-popover-out 220ms ease both;
+}
+
 @keyframes google-meet-link-popover-in {
     from {
         opacity: 0;
@@ -1098,8 +1102,18 @@ body {
     }
 }
 
+@keyframes google-meet-link-popover-out {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--enter {
+    .google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--enter,
+    .google-meet-modal .google-meet-student-link-popover.google-meet-student-link-popover--leave {
         animation: none !important;
     }
 
@@ -1423,13 +1437,13 @@ body {
 .school-settings-modal.is-closing,
 .class-topic-modal.is-closing,
 .app-message-modal.is-closing,
-.student-reposition-modal.is-closing,
-.edit-student-modal.is-open {
+.student-reposition-modal.is-closing {
     display: flex;
 }
 
 .add-modal.is-open,
 .google-meet-modal.is-open,
+.edit-student-modal.is-open,
 .delete-school-modal.is-open {
     display: flex;
 }
@@ -1472,8 +1486,6 @@ body {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 .class-topic-dialog {
@@ -1735,32 +1747,24 @@ body {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 .delete-school-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 .school-settings-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 .app-message-modal-backdrop {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 .app-message-dialog {
@@ -2547,8 +2551,6 @@ input.student-reposition-modal-day {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 .add-modal-dialog {
@@ -2572,6 +2574,27 @@ input.student-reposition-modal-day {
 
 .add-modal-dialog.add-modal-dialog--expanded {
     max-width: 65vw;
+}
+
+/* Add-student overlay card: overridden below 1440px by Media Queries; narrow defaults when those rules don't match */
+.student-modal-overlay .student-modal-card {
+    position: relative;
+    z-index: 1;
+    width: min(1030px, 100%);
+    max-width: 100%;
+    height: auto;
+    max-height: min(94vh, 591px);
+    padding: 20px;
+    box-sizing: border-box;
+    --student-modal-actions-right: 20px;
+    --student-modal-actions-bottom: 20px;
+    --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 2.5px 2.5px 5px 2.5px rgba(10, 15, 35, 0.35);
 }
 
 .add-student-title {
@@ -3382,15 +3405,6 @@ input[type="checkbox"] {
     .add-modal.add-modal--school .add-school-billing-settings-grid--two,
     .add-modal.add-modal--school .add-school-billing-fields--package {
         grid-template-columns: 1fr;
-    }
-}
-
-@media (min-width: 1440px) {
-    .add-modal.add-modal--school .add-modal-dialog {
-        left: 19%;
-        width: 940px;
-        height: 685px;
-        max-height: 685px;
     }
 }
 
@@ -4478,8 +4492,6 @@ tr td.add-teacher-availability-table-day {
     position: absolute;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 .miro-container-layer {
     position: fixed;
@@ -8098,6 +8110,21 @@ header h1 {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
 }
 
+.calendar-link-popover--enter {
+    animation: modal-popup-in 220ms ease both;
+}
+
+.calendar-link-popover--leave {
+    animation: modal-popup-out 220ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .calendar-link-popover--enter,
+    .calendar-link-popover--leave {
+        animation: none !important;
+    }
+}
+
 .calendar-link-popover[hidden] {
     display: none !important;
 }
@@ -9988,13 +10015,89 @@ header h1 {
     }
 }
 
-/* Media Queries */
-@media (min-width: 1366px) {
-    .add-modal-dialog {
-        top: 2.5%;
-        left: 19%;
+/* Media Queries — roster modals add/edit student, add school/teacher (containers only) */
 
-        height: 647px;
-        width: 902px;
+/* Mandatory: viewport width below 1440px — fixed shell */
+@media (max-width: 1439px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog {
+        position: fixed;
+        top: 3%;
+        left: 23%;
+        z-index: 1;
+        height: 591px;
+        width: 1030px;
+        max-height: none;
+        padding: 30px;
+        --student-modal-actions-right: 20px;
+        --student-modal-actions-bottom: 20px;
+        --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-sizing: border-box;
+        background: #ffffff;
+        border-radius: 20px;
+        box-shadow: 2.5px 2.5px 5px 2.5px rgba(10, 15, 35, 0.35);
+        border: 0;
+    }
+
+    .add-modal-dialog.add-modal-dialog--expanded {
+        max-width: none;
+    }
+
+    .edit-student-dialog.student-modal-card {
+        --student-modal-actions-right: 30px;
+    }
+}
+
+/* Viewport 1440px and up — wider / taller shell */
+@media (min-width: 1440px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog {
+        position: fixed;
+        top: 3%;
+        left: 20.5%;
+        z-index: 1;
+        height: 685px;
+        width: 1200px;
+        max-height: 685px;
+        padding: 30px;
+        --student-modal-actions-right: 20px;
+        --student-modal-actions-bottom: 20px;
+        --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-sizing: border-box;
+        background: #ffffff;
+        border-radius: 20px;
+        box-shadow: 2.5px 2.5px 5px 2.5px rgba(10, 15, 35, 0.35);
+        border: 0;
+    }
+
+    .add-modal-dialog.add-modal-dialog--expanded {
+        max-width: none;
+    }
+
+    .edit-student-dialog.student-modal-card {
+        --student-modal-actions-right: 30px;
+    }
+}
+
+/* Thin screens — keep Add School centered fluid layout (must follow max-width rules above) */
+@media (max-width: 800px) {
+    .add-modal.add-modal--school .add-modal-dialog {
+        left: 50%;
+        top: 50%;
+        width: min(94vw, 640px);
+        height: auto;
+        max-height: 92vh;
+        transform: translate(-50%, -50%);
+        padding: 16px 16px 84px;
     }
 }

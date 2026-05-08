@@ -106,6 +106,9 @@
         }
     }
 
+    const STUDENT_MODAL_CLOSE_ANIMATION_MS = 220;
+    let studentModalCloseTimer = null;
+
     function openModal() {
         if (window.TimeTablePermissions && !window.TimeTablePermissions.canManageRoster?.()) {
             console.warn('Permission denied: students cannot add student profiles.');
@@ -116,7 +119,12 @@
             legacyAddModal.classList.remove('is-open', 'is-closing');
             legacyAddModal.setAttribute('aria-hidden', 'true');
         }
+        if (studentModalCloseTimer) {
+            clearTimeout(studentModalCloseTimer);
+            studentModalCloseTimer = null;
+        }
         refreshSchoolOptions();
+        overlay.classList.remove('is-closing');
         overlay.classList.add('is-open');
         overlay.setAttribute('aria-hidden', 'false');
         setSelectedCountry('BR');
@@ -124,9 +132,20 @@
     }
 
     function closeModal() {
-        overlay.classList.remove('is-open');
-        overlay.setAttribute('aria-hidden', 'true');
+        if (overlay.classList.contains('is-closing')) return;
+        if (!overlay.classList.contains('is-open')) return;
         closeCountryPicker();
+        if (studentModalCloseTimer) {
+            clearTimeout(studentModalCloseTimer);
+            studentModalCloseTimer = null;
+        }
+        overlay.classList.remove('is-open');
+        overlay.classList.add('is-closing');
+        overlay.setAttribute('aria-hidden', 'true');
+        studentModalCloseTimer = window.setTimeout(() => {
+            overlay.classList.remove('is-closing');
+            studentModalCloseTimer = null;
+        }, STUDENT_MODAL_CLOSE_ANIMATION_MS);
     }
 
     function clearAllErrors() {
