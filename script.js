@@ -4057,8 +4057,6 @@ const SIDEBAR_ADD_SCHOOL_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z"/></svg>';
 const SIDEBAR_GOOGLE_MEET_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M22.205 9.41v5.13c.01.382-.087.76-.28 1.09a2.13 2.13 0 0 1-.86.77a2 2 0 0 1-.9.21h-.25a2.07 2.07 0 0 1-1-.43l-2.53-2v.91a4.34 4.34 0 0 1-4.34 4.34h-5.91a4.37 4.37 0 0 1-3.07-1.27a4.31 4.31 0 0 1-1.27-3.07V8.92a4.298 4.298 0 0 1 .33-1.66a4.38 4.38 0 0 1 2.35-2.36a4.31 4.31 0 0 1 1.66-.33h5.79a4.4 4.4 0 0 1 1.67.33a4.38 4.38 0 0 1 2.35 2.36c.22.529.33 1.097.32 1.67v.9l2.53-2a2.09 2.09 0 0 1 3.06.53c.207.313.328.675.35 1.05"/></svg>';
-const SIDEBAR_GOOGLE_MEET_SIDE_BTN_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M913 3118 c13 -29 90 -205 172 -391 l148 -338 -168 -767 c-92 -422 -170 -773 -173 -779 -3 -10 35 -13 169 -13 l174 0 144 368 c142 361 283 721 424 1079 39 100 73 181 74 179 1 -1 -65 -362 -147 -801 -83 -439 -150 -804 -150 -812 0 -10 34 -13 169 -13 l169 0 34 97 c20 54 156 442 304 862 148 421 270 758 272 750 1 -8 -58 -393 -133 -857 -74 -463 -135 -845 -135 -847 0 -3 77 -4 172 -3 l171 3 313 970 c172 534 310 973 306 976 -4 4 -146 93 -315 198 l-308 191 -169 -2 -170 -3 131 -229 c72 -126 133 -235 136 -244 3 -8 -133 96 -302 232 l-308 246 -169 0 c-92 0 -168 -3 -168 -6 0 -3 68 -140 152 -303 l152 -296 -90 82 c-49 45 -195 181 -324 302 l-235 220 -172 1 -173 0 23 -52z m1624 -555 c-4 -3 -7 0 -7 7 0 7 3 10 7 7 3 -4 3 -10 0 -14z" transform="translate(0,400) scale(0.1,-0.1)"/></svg>';
 const SIDEBAR_GOOGLE_MEET_OFF_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path stroke-miterlimit="10" d="m11.047 10l-4 3.991m0-3.982l4 3.991"/><path stroke-linejoin="round" d="M12 5.32H6.095A3.595 3.595 0 0 0 2.5 8.923v6.162a3.595 3.595 0 0 0 3.595 3.595H12a3.595 3.595 0 0 0 3.595-3.595V8.924A3.594 3.594 0 0 0 12 5.32m9.5 4.118v5.135c0 .25-.071.496-.205.708a1.355 1.355 0 0 1-.555.493a1.27 1.27 0 0 1-.73.124a1.366 1.366 0 0 1-.677-.278l-3.225-2.588a1.377 1.377 0 0 1-.503-1.047c0-.2.045-.396.133-.575c.092-.168.218-.315.37-.432l3.225-2.567a1.36 1.36 0 0 1 .678-.278c.25-.032.504.011.729.124a1.325 1.325 0 0 1 .76 1.181"/></g></svg>';
 const SIDEBAR_WHATSAPP_SVG =
@@ -6510,13 +6508,6 @@ function renderSidebar() {
         openGoogleMeetLinksLayer();
     });
     bindSidebarCursorTooltip(googleMeetBtn, 'Open Google Meet');
-    const googleMeetSideBtn = document.createElement('button');
-    googleMeetSideBtn.type = 'button';
-    googleMeetSideBtn.id = 'googleMeetSideBtn';
-    googleMeetSideBtn.className = 'sidebar-class-report-meet-side-btn';
-    googleMeetSideBtn.setAttribute('aria-label', 'Miro Whiteboard');
-    googleMeetSideBtn.innerHTML = SIDEBAR_GOOGLE_MEET_SIDE_BTN_SVG;
-    bindSidebarCursorTooltip(googleMeetSideBtn, 'Miro Whiteboard');
     const addStudentBtn = document.createElement('button');
     addStudentBtn.type = 'button';
     addStudentBtn.id = 'addSchoolBtn';
@@ -6579,12 +6570,10 @@ function renderSidebar() {
     const classReportHeaderActions = document.createElement('div');
     classReportHeaderActions.className = 'sidebar-section-actions';
     if (isStudentSidebar) {
-        googleMeetSideBtn.hidden = true;
         classReportPromptBtn.hidden = true;
         classReportDownloadBtn.hidden = true;
     }
     classReportHeaderActions.appendChild(googleMeetBtn);
-    classReportHeaderActions.appendChild(googleMeetSideBtn);
     classReportHeaderActions.appendChild(classReportPromptBtn);
     classReportHeaderActions.appendChild(classReportDownloadBtn);
     bindSidebarCursorTooltip(classReportDownloadBtn, 'Download class report (PDF)');
