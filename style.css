@@ -3366,47 +3366,6 @@ input[type="checkbox"] {
     bottom: 20px;
 }
 
-@media (max-width: 800px) {
-    .add-modal.add-modal--school .add-modal-dialog {
-        left: 50%;
-        top: 50%;
-        width: min(94vw, 640px);
-        height: auto;
-        max-height: 92vh;
-        transform: translate(-50%, -50%);
-        padding: 16px 16px 84px;
-    }
-
-    .add-modal.add-modal--school .add-school-primary-row {
-        grid-template-columns: 1fr;
-    }
-
-    .add-modal.add-modal--school .add-school-billing-layout {
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .add-modal.add-modal--school .add-school-billing-layout.settings-visible {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .add-modal.add-modal--school .add-school-billing-layout.settings-visible .add-school-billing-options {
-        flex: 1 1 auto;
-        width: 100%;
-    }
-
-    .add-modal.add-modal--school .add-school-billing-settings {
-        width: 100%;
-    }
-
-    .add-modal.add-modal--school .add-school-billing-settings-grid--two,
-    .add-modal.add-modal--school .add-school-billing-fields--package {
-        grid-template-columns: 1fr;
-    }
-}
-
 #addStudentSchoolSelect.is-hidden,
 #addStudentSchool.is-hidden {
     display: none;
@@ -9465,75 +9424,6 @@ header h1 {
     }
 }
 
-/* Media Queries — roster modals add/edit student, add school/teacher (containers only) */
-
-/* Mandatory: viewport width at most 1439px — fixed shell (add/edit student, add school/teacher) */
-@media (max-width: 1439px) {
-    .student-modal-overlay .student-modal-card,
-    .edit-student-dialog,
-    .add-modal-dialog,
-    .add-modal.add-modal--school .add-modal-dialog {
-        position: fixed;
-        top: 2.75%;
-        left: 21.75%;
-        z-index: 1;
-
-        padding: 30px;
-        --student-modal-actions-right: 20px;
-        --student-modal-actions-bottom: 20px;
-        --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        box-sizing: border-box;
-        background: #ffffff;
-        border-radius: 20px;
-        box-shadow: 2.5px 2.5px 5px 2.5px rgba(10, 15, 35, 0.35);
-        border: 0;
-    }
-
-    .add-modal-dialog.add-modal-dialog--expanded {
-        max-width: none;
-    }
-
-    .edit-student-dialog.student-modal-card {
-        --student-modal-actions-right: 30px;
-    }
-}
-
-/* Viewport 1440px and up — wider / taller shell */
-@media (min-width: 1440px) {
-    .student-modal-overlay .student-modal-card,
-    .edit-student-dialog,
-    .add-modal-dialog,
-    .add-modal.add-modal--school .add-modal-dialog {
-        position: fixed;
-        top: 3%;
-        left: 20.5%;
-        z-index: 1;
-        padding: 30px;
-        --student-modal-actions-right: 20px;
-        --student-modal-actions-bottom: 20px;
-        --student-modal-body-pad-actions: calc(var(--student-modal-actions-bottom) + 36px + 12px);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        box-sizing: border-box;
-        background: #ffffff;
-        border-radius: 20px;
-        box-shadow: 2.5px 2.5px 5px 2.5px rgba(10, 15, 35, 0.35);
-        border: 0;
-    }
-
-    .add-modal-dialog.add-modal-dialog--expanded {
-        max-width: none;
-    }
-
-    .edit-student-dialog.student-modal-card {
-        --student-modal-actions-right: 30px;
-    }
-}
-
 @media (max-width: 1920px) {
     .student-modal-overlay .student-modal-card,
     .edit-student-dialog,
@@ -9545,18 +9435,5 @@ header h1 {
         left: 16.5%;
         height: 900px;
         width: 1580px;
-    }
-}
-
-/* Thin screens — keep Add School centered fluid layout (must follow max-width rules above) */
-@media (max-width: 800px) {
-    .add-modal.add-modal--school .add-modal-dialog {
-        left: 50%;
-        top: 50%;
-        width: min(94vw, 640px);
-        height: auto;
-        max-height: 92vh;
-        transform: translate(-50%, -50%);
-        padding: 16px 16px 84px;
     }
 }
