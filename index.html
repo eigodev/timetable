@@ -433,6 +433,19 @@
         </div>
     </div>
 
+    <!-- Admin dashboard roster delete confirm (teachers / schools / students) -->
+    <div id="adminDashboardDeleteModal" class="delete-school-modal" aria-hidden="true">
+        <div class="delete-school-modal-backdrop" id="adminDashboardDeleteModalBackdrop"></div>
+        <div class="delete-school-dialog" role="dialog" aria-modal="true" aria-labelledby="adminDashboardDeleteModalTitle">
+            <h3 id="adminDashboardDeleteModalTitle" class="delete-school-title">Delete</h3>
+            <p id="adminDashboardDeleteModalBody" class="delete-school-message"></p>
+            <div class="delete-school-actions">
+                <button type="button" class="btn-delete-school-cancel" id="adminDashboardDeleteModalCancel">Cancel</button>
+                <button type="button" class="btn-delete-school-confirm" id="adminDashboardDeleteModalConfirm">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Delete school modal -->
     <div id="deleteSchoolModal" class="delete-school-modal" aria-hidden="true">
         <div class="delete-school-modal-backdrop" id="deleteSchoolModalBackdrop"></div>
@@ -931,6 +944,7 @@
 
     <!-- JavaScript -->
     <script src="class-report-uploads-store.js"></script>
+    <script src="auth-login-migrate.js"></script>
     <script src="script.js"></script>
     <script src="popups/addschoolpopup.js"></script>
     <script src="popups/addstudentpopup.js"></script>

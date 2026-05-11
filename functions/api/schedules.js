@@ -1,133 +1,136 @@
-// Cloudflare Pages Function to handle schedule data
-// This runs as a Cloudflare Worker on the edge
+import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
+import { resolveRequestAuth } from '../lib/auth-token.js';
+import { filterSchedulesForActor, mergeSchedulesForTeacher } from '../lib/roster-scope.js';
+
+const corsHeaders = (extra = {}) => ({
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  ...extra,
+});
 
 export async function onRequest(context) {
   const { request, env } = context;
-  const KV_SCHEDULES = env.schedules_kv; // KV namespace binding (matches your binding name)
-  
-  // Enable CORS
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+  const KV_SCHEDULES = env.schedules_kv;
+  const secret = String(env.TIMETABLE_AUTH_SECRET || '').trim();
 
-  // Handle preflight requests
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders() });
   }
 
-  // Check if KV is configured
   if (!KV_SCHEDULES) {
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'schedules_kv not configured. Please bind KV namespace in Pages settings with variable name "schedules_kv".',
+        error: 'schedules_kv not configured. Bind KV namespace as "schedules_kv".',
       }),
-      {
-        status: 503,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-      }
+      { status: 503, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     );
   }
 
+  const strictBlock = rejectIfStrictAuthUnconfigured(env, () => ({
+    ...corsHeaders(),
+    'Content-Type': 'application/json',
+  }));
+  if (strictBlock) return strictBlock;
+
   try {
+    const auth = await resolveRequestAuth(request, secret || null);
+    if (!auth.legacy && auth.error) {
+      return auth.error;
+    }
+
     if (request.method === 'GET') {
-      // Get all schedules from KV
-      const schedules = await KV_SCHEDULES.get('all_schedules', 'json');
+      const schedules = (await KV_SCHEDULES.get('all_schedules', 'json')) || {};
       const lastUpdated = await KV_SCHEDULES.get('last_updated', 'text');
-      
-      console.log('Retrieved schedules from KV:', {
-        hasSchedules: !!schedules,
-        teacherCount: schedules ? Object.keys(schedules).length : 0,
-        lastUpdated: lastUpdated
-      });
-      
+      let out = schedules;
+      if (!auth.legacy) {
+        const actor = { role: auth.payload.role, profile: auth.payload.profile };
+        if (actor.role === 'student' && actor.profile) {
+          const fullRoster = (await KV_SCHEDULES.get('all_roster', 'json')) || {};
+          const tutor = String(fullRoster?.studentTeachers?.[actor.profile] || '').trim();
+          if (tutor && schedules[tutor] != null) {
+            out = { [tutor]: schedules[tutor] };
+          } else {
+            out = {};
+          }
+        } else {
+          out = filterSchedulesForActor(schedules, actor);
+        }
+      }
       return new Response(
         JSON.stringify({
           success: true,
-          schedules: schedules || {},
+          schedules: out || {},
           lastUpdated: lastUpdated || null,
         }),
-        {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
-          },
-        }
+        { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
       );
-    } else if (request.method === 'POST') {
-      // Save schedules to KV
-      const body = await request.json();
-      const { schedules } = body;
-      
-      if (!schedules) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Schedules data required' }),
-          {
-            status: 400,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-      }
-      
-      // Save to KV
-      const timestamp = new Date().toISOString();
-      
-      // Convert schedules to string for storage
-      const schedulesString = JSON.stringify(schedules);
-      
-      // Save schedules and timestamp
-      await KV_SCHEDULES.put('all_schedules', schedulesString);
-      await KV_SCHEDULES.put('last_updated', timestamp);
-      
-      console.log('Saved schedules to KV:', {
-        teachers: Object.keys(schedules).length,
-        timestamp: timestamp,
-        size: schedulesString.length
-      });
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          lastUpdated: timestamp,
-          message: 'Schedules saved successfully',
-        }),
-        {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-    } else {
-      return new Response('Method not allowed', {
-        status: 405,
-        headers: corsHeaders,
-      });
     }
+
+    if (request.method === 'POST') {
+      const body = await request.json();
+      const { schedules } = body || {};
+      if (!schedules || typeof schedules !== 'object') {
+        return new Response(JSON.stringify({ success: false, error: 'Schedules data required' }), {
+          status: 400,
+          headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+        });
+      }
+
+      const timestamp = new Date().toISOString();
+
+      if (!auth.legacy) {
+        const role = auth.payload.role;
+        const profile = auth.payload.profile;
+        if (role === 'admin') {
+          await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
+          await KV_SCHEDULES.put('last_updated', timestamp);
+          return new Response(
+            JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Schedules saved successfully' }),
+            { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+          );
+        }
+        if (role === 'teacher' || role === 'gate') {
+          const base = (await KV_SCHEDULES.get('all_schedules', 'json')) || {};
+          let merged;
+          try {
+            merged = mergeSchedulesForTeacher(base, schedules, profile);
+          } catch (e) {
+            return new Response(JSON.stringify({ success: false, error: e.message || 'Forbidden' }), {
+              status: 403,
+              headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+            });
+          }
+          await KV_SCHEDULES.put('all_schedules', JSON.stringify(merged));
+          await KV_SCHEDULES.put('last_updated', timestamp);
+          return new Response(
+            JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Schedules saved successfully' }),
+            { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+        });
+      }
+
+      await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
+      await KV_SCHEDULES.put('last_updated', timestamp);
+      return new Response(
+        JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Schedules saved successfully' }),
+        { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders() });
   } catch (error) {
-    console.error('Error:', error);
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message || 'Internal server error',
-        details: error.stack,
       }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-      }
+      { status: 500, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
     );
   }
 }
-

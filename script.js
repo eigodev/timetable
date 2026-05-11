@@ -23,6 +23,8 @@ try {
     /* ignore */
 }
 const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
+/** Session bearer for `/api/*` when Cloudflare `TIMETABLE_AUTH_SECRET` is configured (teacher-scoped roster/schedules/uploads). */
+const API_BEARER_TOKEN_STORAGE_KEY = 'timetable_api_bearer_token';
 /** When set in sessionStorage, skip auto-login until the next successful manual login (same tab). */
 const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
@@ -132,6 +134,8 @@ let studentPhonesByName = {};
 let studentTeacherByName = {};
 /** Optional account / location fields for roster students (persisted with roster). */
 let studentEmailsByName = {};
+/** Maps legacy login keys (lowercase) to canonical usernames after email→username migration. */
+let authLoginAliasesByKey = {};
 let studentUsernamesByName = {};
 let studentPasswordsByName = {};
 let studentCityByName = {};
@@ -142,6 +146,10 @@ let studentLevelsByName = {};
 let studentExternalFollowUpLinksByName = {};
 let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
+/** Staff profiles from signup (coordinator, class supervisor, assistant); login uses teacher-like session until role rules exist. */
+let gateStaffAccounts = [];
+/** Per-teacher app role (e.g. teacher); reserved for future permission logic. */
+let teacherAppRolesByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
 let customSchoolsList = [];
 /** Per-school external URLs (spreadsheet etc.), keyed by normalized school title. */
@@ -237,6 +245,22 @@ function getSidebarRenderMode(user = getCurrentUser()) {
     if (user.role === 'admin') return 'admin';
     if (user.role === 'teacher') return 'teacher';
     return 'guest';
+}
+
+/** Schools sidebar + Class Report: students the current session may see (admin: all; student: self; teacher: assigned to this tutor). */
+function getStudentNamesVisibleInNavigation() {
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    if (loggedInStudentFullName) {
+        const self = String(loggedInStudentFullName || '').trim().toLowerCase();
+        return allStudents.filter((name) => name.trim().toLowerCase() === self);
+    }
+    if (isTeacherLoggedIn && !isAdminLoggedIn && String(loggedInTeacherName || '').trim()) {
+        const t = String(loggedInTeacherName || '').trim().toLowerCase();
+        return allStudents.filter(
+            (name) => String(studentTeacherByName[name] || '').trim().toLowerCase() === t
+        );
+    }
+    return allStudents;
 }
 
 window.TimeTablePermissions = {
@@ -448,6 +472,13 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const adminDashboardDeleteModal = document.getElementById('adminDashboardDeleteModal');
+            if (adminDashboardDeleteModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeAdminDashboardDeleteModal();
+                return;
+            }
+
             const deleteSchoolModal = document.getElementById('deleteSchoolModal');
             if (deleteSchoolModal?.classList.contains('is-open')) {
                 e.preventDefault();
@@ -584,6 +615,7 @@ function setupGlobalPointerDownToDismissOverlays() {
                 { id: 'studentRepositionModal', close: closeStudentRepositionModal },
                 { id: 'appMessageModal', close: closeAppMessageModal },
                 { id: 'classTopicModal', close: closeClassTopicModal },
+                { id: 'adminDashboardDeleteModal', close: closeAdminDashboardDeleteModal },
                 { id: 'deleteSchoolModal', close: closeDeleteSchoolModal },
                 { id: 'schoolSettingsModal', close: closeSchoolSettingsModal },
                 { id: 'googleMeetModal', close: closeGoogleMeetModal },
@@ -626,6 +658,7 @@ async function loadRosterFromCloud() {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
+                ...getTimetableApiAuthHeaders()
             },
         });
         if (!response.ok) return null;
@@ -1139,7 +1172,7 @@ function loadSavedLoginCredentials() {
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object') return null;
         return {
-            email: String(parsed.email || '').trim(),
+            username: String(parsed.username || parsed.email || '').trim(),
             password: String(parsed.password || '')
         };
     } catch {
@@ -1147,12 +1180,12 @@ function loadSavedLoginCredentials() {
     }
 }
 
-function saveLoginCredentials(email, password) {
+function saveLoginCredentials(username, password) {
     try {
         localStorage.setItem(
             LOGIN_CREDENTIALS_STORAGE_KEY,
             JSON.stringify({
-                email: String(email || '').trim(),
+                username: String(username || '').trim(),
                 password: String(password || '')
             })
         );
@@ -1167,6 +1200,82 @@ function clearSavedLoginCredentials() {
     } catch (error) {
         console.error('Error clearing saved login credentials from localStorage:', error);
     }
+}
+
+function getTimetableApiAuthHeaders() {
+    try {
+        const t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+        if (t && String(t).trim()) {
+            return { Authorization: `Bearer ${String(t).trim()}` };
+        }
+    } catch {
+        /* sessionStorage unavailable */
+    }
+    return {};
+}
+
+function clearTimetableApiBearerToken() {
+    try {
+        sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+    } catch {
+        /* ignore */
+    }
+}
+
+async function refreshTimetableApiBearerTokenIfPossible() {
+    const loginUrl = absoluteHttpApiUrl('/api/auth-login');
+    if (!loginUrl) return;
+    const creds = loadSavedLoginCredentials();
+    if (!creds?.username || !creds.password) return;
+    try {
+        const res = await fetch(loginUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: creds.username,
+                password: creds.password
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (res.status === 503) {
+            try {
+                sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
+            } catch {
+                /* ignore */
+            }
+            clearTimetableApiBearerToken();
+            return;
+        }
+        try {
+            sessionStorage.removeItem('timetable_api_auth_unconfigured');
+        } catch {
+            /* ignore */
+        }
+        if (!res.ok || !data?.token) {
+            clearTimetableApiBearerToken();
+            return;
+        }
+        try {
+            sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, String(data.token));
+        } catch {
+            /* ignore */
+        }
+    } catch (e) {
+        console.warn('API token refresh:', e);
+    }
+}
+
+/** Drop other teachers' schedule keys in memory when the signed-in user is an isolated teacher session. */
+function applyTeacherDataIsolationInMemory() {
+    if (isAdminLoggedIn || loggedInStudentFullName) return;
+    if (!isTeacherLoggedIn || !loggedInTeacherName) return;
+    const keep = String(loggedInTeacherName || '').trim();
+    if (!keep) return;
+    Object.keys(teacherSchedules).forEach((k) => {
+        if (k !== keep) delete teacherSchedules[k];
+    });
 }
 
 function digitsOnly(s) {
@@ -1424,16 +1533,6 @@ function getTutorRosterNameForStudent(studentFullName) {
 
 const STUDENT_PASSWORD_HASH_PREFIX = 'sha256$';
 
-function findStudentNameByLoginEmail(emailRaw) {
-    const emailLc = String(emailRaw || '').trim().toLowerCase();
-    if (!emailLc) return '';
-    return (
-        [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].find((name) => {
-            return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
-        }) || ''
-    );
-}
-
 function normalizeUsername(value) {
     const raw = String(value || '');
     let normalized = raw;
@@ -1450,20 +1549,35 @@ function normalizeUsername(value) {
 }
 
 function buildDefaultStudentUsername(firstRaw, lastRaw) {
-    const first = normalizeUsername(firstRaw);
-    const last = normalizeUsername(lastRaw);
-    const combined = `${first}${last}`;
-    if (!combined) return '';
-    return `${combined}_`;
+    const parts = [firstRaw, lastRaw].map((s) => String(s || '').trim()).filter(Boolean);
+    return buildCanonicalUsernameBaseFromFullName(parts.join(' '));
+}
+
+function buildCanonicalUsernameBaseFromFullName(fullNameRaw) {
+    if (typeof TimeTableAuthMigrate !== 'undefined' && TimeTableAuthMigrate.buildCanonicalUsernameBaseFromFullName) {
+        return TimeTableAuthMigrate.buildCanonicalUsernameBaseFromFullName(fullNameRaw);
+    }
+    const cleaned = String(fullNameRaw || '').trim().replace(/\s+/g, ' ');
+    if (!cleaned) return '';
+    const parts = cleaned.split(' ').filter(Boolean);
+    const slug = parts.map((p) => normalizeUsername(p)).join('');
+    if (!slug) return '';
+    return `${slug}_`;
 }
 
 function buildDefaultStudentUsernameFromFullName(studentFullName) {
-    const parsed = splitName(studentFullName);
-    return buildDefaultStudentUsername(parsed.first, parsed.last);
+    return buildCanonicalUsernameBaseFromFullName(studentFullName);
+}
+
+function resolveAuthLoginTyped(raw) {
+    const t = String(raw || '').trim();
+    if (!t) return '';
+    const hit = authLoginAliasesByKey[t.toLowerCase()];
+    return hit ? String(hit).trim() : t;
 }
 
 function findStudentNameByLoginUsername(usernameRaw) {
-    const trimmed = String(usernameRaw || '').trim();
+    const trimmed = resolveAuthLoginTyped(String(usernameRaw || '').trim());
     if (!trimmed) return '';
     const key = normalizeUsername(trimmed);
     const lc = trimmed.toLowerCase();
@@ -1478,11 +1592,10 @@ function findStudentNameByLoginUsername(usernameRaw) {
 }
 
 /**
- * Same identity rules as test.html / admin.html login: match roster username or contact email.
- * (Saved credentials store the typed value under `email` even when it is a username.)
+ * Same identity rules as login-screen.html / admin.html login: roster student username only.
  */
 function findStudentNameByLoginIdentity(raw) {
-    return findStudentNameByLoginUsername(raw) || findStudentNameByLoginEmail(raw);
+    return findStudentNameByLoginUsername(raw);
 }
 
 function syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput) {
@@ -1544,15 +1657,6 @@ async function verifyStudentPassword(storedPasswordRaw, passwordRaw) {
     return input === stored;
 }
 
-function formatStudentPasswordForAdminDisplay(storedPasswordRaw) {
-    const raw = String(storedPasswordRaw || '').trim();
-    if (!raw) return '<em>Not set</em>';
-    if (isStudentPasswordHashed(raw)) {
-        return '<em>Stored as hash (original not recoverable). Set a new password in Edit student or Account admin to show it here.</em>';
-    }
-    return escapeHtmlAttr(raw);
-}
-
 function loadAdminAccountFromStorage() {
     try {
         const raw = localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY);
@@ -1611,7 +1715,7 @@ async function ensureAdminAccountReady() {
 }
 
 async function verifyAdminLogin(usernameRaw, passwordRaw) {
-    const username = String(usernameRaw || '').trim();
+    const username = resolveAuthLoginTyped(String(usernameRaw || '').trim());
     const password = sanitizeTypedLoginPassword(passwordRaw);
     if (!username || !password) return { ok: false, error: '' };
     const expectedUsername = String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim();
@@ -1624,18 +1728,18 @@ async function verifyAdminLogin(usernameRaw, passwordRaw) {
 }
 
 /**
- * Student login: roster username or contact email + account password (same as the gate login page).
+ * Student login: roster username + account password (same as the gate login page).
  * @returns {Promise<{ ok: true, studentName: string } | { ok: false, error: string }>}
  */
 async function verifyStudentLogin(usernameRaw, passwordRaw) {
     const username = String(usernameRaw || '').trim();
     const password = sanitizeTypedLoginPassword(passwordRaw);
     if (!username) {
-        return { ok: false, error: 'Student username or email is required to log in.' };
+        return { ok: false, error: 'Student username is required to log in.' };
     }
     const studentName = findStudentNameByLoginIdentity(username);
     if (!studentName) {
-        return { ok: false, error: 'Teacher/Student account not found.' };
+        return { ok: false, error: 'No account matches that username.' };
     }
     const storedPassword = String(studentPasswordsByName[studentName] || '');
     if (!storedPassword) {
@@ -1671,12 +1775,12 @@ async function tryRestoreSessionFromSavedCredentials() {
     }
     const saved = loadSavedLoginCredentials();
     if (!saved) return null;
-    const rawEmail = String(saved.email || '').trim();
-    const emailLc = rawEmail.toLowerCase();
+    const rawLogin = resolveAuthLoginTyped(String(saved.username || '').trim());
+    const loginLc = rawLogin.toLowerCase();
     const password = sanitizeTypedLoginPassword(saved.password);
-    if (!rawEmail || !password) return null;
+    if (!rawLogin || !password) return null;
 
-    const adminLogin = await verifyAdminLogin(rawEmail, password);
+    const adminLogin = await verifyAdminLogin(rawLogin, password);
     if (adminLogin.ok) {
         isAdminLoggedIn = true;
         loggedInStudentFullName = '';
@@ -1685,22 +1789,37 @@ async function tryRestoreSessionFromSavedCredentials() {
         return DEFAULT_ADMIN_USERNAME;
     }
 
-    const teacherNameByEmail = teachersList.find((name) => {
-        const teacherEmail = String(teacherEmailsByName[name] || '').trim().toLowerCase();
-        return teacherEmail && teacherEmail === emailLc;
+    const teacherNameByLogin = teachersList.find((name) => {
+        const teacherLogin = String(teacherEmailsByName[name] || '').trim().toLowerCase();
+        return teacherLogin && teacherLogin === loginLc;
     });
-    if (teacherNameByEmail) {
+    if (teacherNameByLogin) {
         isAdminLoggedIn = false;
         if (password.length < 8) return null;
-        const expectedPassword = String(teacherPasswordsByName[teacherNameByEmail] || '');
+        const expectedPassword = String(teacherPasswordsByName[teacherNameByLogin] || '');
         if (!expectedPassword || !(await verifyStudentPassword(expectedPassword, password))) return null;
         loggedInStudentFullName = '';
         isTeacherLoggedIn = true;
-        loggedInTeacherName = teacherNameByEmail;
-        return teacherNameByEmail;
+        loggedInTeacherName = teacherNameByLogin;
+        return teacherNameByLogin;
     }
 
-    const v = await verifyStudentLogin(rawEmail, password);
+    const staffEntry = gateStaffAccounts.find((entry) => {
+        const u = String(entry.username || '').trim().toLowerCase();
+        return u && u === loginLc;
+    });
+    if (staffEntry) {
+        isAdminLoggedIn = false;
+        if (password.length < 8) return null;
+        const expectedPassword = String(staffEntry.password || '');
+        if (!expectedPassword || !(await verifyStudentPassword(expectedPassword, password))) return null;
+        loggedInStudentFullName = '';
+        isTeacherLoggedIn = true;
+        loggedInTeacherName = String(staffEntry.profileName || '').trim();
+        return loggedInTeacherName;
+    }
+
+    const v = await verifyStudentLogin(rawLogin, password);
     if (v.ok) {
         isAdminLoggedIn = false;
         let tutor = getTutorRosterNameForStudent(v.studentName);
@@ -1724,7 +1843,7 @@ function isTeacherSelectionAllowed(name) {
     if (loggedInStudentFullName) {
         return requested.toLowerCase() === String(loggedInStudentFullName || '').trim().toLowerCase();
     }
-    if (!loggedInTeacherName) return true;
+    if (!loggedInTeacherName) return false;
     return requested.toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase();
 }
 
@@ -1806,6 +1925,36 @@ function setProfileAvatarDataUrl(profileKey, dataUrl) {
 async function initRoster(preloadedRoster = null) {
     const cloudRoster = preloadedRoster || await loadRosterFromCloud();
     const saved = cloudRoster || loadRosterFromStorage();
+
+    authLoginAliasesByKey = {};
+    if (saved) {
+        try {
+            let migrated = false;
+            if (typeof TimeTableAuthMigrate !== 'undefined' && TimeTableAuthMigrate.migrateRosterAuthFields) {
+                migrated = !!TimeTableAuthMigrate.migrateRosterAuthFields(saved);
+            }
+            if (migrated) {
+                try {
+                    localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(saved));
+                } catch (error) {
+                    console.error('Error persisting roster after auth migration:', error);
+                }
+                queueSaveRosterToCloud(saved);
+            }
+            const rawAliases =
+                saved.authLoginAliases && typeof saved.authLoginAliases === 'object' && !Array.isArray(saved.authLoginAliases)
+                    ? saved.authLoginAliases
+                    : {};
+            Object.keys(rawAliases).forEach((k) => {
+                const key = String(k || '').trim().toLowerCase();
+                const v = String(rawAliases[k] || '').trim();
+                if (key && v) authLoginAliasesByKey[key] = v;
+            });
+        } catch (e) {
+            console.warn('Auth username migration skipped:', e);
+        }
+    }
+
     const savedAdminAccount = loadAdminAccountFromRoster(saved);
     if (savedAdminAccount) {
         adminAccount = savedAdminAccount;
@@ -1835,6 +1984,8 @@ async function initRoster(preloadedRoster = null) {
         studentExternalFollowUpLinksByName = {};
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
+        gateStaffAccounts = [];
+        teacherAppRolesByName = {};
         customSchoolsList = [];
         schoolExternalLinks = {};
         schoolThemeColors = {};
@@ -1844,6 +1995,7 @@ async function initRoster(preloadedRoster = null) {
         speakonStudentWeeklyClass = {};
         studentGoogleMeetLinksByName = {};
         googleMeetSharedLinkModeBySchoolKey = {};
+        authLoginAliasesByKey = {};
         loadStudentClassReportRows();
         return;
     }
@@ -2002,6 +2154,25 @@ async function initRoster(preloadedRoster = null) {
         const p = String(passwordsRaw[name] || '');
         if (p) teacherPasswordsByName[name] = p;
     });
+    gateStaffAccounts = Array.isArray(saved.gateStaffAccounts)
+        ? saved.gateStaffAccounts
+              .map((entry) => ({
+                  profileName: String(entry.profileName || '').trim(),
+                  username: String(entry.username || '').trim(),
+                  password: String(entry.password || ''),
+                  appRole: String(entry.appRole || '').trim()
+              }))
+              .filter((entry) => entry.profileName && entry.username && entry.password && entry.appRole)
+        : [];
+    const teacherAppRolesRaw =
+        saved.teacherAppRoles && typeof saved.teacherAppRoles === 'object' && !Array.isArray(saved.teacherAppRoles)
+            ? saved.teacherAppRoles
+            : {};
+    teacherAppRolesByName = {};
+    teachersList.forEach((name) => {
+        const r = String(teacherAppRolesRaw[name] || '').trim();
+        if (r) teacherAppRolesByName[name] = r;
+    });
     customSchoolsList = Array.isArray(saved.customSchools)
         ? [...new Set(saved.customSchools.map((s) => String(s || '').trim()).filter(Boolean))]
         : [];
@@ -2124,11 +2295,48 @@ function getAvailableSchoolNames() {
     return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
+/** School dropdown for add/edit student: teachers only see their own schools (from assigned students + eligible custom schools). */
+function getSchoolNamesForStudentSchoolSelect() {
+    const asStudent = String(loggedInStudentFullName || '').trim();
+    if (asStudent) {
+        const school = String(getStudentSchoolName(asStudent) || '').trim();
+        return school ? [school] : [];
+    }
+    const isScopedTeacher =
+        isTeacherLoggedIn && !isAdminLoggedIn && String(loggedInTeacherName || '').trim();
+    if (!isScopedTeacher) {
+        return getAvailableSchoolNames();
+    }
+    const tLc = String(loggedInTeacherName || '').trim().toLowerCase();
+    const tutorLc = (n) => String(studentTeacherByName[n] || '').trim().toLowerCase();
+    const visible = new Set();
+    getStudentNamesVisibleInNavigation().forEach((n) => {
+        const s = String(getStudentSchoolName(n) || '').trim();
+        if (s) visible.add(s);
+    });
+    customSchoolsList.forEach((raw) => {
+        const s = String(raw || '').trim();
+        if (!s) return;
+        const sk = s.toLowerCase();
+        const inSchool = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter(
+            (n) => (getStudentSchoolName(n) || '').trim().toLowerCase() === sk
+        );
+        if (inSchool.length === 0) {
+            visible.add(s);
+        } else if (inSchool.every((n) => tutorLc(n) === tLc)) {
+            visible.add(s);
+        }
+    });
+    return [...visible].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+window.getSchoolNamesForStudentSchoolSelect = getSchoolNamesForStudentSchoolSelect;
+
 function refreshAddStudentSchoolSelect(selectedSchool = '') {
     const schoolSelect = document.getElementById('addStudentGroupSelect');
     if (!schoolSelect) return;
     const selected = String(selectedSchool || '').trim();
-    const options = getAvailableSchoolNames();
+    const options = getSchoolNamesForStudentSchoolSelect();
     schoolSelect.innerHTML = '';
     const placeholder = document.createElement('option');
     placeholder.value = '';
@@ -2617,7 +2825,7 @@ async function fetchClassReportUploadAssetsByIds(ids) {
     if (!url) return {};
     const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
         cache: 'no-cache',
         body: JSON.stringify({ action: 'fetchAssets', ids: idList })
     });
@@ -2674,7 +2882,7 @@ async function renameClassReportStudentBucketOnServer(fromStudent, toStudent) {
     try {
         const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
             body: JSON.stringify({
                 action: 'renameStudentBucket',
                 fromStudent: fromName,
@@ -2697,7 +2905,7 @@ async function patchClassReportUploadQuestionsOnServer(studentKey, uploadId, que
         if (!url) return false;
         const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
             body: JSON.stringify({
                 action: 'patchUploadMeta',
                 student: String(studentKey || '').trim(),
@@ -2758,7 +2966,7 @@ async function flushClassReportReplaceManifestFromMemory() {
         }
         const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
             body: JSON.stringify({
                 action: 'replaceManifest',
                 manifest: memoryToManifest()
@@ -3240,9 +3448,24 @@ function applyAllSpeakOnStudentColorsToTeacherScheduleCopy(sched) {
     return out;
 }
 
+/** Which schedule keys should receive SpeakOn color sync for the current session (avoids recreating other teachers' grids). */
+function getTeacherNamesForSpeakOnSync() {
+    if (String(loggedInStudentFullName || '').trim()) {
+        const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
+        return tk ? [tk] : [];
+    }
+    if (isAdminLoggedIn) {
+        return teachersList.map((t) => String(t || '').trim()).filter(Boolean);
+    }
+    if (isTeacherLoggedIn && String(loggedInTeacherName || '').trim()) {
+        return [String(loggedInTeacherName).trim()];
+    }
+    return teachersList.map((t) => String(t || '').trim()).filter(Boolean);
+}
+
 /** Recompute SpeakOn magenta/salmon on every teacher profile from student grids + roster. */
 function syncSpeakOnWeeklyToAllTeacherSchedules() {
-    teachersList.forEach((tName) => {
+    getTeacherNamesForSpeakOnSync().forEach((tName) => {
         const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
         const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
         const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
@@ -4747,7 +4970,7 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
             const mainB64 = await ClassReportUploadsStore.blobToPureBase64(file);
             const res = await fetch(apiUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
                 body: JSON.stringify({
                     action: 'putUpload',
                     student: key,
@@ -4817,7 +5040,7 @@ function removeStudentClassReportUpload(studentName, uploadId) {
             if (apiUrl) {
                 const res = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
                     body: JSON.stringify({
                         action: 'deleteUpload',
                         student: key,
@@ -4880,7 +5103,7 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
         }
         const res = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
             body: JSON.stringify({
                 action: 'addRelatedUpload',
                 student: key,
@@ -5679,7 +5902,10 @@ function saveRoster() {
         studentSchools: studentSchoolByName,
         teacherEmails: teacherEmailsByName,
         teacherPasswords: teacherPasswordsByName,
+        gateStaffAccounts,
+        teacherAppRoles: teacherAppRolesByName,
         customSchools: customSchoolsList,
+        authLoginAliases: { ...authLoginAliasesByKey },
         schoolExternalLinks,
         schoolThemeColors,
         schoolBillingModels,
@@ -5878,12 +6104,19 @@ async function saveRosterToCloud(rosterPayload) {
     }
     isSavingRoster = true;
     try {
+        const isScopedTeacher =
+            !isAdminLoggedIn &&
+            isTeacherLoggedIn &&
+            !loggedInStudentFullName &&
+            String(loggedInTeacherName || '').trim();
+        const payload = isScopedTeacher ? { roster: rosterPayload, merge: true } : { roster: rosterPayload };
         const response = await fetch(rosterUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...getTimetableApiAuthHeaders()
             },
-            body: JSON.stringify({ roster: rosterPayload }),
+            body: JSON.stringify(payload),
         });
         if (response.ok) {
             const data = await response.json();
@@ -5929,6 +6162,7 @@ async function pollRosterUpdates() {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
+                ...getTimetableApiAuthHeaders()
             },
             cache: 'no-cache',
         });
@@ -5999,7 +6233,7 @@ async function pollClassReportUploadsFromCloud() {
     try {
         const response = await fetch(pollUrl, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
             cache: 'no-cache',
         });
         if (!response.ok) return;
@@ -6086,15 +6320,17 @@ async function loadAllSchedules() {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
+                ...getTimetableApiAuthHeaders()
             },
         });
         
         if (response.ok) {
             const data = await response.json();
             
-            if (data.success) {
+                if (data.success) {
                 if (data.schedules && !skipCloudClobberPendingUpload) {
                     Object.assign(teacherSchedules, data.schedules);
+                    applyTeacherDataIsolationInMemory();
                 }
                 lastUpdateTimestamp = data.lastUpdated;
 
@@ -6208,6 +6444,7 @@ function startPolling() {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
+                        ...getTimetableApiAuthHeaders()
                     },
                     cache: 'no-cache',
                 });
@@ -6238,6 +6475,7 @@ function startPolling() {
                                     } else {
                                         console.log('Data changed - updating from cloud');
                                         Object.assign(teacherSchedules, schedules);
+                                        applyTeacherDataIsolationInMemory();
                                         syncSpeakOnWeeklyToAllTeacherSchedules();
 
                                         updateSyncStatus('synced', '✓ Updated from cloud');
@@ -6352,6 +6590,7 @@ async function performSave() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...getTimetableApiAuthHeaders()
             },
             body: JSON.stringify({
                 schedules: teacherSchedules,
@@ -6584,6 +6823,7 @@ function performTeacherSessionLogout() {
     loggedInTeacherName = '';
     loggedInStudentFullName = '';
     currentTeacher = null;
+    clearTimetableApiBearerToken();
     resetClassStartNotificationCache();
     notifyUpcomingClasses();
     try {
@@ -6594,7 +6834,7 @@ function performTeacherSessionLogout() {
     }
     renderSidebar();
     setLoggedOutDashboard();
-    window.location.href = 'test.html';
+    window.location.href = 'login-screen.html';
 }
 
 function renderSidebar() {
@@ -6746,6 +6986,7 @@ function renderSidebar() {
     addTeacherBtn.id = 'addTeacherProfileBtn';
     addTeacherBtn.className = 'sidebar-add-btn sidebar-section-add-btn sidebar-add-btn--teacher';
     addTeacherBtn.setAttribute('aria-label', 'Add teacher profile');
+    addTeacherBtn.hidden = !hasEffectiveAdminSession();
     addTeacherBtn.innerHTML = SIDEBAR_ADD_TEACHER_SVG;
     addTeacherBtn.addEventListener('click', () => {
         if (!canManageRoster()) {
@@ -6770,7 +7011,7 @@ function renderSidebar() {
         loginTeacherBtn.setAttribute('aria-label', 'Admin login');
         loginTeacherBtn.innerHTML = `<span class="sidebar-add-btn-label">Log In</span>${SIDEBAR_LOGIN_TEACHER_SVG}`;
         loginTeacherBtn.addEventListener('click', () => {
-            window.location.href = 'test.html';
+            window.location.href = 'login-screen.html';
         });
     }
     bindSidebarCursorTooltip(loginTeacherBtn, isTeacherLoggedIn ? 'Log out' : 'Admin login');
@@ -6839,6 +7080,7 @@ function renderSidebar() {
         window.openAddSchoolPopup?.();
     });
     bindSidebarCursorTooltip(addStudentBtn, 'Add a school');
+    addStudentBtn.hidden = !hasEffectiveAdminSession();
     if (isStudentSidebar) {
         addTeacherBtn.hidden = true;
         googleMeetBtn.hidden = true;
@@ -6972,12 +7214,7 @@ function renderSidebar() {
     }
 
     const studentGroups = new Map();
-    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
-    const rosterScopeStudents = loggedInStudentFullName
-        ? allStudents.filter(
-            (name) => name.trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
-        )
-        : allStudents;
+    const rosterScopeStudents = getStudentNamesVisibleInNavigation();
     rosterScopeStudents.forEach((name) => {
         const school = getStudentSchoolName(name) || 'HomeTeachers';
         const key = school.trim().toLowerCase();
@@ -6994,6 +7231,19 @@ function renderSidebar() {
         const school = String(raw || '').trim();
         if (!school) return;
         const key = school.toLowerCase();
+        const scopedTeacher =
+            isTeacherLoggedIn &&
+            !isAdminLoggedIn &&
+            !loggedInStudentFullName &&
+            String(loggedInTeacherName || '').trim();
+        if (
+            scopedTeacher &&
+            !rosterScopeStudents.some(
+                (n) => (getStudentSchoolName(n) || 'HomeTeachers').trim().toLowerCase() === key
+            )
+        ) {
+            return;
+        }
         if (!studentGroups.has(key)) {
             studentGroups.set(key, {
                 title: school,
@@ -7417,13 +7667,8 @@ function populateClassReportStudentLists(container) {
     };
 
     const grouped = new Map();
-    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
-        if (
-            loggedInStudentFullName &&
-            name.trim().toLowerCase() !== String(loggedInStudentFullName).trim().toLowerCase()
-        ) {
-            return;
-        }
+    const rosterScopeStudents = getStudentNamesVisibleInNavigation();
+    rosterScopeStudents.forEach((name) => {
         const school = getStudentSchoolName(name) || 'HomeTeachers';
         const key = school.trim().toLowerCase();
         if (!grouped.has(key)) {
@@ -7435,6 +7680,19 @@ function populateClassReportStudentLists(container) {
         const school = String(raw || '').trim();
         if (!school) return;
         const key = school.toLowerCase();
+        const scopedTeacher =
+            isTeacherLoggedIn &&
+            !isAdminLoggedIn &&
+            !loggedInStudentFullName &&
+            String(loggedInTeacherName || '').trim();
+        if (
+            scopedTeacher &&
+            !rosterScopeStudents.some(
+                (n) => (getStudentSchoolName(n) || 'HomeTeachers').trim().toLowerCase() === key
+            )
+        ) {
+            return;
+        }
         if (!grouped.has(key)) {
             grouped.set(key, { title: school, names: [], kind: rosterKindFromSchoolName(school) });
         }
@@ -7549,12 +7807,12 @@ function renderAdminOverviewPanel() {
                   .map((raw) => {
                       const name = String(raw || '').trim();
                       if (!name) return '';
-                      const email = String(teacherEmailsByName[name] || '').trim();
+                      const loginUser = String(teacherEmailsByName[name] || '').trim();
                       const rawPw = String(teacherPasswordsByName[name] || '').trim();
                       const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
-                        <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtmlAttr(loginUser) : '<em>Not set</em>'}</span>
                         <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Teacher" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove teacher account">
                             <div class="admin-dashboard-button-remove">
@@ -7582,6 +7840,13 @@ function renderAdminOverviewPanel() {
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(title)}</span>
                         <span class="admin-dashboard-item-meta">Roster: ${escapeHtmlAttr(kind)}</span>
                         <span class="admin-dashboard-item-meta">Students (${students.length}): ${list}</span>
+                        <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="School" data-admin-name="${escapeHtmlAttr(title)}" aria-label="Remove school profile">
+                            <div class="admin-dashboard-button-remove">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                      <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                        </button>
                       </div>`;
                   })
                   .join('');
@@ -7596,15 +7861,17 @@ function renderAdminOverviewPanel() {
                       if (!name) return '';
                       const school = String(getStudentSchoolName(name) || '').trim() || '—';
                       const email = String(studentEmailsByName[name] || '').trim();
+                      const loginUsername = String(studentUsernamesByName[name] || '').trim();
                       const tutor = String(studentTeacherByName[name] || '').trim();
                       const rk = getStudentRosterKind(name) || 'private';
                       const rawStudentPw = String(studentPasswordsByName[name] || '').trim();
-                      const studentPwHtml = formatStudentPasswordForAdminDisplay(rawStudentPw);
+                      const studentPwHtml = rawStudentPw ? escapeHtmlAttr(rawStudentPw) : '<em>Not set</em>';
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         <span class="admin-dashboard-item-meta">School: ${escapeHtmlAttr(school)}</span>
                         <span class="admin-dashboard-item-meta">Profile / roster: ${escapeHtmlAttr(rk)}</span>
-                        <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Username: ${loginUsername ? escapeHtmlAttr(loginUsername) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Contact email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
                         <span class="admin-dashboard-item-meta">Password: ${studentPwHtml}</span>
                         <span class="admin-dashboard-item-meta">Assigned teacher: ${tutor ? escapeHtmlAttr(tutor) : '<em>None</em>'}</span>
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove student account">
@@ -7668,7 +7935,7 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
     }
     if (!name) return false;
     if (role !== 'Student' && !email) {
-        showAppMessage('Teacher email is required.');
+        showAppMessage('Teacher username is required.');
         return false;
     }
     if (password.length < 8) {
@@ -7690,8 +7957,12 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
             if (role === 'Student' && n === name) return false;
             return String(studentEmailsByName[n] || '').trim().toLowerCase() === emailLc;
         });
-        if (emailConflictTeacher || emailConflictStudent || emailLc === String(adminAccount.username || '').trim().toLowerCase()) {
-            showAppMessage('This email/username is already in use.');
+        const usernameConflictStudent = allStudentNames.some((n) => {
+            if (role === 'Student' && n === name) return false;
+            return String(studentUsernamesByName[n] || '').trim().toLowerCase() === emailLc;
+        });
+        if (emailConflictTeacher || emailConflictStudent || usernameConflictStudent || emailLc === String(adminAccount.username || '').trim().toLowerCase()) {
+            showAppMessage(role === 'Teacher' ? 'This username is already in use.' : 'This email or username is already in use.');
             return false;
         }
     }
@@ -7717,22 +7988,74 @@ function removeAccountFromAdmin(role, name) {
         showAppMessage('The admin account cannot be deleted.');
         return;
     }
+    if (role === 'School') {
+        deleteSchoolFromSidebarConfirmed(name);
+        showAppMessage('School removed. Students in that school were deleted; teachers were kept.');
+        return;
+    }
     if (role === 'Teacher') {
         const idx = teachersList.findIndex((t) => String(t || '').trim().toLowerCase() === String(name || '').trim().toLowerCase());
         if (idx === -1) return;
         const teacherName = teachersList[idx];
+        const teacherLc = teacherName.trim().toLowerCase();
+
+        const studentsOfTeacher = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter(
+            (n) => String(studentTeacherByName[n] || '').trim().toLowerCase() === teacherLc
+        );
+        const removedNameSet = new Set(studentsOfTeacher.map((n) => n.trim().toLowerCase()));
+
+        privateStudentsList = privateStudentsList.filter((n) => !removedNameSet.has(n.trim().toLowerCase()));
+        speakonStudentsList = speakonStudentsList.filter((n) => !removedNameSet.has(n.trim().toLowerCase()));
+        passportStudentsList = passportStudentsList.filter((n) => !removedNameSet.has(n.trim().toLowerCase()));
+
+        studentsOfTeacher.forEach((nm) => {
+            delete teacherSchedules[nm];
+            delete speakonStudentWeeklyClass[nm];
+            delete studentClassReportRows[nm];
+            delete studentClassReportUploadsByName[nm];
+            delete passportFollowupLinks[nm];
+            delete studentExternalFollowUpLinksByName[nm];
+            delete studentSchoolByName[nm];
+            delete studentPhonesByName[nm];
+            delete studentTeacherByName[nm];
+            delete studentGoogleMeetLinksByName[nm];
+            delete studentEmailsByName[nm];
+            delete studentUsernamesByName[nm];
+            delete studentPasswordsByName[nm];
+            delete studentCityByName[nm];
+            delete studentCountryByName[nm];
+        });
+
         teachersList.splice(idx, 1);
         delete teacherEmailsByName[teacherName];
         delete teacherPasswordsByName[teacherName];
         delete teacherSchedules[teacherName];
-        Object.keys(studentTeacherByName).forEach((student) => {
-            if (String(studentTeacherByName[student] || '').trim().toLowerCase() === teacherName.trim().toLowerCase()) {
-                delete studentTeacherByName[student];
-            }
-        });
-        if (loggedInTeacherName && loggedInTeacherName.trim().toLowerCase() === teacherName.trim().toLowerCase()) {
+
+        stripUnusedCustomSchoolProfiles();
+
+        if (loggedInTeacherName && loggedInTeacherName.trim().toLowerCase() === teacherLc) {
             loggedInTeacherName = '';
         }
+        const clearCalendarIfNamed = (n) => n && removedNameSet.has(String(n).trim().toLowerCase());
+        if (clearCalendarIfNamed(currentTeacher)) {
+            currentTeacher = null;
+            slotStates = {};
+        }
+
+        saveRoster();
+        saveStudentClassReportRows();
+        void flushClassReportReplaceManifestFromMemory();
+        syncSpeakOnWeeklyToAllTeacherSchedules();
+        saveAllSchedulesLocal();
+        saveAllSchedules();
+        renderSidebar();
+        if (currentTeacher) {
+            resyncSelectionAfterSidebarRender();
+        } else if (teachersList[0]) {
+            selectTeacher(teachersList[0]);
+        }
+        showAppMessage('Teacher removed along with their students and unused school profiles.');
+        return;
     } else if (role === 'Student') {
         const school = getStudentSchoolName(name);
         const kind = rosterKindFromSchoolName(school);
@@ -7891,6 +8214,27 @@ function removeSchoolFromSidebar(displayTitle) {
     openSchoolSettingsModal(schoolTitle);
 }
 
+/** Drops custom school entries (and their per-school settings) when no student references that school. */
+function stripUnusedCustomSchoolProfiles() {
+    const used = new Set();
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach((name) => {
+        const k = (getStudentSchoolName(name) || '').trim().toLowerCase();
+        if (k) used.add(k);
+    });
+    customSchoolsList = customSchoolsList.filter((school) => {
+        const sk = String(school || '').trim().toLowerCase();
+        if (!sk) return false;
+        if (used.has(sk)) return true;
+        delete schoolExternalLinks[sk];
+        delete schoolThemeColors[sk];
+        delete schoolBillingModels[sk];
+        delete schoolBillingConfigs[sk];
+        delete googleMeetSharedLinkModeBySchoolKey[sk];
+        delete classReportCollapsedBySchool[sk];
+        return false;
+    });
+}
+
 function deleteSchoolFromSidebarConfirmed(displayTitle) {
     if (!canManageRoster()) {
         denyStudentAction('Permission denied: students cannot delete schools.');
@@ -8003,6 +8347,72 @@ function setupDeleteSchoolModal() {
             deleteSchoolFromSidebarConfirmed(title);
         }
     });
+}
+
+let adminDashboardDeletePending = null;
+
+function buildAdminDashboardDeleteMessage(role, name) {
+    let confirmMsg = `Delete this ${String(role || '').toLowerCase()} account?\n\n${name}`;
+    if (role === 'Teacher') {
+        confirmMsg =
+            `Delete teacher "${name}"?\n\nEvery student assigned to this teacher will be removed. Custom school profiles with no remaining students will be removed. Other teachers are kept.`;
+    } else if (role === 'School') {
+        confirmMsg = `Delete school "${name}"?\n\nAll students in this school will be removed. Teacher profiles are kept.`;
+    } else if (role === 'Student') {
+        confirmMsg = `Delete this student account?\n\n${name}\n\nSchools and teachers are kept.`;
+    }
+    return confirmMsg;
+}
+
+function adminDashboardDeleteTitleForRole(role) {
+    if (role === 'Teacher') return 'Delete teacher?';
+    if (role === 'School') return 'Delete school?';
+    if (role === 'Student') return 'Delete student?';
+    return 'Delete?';
+}
+
+function closeAdminDashboardDeleteModal() {
+    const modal = document.getElementById('adminDashboardDeleteModal');
+    adminDashboardDeletePending = null;
+    closeModalWithAnimation(modal);
+}
+
+function setupAdminDashboardDeleteModal() {
+    const modal = document.getElementById('adminDashboardDeleteModal');
+    const cancelBtn = document.getElementById('adminDashboardDeleteModalCancel');
+    const confirmBtn = document.getElementById('adminDashboardDeleteModalConfirm');
+    const backdrop = document.getElementById('adminDashboardDeleteModalBackdrop');
+    if (!modal || !confirmBtn || modal.dataset.bound === '1') return;
+    modal.dataset.bound = '1';
+    cancelBtn?.addEventListener('click', () => closeAdminDashboardDeleteModal());
+    backdrop?.addEventListener('click', () => closeAdminDashboardDeleteModal());
+    confirmBtn.addEventListener('click', () => {
+        const p = adminDashboardDeletePending;
+        adminDashboardDeletePending = null;
+        closeModalWithAnimation(modal);
+        if (p && p.role && p.name) {
+            removeAccountFromAdmin(p.role, p.name);
+            renderAdminOverviewPanel();
+        }
+    });
+}
+
+function openAdminDashboardDeleteConfirm(role, name) {
+    const modal = document.getElementById('adminDashboardDeleteModal');
+    const titleEl = document.getElementById('adminDashboardDeleteModalTitle');
+    const bodyEl = document.getElementById('adminDashboardDeleteModalBody');
+    if (!modal || !titleEl || !bodyEl) {
+        if (window.confirm(buildAdminDashboardDeleteMessage(role, name))) {
+            removeAccountFromAdmin(role, name);
+            renderAdminOverviewPanel();
+        }
+        return;
+    }
+    titleEl.textContent = adminDashboardDeleteTitleForRole(role);
+    bodyEl.textContent = buildAdminDashboardDeleteMessage(role, name);
+    bodyEl.style.whiteSpace = 'pre-line';
+    adminDashboardDeletePending = { role, name };
+    openModalWithAnimation(modal);
 }
 
 function openSchoolSettingsModal(schoolTitle) {
@@ -8460,11 +8870,14 @@ function setupPasswordToggles() {
 
 // Initialize teachers sidebar
 async function initTeachers() {
-    await loadAllSchedules();
+    await refreshTimetableApiBearerTokenIfPossible();
     await initRoster();
     await ensureAdminAccountReady();
-    syncSpeakOnWeeklyToAllTeacherSchedules();
     const restoredTeacher = await tryRestoreSessionFromSavedCredentials();
+    applyTeacherDataIsolationInMemory();
+    await loadAllSchedules();
+    applyTeacherDataIsolationInMemory();
+    syncSpeakOnWeeklyToAllTeacherSchedules();
     renderSidebar();
     setupTeacherListEditDelegation();
     setupSidebarAdminLogoffDelegation();
@@ -9028,7 +9441,7 @@ function refreshEditStudentSchoolSelect(selectedSchool = '') {
     const schoolSelect = document.getElementById('editStudentSchool');
     if (!schoolSelect) return;
     const selected = String(selectedSchool || '').trim();
-    const options = getAvailableSchoolNames();
+    const options = [...getSchoolNamesForStudentSchoolSelect()];
     if (selected && !options.includes(selected)) {
         options.push(selected);
         options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -9638,6 +10051,12 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, bi
     closeAddStudentModal();
 }
 
+function isGateStaffLoginUsernameTaken(usernameLc) {
+    const lc = String(usernameLc || '').trim().toLowerCase();
+    if (!lc) return false;
+    return gateStaffAccounts.some((e) => String(e.username || '').trim().toLowerCase() === lc);
+}
+
 function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
     if (!canManageRoster()) {
         denyStudentAction('Permission denied: students cannot add teacher profiles.');
@@ -9652,7 +10071,7 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
         return;
     }
     if (!email) {
-        showAppMessage('Please enter an email address.');
+        showAppMessage('Please enter a username.');
         return;
     }
     const phoneEl = document.getElementById('addTeacherPhone');
@@ -9674,31 +10093,40 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
         showAppMessage('Password must match @xxxnxnn (letters and numbers, case-insensitive).');
         return;
     }
-    const emailInput = document.getElementById('addTeacherEmail');
-    if (emailInput && typeof emailInput.checkValidity === 'function' && !emailInput.checkValidity()) {
-        emailInput.reportValidity();
+    const emailLc = email.toLowerCase();
+    const adminR = String(adminAccount.username || '').trim().toLowerCase();
+    if (adminR && emailLc === adminR) {
+        showAppMessage('This username is already used by the admin account.');
         return;
     }
-    const emailLc = email.toLowerCase();
-    const studentEmailTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
-        return String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc;
+    const studentIdTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
+        return (
+            String(studentEmailsByName[name] || '').trim().toLowerCase() === emailLc ||
+            String(studentUsernamesByName[name] || '').trim().toLowerCase() === emailLc
+        );
     });
-    if (studentEmailTaken) {
-        showAppMessage('This email is already used by a student account.');
+    if (studentIdTaken) {
+        showAppMessage('This username is already used by a student account.');
         return;
     }
     const teacherEmailTaken = teachersList.some((name) => {
         return String(teacherEmailsByName[name] || '').trim().toLowerCase() === emailLc;
     });
     if (teacherEmailTaken) {
-        showAppMessage('This teacher email is already in use.');
+        showAppMessage('This teacher username is already in use.');
+        return;
+    }
+    if (isGateStaffLoginUsernameTaken(emailLc)) {
+        showAppMessage('This username is already used by a staff account.');
         return;
     }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
-    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
-        (n) => n.trim().toLowerCase() === fullName.toLowerCase()
-    );
+    const nameTaken =
+        [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
+            (n) => n.trim().toLowerCase() === fullName.toLowerCase()
+        ) ||
+        gateStaffAccounts.some((e) => String(e.profileName || '').trim().toLowerCase() === fullName.toLowerCase());
     if (nameTaken) {
         showAppMessage('That name is already in the list.');
         return;
@@ -9708,6 +10136,7 @@ function addTeacherFromForm(firstName, lastName, emailRaw, passwordRaw) {
     teachersList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     teacherEmailsByName[fullName] = email;
     teacherPasswordsByName[fullName] = password;
+    teacherAppRolesByName[fullName] = 'teacher';
     if (!teacherSchedules[fullName]) {
         teacherSchedules[fullName] = {};
     }
@@ -9791,6 +10220,11 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
             emailEl?.focus();
             return;
         }
+        if (isGateStaffLoginUsernameTaken(emailLc)) {
+            alert('This email is already used by a staff account.');
+            emailEl?.focus();
+            return;
+        }
     }
     const usernameLc = username.toLowerCase();
     const studentUsernameTaken = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some((name) => {
@@ -9806,11 +10240,18 @@ async function addStudentToSchoolFromForm(firstName, lastName, schoolNameRaw) {
         usernameEl?.focus();
         return;
     }
+    if (isGateStaffLoginUsernameTaken(usernameLc)) {
+        alert('This username is already used by a staff account.');
+        usernameEl?.focus();
+        return;
+    }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ');
-    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
-        (n) => n.trim().toLowerCase() === fullName.toLowerCase()
-    );
+    const nameTaken =
+        [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
+            (n) => n.trim().toLowerCase() === fullName.toLowerCase()
+        ) ||
+        gateStaffAccounts.some((e) => String(e.profileName || '').trim().toLowerCase() === fullName.toLowerCase());
     if (nameTaken) {
         alert('That name is already in the list.');
         return;
@@ -9906,9 +10347,11 @@ async function createStudentFromModernModal(studentData) {
     }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ').trim();
-    const nameTaken = [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
-        (n) => n.trim().toLowerCase() === fullName.toLowerCase()
-    );
+    const nameTaken =
+        [...teachersList, ...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].some(
+            (n) => n.trim().toLowerCase() === fullName.toLowerCase()
+        ) ||
+        gateStaffAccounts.some((e) => String(e.profileName || '').trim().toLowerCase() === fullName.toLowerCase());
     if (nameTaken) {
         showAppMessage('That name is already in the list.');
         return false;
@@ -9929,6 +10372,10 @@ async function createStudentFromModernModal(studentData) {
     });
     if (studentUsernameTaken || usernameLc === String(adminAccount.username || '').trim().toLowerCase()) {
         showAppMessage('This student username is already in use.');
+        return false;
+    }
+    if (isGateStaffLoginUsernameTaken(usernameLc)) {
+        showAppMessage('This username is already used by a staff account.');
         return false;
     }
 
@@ -13708,10 +14155,7 @@ function setupAdminControlPanel() {
             const role = String(deleteBtn.getAttribute('data-admin-role') || '').trim();
             const name = String(deleteBtn.getAttribute('data-admin-name') || '').trim();
             if (!role || !name) return;
-            const ok = window.confirm(`Delete this ${role.toLowerCase()} account?\n\n${name}`);
-            if (!ok) return;
-            removeAccountFromAdmin(role, name);
-            renderAdminOverviewPanel();
+            openAdminDashboardDeleteConfirm(role, name);
             return;
         }
     });
@@ -13722,17 +14166,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isAdminPage) {
         try {
             if (sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) !== 'true') {
-                window.location.href = 'test.html';
+                window.location.href = 'login-screen.html';
                 return;
             }
         } catch {
-            window.location.href = 'test.html';
+            window.location.href = 'login-screen.html';
             return;
         }
 
         await initTeachers();
         setupAppMessageModal();
         setupVisibilityCloudRefresh();
+        setupAdminDashboardDeleteModal();
         setupAdminControlPanel();
         document.getElementById('adminPageLogoff')?.addEventListener('click', () => {
             performTeacherSessionLogout();
@@ -13759,6 +14204,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEditStudentModal();
     setupSchoolSettingsModal();
     setupDeleteSchoolModal();
+    setupAdminDashboardDeleteModal();
     setupStudentClassReportPanel();
     setupClassTopicModal();
 });

@@ -6537,7 +6537,8 @@ tr td.add-teacher-availability-table-day {
 }
 
 .admin-dashboard-item {
-    padding: 10px 10px;
+    position: relative;
+    padding: 10px 44px 10px 10px;
     background: #fff;
     border: 1px solid #e8eaf6;
     border-radius: 10px;
@@ -6556,6 +6557,35 @@ tr td.add-teacher-availability-table-day {
 .admin-dashboard-item-meta {
     color: #555;
     line-height: 1.35;
+}
+
+.admin-dashboard-item-remove {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 2px;
+    color: #c62828;
+    border-radius: 6px;
+}
+
+.admin-dashboard-item-remove:hover {
+    background: #ffebee;
+}
+
+.admin-dashboard-button-remove {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-dashboard-button-remove svg {
+    width: 20px;
+    height: 20px;
 }
 
 .admin-dashboard-empty {
@@ -9440,19 +9470,17 @@ header h1 {
 
 /* Media Queries — roster modals add/edit student, add school/teacher (containers only) */
 
-/* Mandatory: viewport width below 1440px — fixed shell */
+/* Mandatory: viewport width at most 1439px — fixed shell (add/edit student, add school/teacher) */
 @media (max-width: 1439px) {
     .student-modal-overlay .student-modal-card,
     .edit-student-dialog,
     .add-modal-dialog,
     .add-modal.add-modal--school .add-modal-dialog {
         position: fixed;
-        top: 3%;
-        left: 23%;
+        top: 2.75%;
+        left: 21.75%;
         z-index: 1;
-        height: 591px;
-        width: 1030px;
-        max-height: none;
+        
         padding: 30px;
         --student-modal-actions-right: 20px;
         --student-modal-actions-bottom: 20px;

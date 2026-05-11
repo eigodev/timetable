@@ -71,8 +71,7 @@
         }
     }
 
-    function getAvailableSchoolNames() {
-        const roster = getStoredRoster();
+    function getAvailableSchoolNamesFromRosterPayload(roster) {
         const schools = new Set();
         const studentSchools = roster?.studentSchools && typeof roster.studentSchools === 'object'
             ? roster.studentSchools
@@ -91,10 +90,18 @@
         return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     }
 
+    function getSchoolNamesForStudentSchoolPicker() {
+        if (typeof window.getSchoolNamesForStudentSchoolSelect === 'function') {
+            return window.getSchoolNamesForStudentSchoolSelect();
+        }
+        const roster = getStoredRoster();
+        return getAvailableSchoolNamesFromRosterPayload(roster);
+    }
+
     function refreshSchoolOptions(selectedSchool = '') {
         if (!(fields.school instanceof HTMLSelectElement)) return;
         const selected = String(selectedSchool || fields.school.value || '').trim();
-        const schools = getAvailableSchoolNames();
+        const schools = getSchoolNamesForStudentSchoolPicker();
         fields.school.innerHTML = '<option value="" disabled selected>Select a school</option>';
         schools.forEach((school) => {
             const option = document.createElement('option');

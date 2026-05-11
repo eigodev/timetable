@@ -1,5 +1,8 @@
 // Cloudflare Pages Function: class-report feed — manifest + per-asset KV values (v2).
-// Security: publicly readable/writable KV (same as roster) — unchanged risk; bind schedules_kv.
+
+import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
+import { resolveRequestAuth } from '../lib/auth-token.js';
+import { isStudentVisibleToActor } from '../lib/roster-scope.js';
 
 const CR_MANIFEST_KEY = 'cr_upl_manifest_v2';
 const CR_UPDATED_KEY = 'cr_upl_last_updated_v2';
@@ -112,12 +115,39 @@ function corsHeaders(extraMethods = []) {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': methods.join(', '),
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 }
 
 function corsJson(extra = {}) {
   return { ...extra, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } };
+}
+
+function filterManifestStudents(manifest, fullRoster, actor) {
+  if (!actor || !fullRoster) return manifest;
+  const m = coerceManifest(manifest || {});
+  const next = { students: {} };
+  for (const [stu, uploads] of Object.entries(m.students || {})) {
+    if (isStudentVisibleToActor(fullRoster, stu, actor)) next.students[stu] = uploads;
+  }
+  return next;
+}
+
+function assetIdAllowedInManifest(manifest, assetId, fullRoster, actor) {
+  if (!actor || !fullRoster) return true;
+  if (actor.role === 'admin') return true;
+  const id = String(assetId || '').trim();
+  for (const [stu, list] of Object.entries(manifest.students || {})) {
+    if (!isStudentVisibleToActor(fullRoster, stu, actor)) continue;
+    if (!Array.isArray(list)) continue;
+    for (const u of list) {
+      if (u && u.id === id) return true;
+      for (const r of u.relatedFiles || []) {
+        if (r && r.id === id) return true;
+      }
+    }
+  }
+  return false;
 }
 
 export async function onRequest(context) {
@@ -140,7 +170,24 @@ export async function onRequest(context) {
     );
   }
 
+  const strictBlock = rejectIfStrictAuthUnconfigured(env, () => ({
+    ...corsJson().headers,
+  }));
+  if (strictBlock) return strictBlock;
+
   try {
+    const secret = String(env.TIMETABLE_AUTH_SECRET || '').trim();
+    const auth = await resolveRequestAuth(request, secret || null);
+    if (!auth.legacy && auth.error) {
+      return auth.error;
+    }
+    let fullRoster = null;
+    let actor = null;
+    if (!auth.legacy) {
+      fullRoster = (await KV.get('all_roster', 'json')) || {};
+      actor = { role: auth.payload.role, profile: auth.payload.profile };
+    }
+
     /** --- GET manifest (default) --- */
     if (request.method === 'GET') {
       const url = new URL(request.url);
@@ -156,6 +203,15 @@ export async function onRequest(context) {
         if (ids.length === 0) {
           return new Response(JSON.stringify({ success: true, assets: {} }), corsJson({ status: 200 }));
         }
+        let manifestRawA = await KV.get(CR_MANIFEST_KEY, 'json');
+        if (typeof manifestRawA === 'string') {
+          try {
+            manifestRawA = JSON.parse(manifestRawA);
+          } catch {
+            manifestRawA = null;
+          }
+        }
+        const fullManifestForAssets = coerceManifest(manifestRawA || {});
         const assets = {};
         await Promise.all(
           ids.map(async (idRaw) => {
@@ -163,6 +219,9 @@ export async function onRequest(context) {
             try {
               idSafe = sanitizeAssetId(idRaw, 'asset');
             } catch {
+              return;
+            }
+            if (!assetIdAllowedInManifest(fullManifestForAssets, idSafe, fullRoster, actor)) {
               return;
             }
             const du = await readAssetIntoDataUrl(KV, idSafe);
@@ -180,7 +239,7 @@ export async function onRequest(context) {
           manifestRaw = null;
         }
       }
-      const manifest = coerceManifest(manifestRaw || {});
+      const manifest = filterManifestStudents(coerceManifest(manifestRaw || {}), fullRoster, actor);
       const lastUpdated = (await KV.get(CR_UPDATED_KEY, 'text')) || null;
       return new Response(
         JSON.stringify({ success: true, manifest, lastUpdated }),
@@ -201,6 +260,15 @@ export async function onRequest(context) {
         const ids = Array.isArray(body.ids)
           ? body.ids.map(String).slice(0, 100).filter(Boolean)
           : [];
+        let manifestRawF = await KV.get(CR_MANIFEST_KEY, 'json');
+        if (typeof manifestRawF === 'string') {
+          try {
+            manifestRawF = JSON.parse(manifestRawF);
+          } catch {
+            manifestRawF = null;
+          }
+        }
+        const fullManifestFetch = coerceManifest(manifestRawF || {});
         const assets = {};
         await Promise.all(
           ids.map(async (idRaw) => {
@@ -208,6 +276,9 @@ export async function onRequest(context) {
             try {
               idSafe = sanitizeAssetId(idRaw, 'asset');
             } catch {
+              return;
+            }
+            if (!assetIdAllowedInManifest(fullManifestFetch, idSafe, fullRoster, actor)) {
               return;
             }
             const du = await readAssetIntoDataUrl(KV, idSafe);
@@ -218,6 +289,9 @@ export async function onRequest(context) {
       }
 
       if (action === 'replaceManifest') {
+        if (actor && actor.role !== 'admin') {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
+        }
         const manifest = coerceManifest(body.manifest || {});
         const timestamp = new Date().toISOString();
         await KV.put(CR_MANIFEST_KEY, JSON.stringify(manifest));
@@ -230,6 +304,9 @@ export async function onRequest(context) {
         const uploadId = sanitizeAssetId(body.uploadId, 'upload');
         if (!student) {
           return new Response(JSON.stringify({ success: false, error: 'student required' }), corsJson({ status: 400 }));
+        }
+        if (actor && !isStudentVisibleToActor(fullRoster, student, actor)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
         }
         let manifestRaw = await KV.get(CR_MANIFEST_KEY, 'json');
         if (typeof manifestRaw === 'string') {
@@ -271,6 +348,9 @@ export async function onRequest(context) {
       }
 
       if (action === 'renameStudentBucket') {
+        if (actor && actor.role !== 'admin') {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
+        }
         const fromName = String(body.fromStudent || '').trim();
         const toName = String(body.toStudent || '').trim();
         if (!fromName || !toName || fromName === toName) {
@@ -301,6 +381,9 @@ export async function onRequest(context) {
         const uploadId = sanitizeAssetId(body.uploadId, 'upload');
         if (!student) {
           return new Response(JSON.stringify({ success: false, error: 'student required' }), corsJson({ status: 400 }));
+        }
+        if (actor && !isStudentVisibleToActor(fullRoster, student, actor)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
         }
         let manifestRaw = await KV.get(CR_MANIFEST_KEY, 'json');
         if (typeof manifestRaw === 'string') {
@@ -349,6 +432,9 @@ export async function onRequest(context) {
         const student = String(body.student || '').trim();
         if (!student) {
           return new Response(JSON.stringify({ success: false, error: 'student required' }), corsJson({ status: 400 }));
+        }
+        if (actor && !isStudentVisibleToActor(fullRoster, student, actor)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
         }
         let uploadRaw = body.upload;
         if (!uploadRaw || typeof uploadRaw !== 'object') {
@@ -444,6 +530,9 @@ export async function onRequest(context) {
         const rel = body.relatedFile;
         if (!student || !rel || typeof rel !== 'object') {
           return new Response(JSON.stringify({ success: false, error: 'student, uploadId, relatedFile required' }), corsJson({ status: 400 }));
+        }
+        if (actor && !isStudentVisibleToActor(fullRoster, student, actor)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
         }
         const rid = sanitizeAssetId(rel.id, 'related');
 

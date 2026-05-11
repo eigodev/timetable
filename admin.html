@@ -67,20 +67,6 @@
             display: none;
         }
 
-        .admin-avatar {
-            width: 44px;
-            height: 44px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 10px;
-            border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.72);
-            background: linear-gradient(145deg, #f8fbff 0%, #d9e2ff 100%);
-            color: var(--blue);
-            font-weight: 800;
-        }
-
         .admin-sidebar-title {
             margin: 0;
             font-size: 1rem;
@@ -269,10 +255,11 @@
         }
 
         .admin-dashboard-item {
+            position: relative;
             display: flex;
             flex-direction: column;
             gap: 4px;
-            padding: 10px;
+            padding: 10px 44px 10px 10px;
             border: 1px solid #e8eaf6;
             border-radius: 12px;
             background: #ffffff;
@@ -295,6 +282,118 @@
             color: #757575;
             font-size: 0.82rem;
             font-style: italic;
+        }
+
+        .admin-dashboard-item-remove {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 2px;
+            color: #c62828;
+            border-radius: 6px;
+        }
+
+        .admin-dashboard-item-remove:hover {
+            background: #ffebee;
+        }
+
+        .admin-dashboard-button-remove {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-dashboard-button-remove svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Roster delete confirmation (replaces window.confirm) */
+        .admin-roster-delete-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .admin-roster-delete-modal.is-open {
+            display: flex;
+        }
+
+        .admin-roster-delete-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+        }
+
+        .admin-roster-delete-dialog {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 420px;
+            padding: 22px 22px 18px;
+            background: #ffffff;
+            border-radius: 15px;
+            box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .admin-roster-delete-title {
+            margin: 0 0 2px;
+            font-size: 1.2rem;
+            color: #b71c1c;
+        }
+
+        .admin-roster-delete-body {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #37474f;
+            line-height: 1.4;
+        }
+
+        .admin-roster-delete-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 6px;
+        }
+
+        .admin-roster-delete-btn {
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+        }
+
+        .admin-roster-delete-btn--cancel {
+            background: #eceff1;
+            color: #37474f;
+        }
+
+        .admin-roster-delete-btn--cancel:hover {
+            background: #dfe3e6;
+        }
+
+        .admin-roster-delete-btn--confirm {
+            background: linear-gradient(135deg, #334461, #071630);
+            color: #ffffff;
+        }
+
+        .admin-roster-delete-btn--confirm:hover {
+            filter: brightness(1.06);
         }
 
         .admin-placeholder {
@@ -329,7 +428,6 @@
         <aside class="admin-sidebar" aria-label="Admin navigation">
             <div class="admin-sidebar-scroll">
                 <div>
-                    <div class="admin-avatar" aria-hidden="true">A</div>
                     <h1 class="admin-sidebar-title">Admin</h1>
                     <p class="admin-sidebar-role">Full platform access</p>
                 </div>
@@ -375,19 +473,33 @@
         <main class="admin-main" id="adminMain" aria-live="polite"></main>
     </div>
 
+    <div id="adminRosterDeleteModal" class="admin-roster-delete-modal" aria-hidden="true">
+        <div class="admin-roster-delete-backdrop" id="adminRosterDeleteBackdrop"></div>
+        <div class="admin-roster-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="adminRosterDeleteTitle">
+            <h3 id="adminRosterDeleteTitle" class="admin-roster-delete-title">Delete</h3>
+            <p id="adminRosterDeleteBody" class="admin-roster-delete-body"></p>
+            <div class="admin-roster-delete-actions">
+                <button type="button" class="admin-roster-delete-btn admin-roster-delete-btn--cancel" id="adminRosterDeleteCancel">Cancel</button>
+                <button type="button" class="admin-roster-delete-btn admin-roster-delete-btn--confirm" id="adminRosterDeleteConfirm">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth-login-migrate.js"></script>
     <script>
-        /* Moved from test.html lines 455-694; kept isolated so admin.html has no duplicate globals. */
+        /* Moved from login-screen.html (formerly test.html) lines 455-694; kept isolated so admin.html has no duplicate globals. */
         (function movedAdminLoginHelpers() {
             const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
             const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
             const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
             const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
             const ROSTER_STORAGE_KEY = 'timetable_roster';
+            const API_BEARER_TOKEN_STORAGE_KEY = 'timetable_api_bearer_token';
             const DEFAULT_ADMIN_USERNAME = 'admin_';
             const DEFAULT_ADMIN_PASSWORD = '@Admin';
             const PASSWORD_HASH_PREFIX = 'sha256$';
 
-            const usernameInput = document.getElementById('loginEmail');
+            const usernameInput = document.getElementById('loginUsername');
             const passwordInput = document.getElementById('loginPassword');
             const loginBtn = document.querySelector('.login-btn');
 
@@ -430,6 +542,40 @@
                 return roster && typeof roster === 'object' && !Array.isArray(roster) ? roster : null;
             }
 
+            function timetablePageApiAuthHeaders() {
+                try {
+                    const t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+                    if (t && String(t).trim()) return { Authorization: `Bearer ${String(t).trim()}` };
+                } catch (e) {
+                    /* ignore */
+                }
+                return {};
+            }
+
+            async function refreshTimetablePageApiBearerToken(usernameTyped, passwordTyped) {
+                try {
+                    const res = await fetch('/api/auth-login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ username: usernameTyped, password: passwordTyped })
+                    });
+                    const data = await res.json().catch(() => null);
+                    if (res.status === 503) {
+                        sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+                        return;
+                    }
+                    if (!res.ok || !data?.token) {
+                        sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+                        return;
+                    }
+                    sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, String(data.token));
+                } catch (e) {
+                    console.warn('auth-login:', e);
+                }
+            }
+
             function loadCachedRoster() {
                 try {
                     return normalizeRoster(JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null'));
@@ -442,14 +588,21 @@
                 try {
                     const response = await fetch('/api/roster?t=' + Date.now(), {
                         method: 'GET',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', ...timetablePageApiAuthHeaders() },
                         cache: 'no-cache'
                     });
                     if (!response.ok) return null;
                     const data = await response.json();
                     const roster = normalizeRoster(data?.roster);
                     if (!roster) return null;
-                    localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+                    if (window.TimeTableAuthMigrate?.migrateRosterAuthFields(roster)) {
+                        /* roster mutated; persisted below */
+                    }
+                    try {
+                        localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+                    } catch (e) {
+                        console.error(e);
+                    }
                     const account = normalizeAdminAccount(roster.adminAccount);
                     if (account) {
                         localStorage.setItem(ADMIN_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
@@ -460,26 +613,20 @@
                 }
             }
 
-            async function loadHostedRosterAdminAccount() {
-                const roster = await loadHostedRoster();
-                return normalizeAdminAccount(roster?.adminAccount);
-            }
-
             function getRosterCreatedAccounts(roster) {
                 if (!roster || typeof roster !== 'object') return [];
                 const accounts = [];
-                const teacherEmails = roster.teacherEmails && typeof roster.teacherEmails === 'object' ? roster.teacherEmails : {};
+                const teacherLogins = roster.teacherEmails && typeof roster.teacherEmails === 'object' ? roster.teacherEmails : {};
                 const teacherPasswords = roster.teacherPasswords && typeof roster.teacherPasswords === 'object' ? roster.teacherPasswords : {};
                 const teachers = Array.isArray(roster.teachers) ? roster.teachers : [];
                 teachers.forEach((name) => {
-                    const username = String(teacherEmails[name] || '').trim();
+                    const username = String(teacherLogins[name] || '').trim();
                     const passwordHash = String(teacherPasswords[name] || '').trim();
                     if (username && passwordHash) {
                         accounts.push({ role: 'teacher', profileName: String(name || '').trim(), username, passwordHash });
                     }
                 });
 
-                const studentEmails = roster.studentEmails && typeof roster.studentEmails === 'object' ? roster.studentEmails : {};
                 const studentUsernames = roster.studentUsernames && typeof roster.studentUsernames === 'object' ? roster.studentUsernames : {};
                 const studentPasswords = roster.studentPasswords && typeof roster.studentPasswords === 'object' ? roster.studentPasswords : {};
                 [
@@ -490,9 +637,25 @@
                     const passwordHash = String(studentPasswords[name] || '').trim();
                     if (!passwordHash) return;
                     const username = String(studentUsernames[name] || '').trim();
-                    const email = String(studentEmails[name] || '').trim();
-                    if (username) accounts.push({ role: 'student', profileName: String(name || '').trim(), username, passwordHash });
-                    if (email) accounts.push({ role: 'student', profileName: String(name || '').trim(), username: email, passwordHash });
+                    if (username) {
+                        accounts.push({ role: 'student', profileName: String(name || '').trim(), username, passwordHash });
+                    }
+                });
+
+                const gateStaff = Array.isArray(roster.gateStaffAccounts) ? roster.gateStaffAccounts : [];
+                gateStaff.forEach((entry) => {
+                    const username = String(entry.username || '').trim();
+                    const passwordHash = String(entry.password || '').trim();
+                    const profileName = String(entry.profileName || '').trim();
+                    const appRole = String(entry.appRole || '').trim();
+                    if (!username || !passwordHash || !profileName || !appRole) return;
+                    accounts.push({
+                        role: 'teacher',
+                        profileName,
+                        username,
+                        passwordHash,
+                        appRole
+                    });
                 });
 
                 return accounts;
@@ -517,7 +680,6 @@
                 const acc = String(accountUsernameRaw || '').trim();
                 if (!typed || !acc) return false;
                 if (typed.toLowerCase() === acc.toLowerCase()) return true;
-                if (typed.includes('@') || acc.includes('@')) return false;
                 const a = normalizeStudentLoginUsernameKey(acc);
                 const b = normalizeStudentLoginUsernameKey(typed);
                 return !!a && a === b;
@@ -544,42 +706,62 @@
             }
 
             async function verifyLogin(usernameRaw, passwordRaw) {
-                const username = String(usernameRaw || '').trim();
+                const usernameTyped = String(usernameRaw || '').trim();
                 const password = sanitizeLoginPasswordTyped(passwordRaw);
-                if (!username || !password) return { ok: false };
+                if (!usernameTyped || !password) return { ok: false };
+
+                await refreshTimetablePageApiBearerToken(usernameTyped, password);
+
+                let roster = await loadHostedRoster();
+                if (!roster) roster = loadCachedRoster();
+                if (roster && window.TimeTableAuthMigrate?.migrateRosterAuthFields(roster)) {
+                    try {
+                        localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+
+                const usernameEff = roster && window.TimeTableAuthMigrate
+                    ? TimeTableAuthMigrate.resolveAuthLoginTypedFromRoster(roster, usernameTyped)
+                    : usernameTyped;
 
                 const storedAccount =
-                    await loadHostedRosterAdminAccount()
+                    normalizeAdminAccount(roster?.adminAccount)
                     || loadCachedRosterAdminAccount()
                     || loadStoredAdminAccount();
 
                 if (storedAccount) {
-                    if (username.toLowerCase() === storedAccount.username.toLowerCase()) {
-                        return {
-                            ok: await verifyPassword(storedAccount.passwordHash, password),
-                            role: 'admin'
-                        };
+                    if (usernameEff.toLowerCase() === storedAccount.username.toLowerCase()) {
+                        const okPw = await verifyPassword(storedAccount.passwordHash, password);
+                        return okPw
+                            ? { ok: true, role: 'admin', resolvedUsername: storedAccount.username }
+                            : { ok: false };
                     }
                 }
 
-                const roster = await loadHostedRoster() || loadCachedRoster();
                 const createdAccounts = getRosterCreatedAccounts(roster);
                 const matchingCreatedAccount = createdAccounts.find((account) => {
-                    return studentGateLoginAccountMatches(username, account.username);
+                    return studentGateLoginAccountMatches(usernameEff, account.username);
                 });
                 if (matchingCreatedAccount) {
-                    return {
-                        ok: await verifyPassword(matchingCreatedAccount.passwordHash, password),
-                        role: matchingCreatedAccount.role,
-                        profileName: matchingCreatedAccount.profileName
-                    };
+                    const okPw = await verifyPassword(matchingCreatedAccount.passwordHash, password);
+                    return okPw
+                        ? {
+                              ok: true,
+                              role: matchingCreatedAccount.role,
+                              profileName: matchingCreatedAccount.profileName,
+                              resolvedUsername: matchingCreatedAccount.username
+                          }
+                        : { ok: false };
                 }
                 if (storedAccount || createdAccounts.length > 0) return { ok: false };
 
-                return {
-                    ok: username === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD,
-                    role: 'admin'
-                };
+                const fallbackOk =
+                    usernameEff === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD;
+                return fallbackOk
+                    ? { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME }
+                    : { ok: false };
             }
 
             window.TimeTableAdminLogin = { verifyLogin };
@@ -605,12 +787,13 @@
                     sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
                     window.location.href = 'admin.html';
                 } else if (loginResult.ok) {
-                    localStorage.setItem(LOGIN_CREDENTIALS_STORAGE_KEY, JSON.stringify({ email: username, password }));
+                    const u = loginResult.resolvedUsername || username;
+                    localStorage.setItem(LOGIN_CREDENTIALS_STORAGE_KEY, JSON.stringify({ username: u, password }));
                     sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
                     sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
                     window.location.href = 'index.html';
                 } else {
-                    alert('Invalid username or password.');
+                    alert('Username not found, or the password is incorrect.');
                 }
             });
             [usernameInput, passwordInput].forEach((input) => {
@@ -691,6 +874,148 @@
             }
         }
 
+        function loadRosterRaw() {
+            try {
+                const parsed = JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || 'null');
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+            } catch {
+                return {};
+            }
+        }
+
+        function saveRosterRaw(raw) {
+            try {
+                localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(raw));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function ensureRosterObject(raw, key) {
+            if (!raw[key] || typeof raw[key] !== 'object' || Array.isArray(raw[key])) raw[key] = {};
+            return raw[key];
+        }
+
+        function ensureRosterStudentList(raw, listKey) {
+            if (!Array.isArray(raw[listKey])) raw[listKey] = [];
+            return raw[listKey];
+        }
+
+        function getStudentSchoolKeyFromRaw(raw, studentName, listKey) {
+            const saved = String(ensureRosterObject(raw, 'studentSchools')[studentName] || '').trim().toLowerCase();
+            if (saved) return saved;
+            if (listKey === 'speakon') return 'speakon';
+            if (listKey === 'passport') return 'passport';
+            return 'hometeachers';
+        }
+
+        function deleteStudentFieldRaw(raw, fieldKey, studentName) {
+            const o = raw[fieldKey];
+            if (o && typeof o === 'object' && !Array.isArray(o)) delete o[studentName];
+        }
+
+        function deleteStudentFromRosterAdmin(raw, studentName, listKey) {
+            const arr = ensureRosterStudentList(raw, listKey);
+            const i = arr.findIndex((n) => String(n || '').trim() === String(studentName || '').trim());
+            if (i === -1) return false;
+            arr.splice(i, 1);
+            deleteStudentFieldRaw(raw, 'studentSchools', studentName);
+            deleteStudentFieldRaw(raw, 'studentTeachers', studentName);
+            deleteStudentFieldRaw(raw, 'studentEmails', studentName);
+            deleteStudentFieldRaw(raw, 'studentUsernames', studentName);
+            deleteStudentFieldRaw(raw, 'studentPasswords', studentName);
+            deleteStudentFieldRaw(raw, 'studentCities', studentName);
+            deleteStudentFieldRaw(raw, 'studentCountries', studentName);
+            deleteStudentFieldRaw(raw, 'studentPhones', studentName);
+            deleteStudentFieldRaw(raw, 'studentGoogleMeetLinks', studentName);
+            deleteStudentFieldRaw(raw, 'passportLinks', studentName);
+            deleteStudentFieldRaw(raw, 'studentExternalFollowUpLinks', studentName);
+            deleteStudentFieldRaw(raw, 'studentBirthDates', studentName);
+            deleteStudentFieldRaw(raw, 'studentAges', studentName);
+            deleteStudentFieldRaw(raw, 'studentLevels', studentName);
+            return true;
+        }
+
+        function stripUnusedCustomSchoolProfilesAdmin(raw) {
+            const used = new Set();
+            ['private', 'speakon', 'passport'].forEach((listKey) => {
+                ensureRosterStudentList(raw, listKey).forEach((name) => {
+                    used.add(getStudentSchoolKeyFromRaw(raw, name, listKey));
+                });
+            });
+            raw.customSchools = asArray(raw.customSchools).filter((school) => {
+                const sk = String(school || '').trim().toLowerCase();
+                if (!sk) return false;
+                if (used.has(sk)) return true;
+                ['schoolExternalLinks', 'schoolThemeColors', 'schoolBillingModels', 'schoolBillingConfigs'].forEach((k) => {
+                    deleteStudentFieldRaw(raw, k, sk);
+                });
+                if (raw.googleMeetSharedLinkModeBySchool && typeof raw.googleMeetSharedLinkModeBySchool === 'object') {
+                    delete raw.googleMeetSharedLinkModeBySchool[sk];
+                }
+                if (raw.classReportCollapsedBySchool && typeof raw.classReportCollapsedBySchool === 'object') {
+                    delete raw.classReportCollapsedBySchool[sk];
+                }
+                return false;
+            });
+        }
+
+        function deleteTeacherAdmin(raw, teacherNameQuery) {
+            const q = String(teacherNameQuery || '').trim().toLowerCase();
+            if (!q) return;
+            const arr = Array.isArray(raw.teachers) ? raw.teachers : [];
+            const found = arr.find((t) => String(t || '').trim().toLowerCase() === q);
+            if (!found) return;
+            raw.teachers = arr.filter((t) => String(t || '').trim().toLowerCase() !== q);
+            deleteStudentFieldRaw(raw, 'teacherEmails', found);
+            deleteStudentFieldRaw(raw, 'teacherPasswords', found);
+            const st = ensureRosterObject(raw, 'studentTeachers');
+            const toRemove = [];
+            ['private', 'speakon', 'passport'].forEach((listKey) => {
+                ensureRosterStudentList(raw, listKey).forEach((studentName) => {
+                    if (String(st[studentName] || '').trim().toLowerCase() === q) {
+                        toRemove.push({ name: studentName, listKey });
+                    }
+                });
+            });
+            toRemove.forEach(({ name, listKey }) => deleteStudentFromRosterAdmin(raw, name, listKey));
+            stripUnusedCustomSchoolProfilesAdmin(raw);
+        }
+
+        function deleteSchoolAdmin(raw, displayTitle) {
+            const schoolKey = String(displayTitle || '').trim().toLowerCase();
+            if (!schoolKey) return;
+            ['private', 'speakon', 'passport'].forEach((listKey) => {
+                const snapshot = [...ensureRosterStudentList(raw, listKey)];
+                snapshot.forEach((studentName) => {
+                    if (getStudentSchoolKeyFromRaw(raw, studentName, listKey) === schoolKey) {
+                        deleteStudentFromRosterAdmin(raw, studentName, listKey);
+                    }
+                });
+            });
+            raw.customSchools = asArray(raw.customSchools).filter((s) => String(s || '').trim().toLowerCase() !== schoolKey);
+            ['schoolExternalLinks', 'schoolThemeColors', 'schoolBillingModels', 'schoolBillingConfigs'].forEach((k) => {
+                deleteStudentFieldRaw(raw, k, schoolKey);
+            });
+            if (raw.googleMeetSharedLinkModeBySchool && typeof raw.googleMeetSharedLinkModeBySchool === 'object') {
+                delete raw.googleMeetSharedLinkModeBySchool[schoolKey];
+            }
+        }
+
+        function applyAdminProfileDeletion(role, name) {
+            const raw = loadRosterRaw();
+            if (role === 'Teacher') deleteTeacherAdmin(raw, name);
+            else if (role === 'School') deleteSchoolAdmin(raw, name);
+            else if (role === 'Student') {
+                const st = getAllStudents().find((s) => s.name === name);
+                if (st) deleteStudentFromRosterAdmin(raw, name, st.kind);
+            }
+            saveRosterRaw(raw);
+            currentRoster = loadRoster();
+        }
+
+        const ADMIN_REMOVE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>`;
+
         function loadAdminName() {
             try {
                 const parsed = JSON.parse(localStorage.getItem(ADMIN_ACCOUNT_STORAGE_KEY) || 'null');
@@ -731,8 +1056,9 @@
             return [...schools.values()].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
         }
 
-        function passwordLabel(value) {
-            return String(value || '').trim() ? 'Configured' : 'Not set';
+        function dashboardPasswordHtml(value) {
+            const v = String(value || '').trim();
+            return v ? escapeHtml(v) : '<em>Not set</em>';
         }
 
         function renderStats() {
@@ -755,11 +1081,14 @@
                 .slice()
                 .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
                 .map((name) => {
-                    const email = String(currentRoster.teacherEmails[name] || '').trim();
+                    const loginUser = String(currentRoster.teacherEmails[name] || '').trim();
                     return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
-                        <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtml(email) : '<em>Not set</em>'}</span>
-                        <span class="admin-dashboard-item-meta">Password: ${escapeHtml(passwordLabel(currentRoster.teacherPasswords[name]))}</span>
+                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtml(loginUser) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Password: ${dashboardPasswordHtml(currentRoster.teacherPasswords[name])}</span>
+                        <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Teacher" data-admin-name="${escapeHtml(name)}" aria-label="Remove teacher profile">
+                            <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
+                        </button>
                     </div>`;
                 }).join('');
         }
@@ -772,6 +1101,9 @@
                 return `<div class="admin-dashboard-item">
                     <span class="admin-dashboard-item-title">${escapeHtml(title)}</span>
                     <span class="admin-dashboard-item-meta">Students (${students.length}): ${studentList}</span>
+                    <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="School" data-admin-name="${escapeHtml(title)}" aria-label="Remove school profile">
+                        <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
+                    </button>
                 </div>`;
             }).join('');
         }
@@ -791,11 +1123,14 @@
                     <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
                     <span class="admin-dashboard-item-meta">School: ${escapeHtml(getStudentSchoolName(student))}</span>
                     <span class="admin-dashboard-item-meta">Roster: ${escapeHtml(student.kind)}</span>
-                    <span class="admin-dashboard-item-meta">Email: ${email ? escapeHtml(email) : '<em>Not set</em>'}</span>
                     <span class="admin-dashboard-item-meta">Username: ${username ? escapeHtml(username) : '<em>Not set</em>'}</span>
-                    <span class="admin-dashboard-item-meta">Password: ${escapeHtml(passwordLabel(currentRoster.studentPasswords[name]))}</span>
+                    <span class="admin-dashboard-item-meta">Contact email: ${email ? escapeHtml(email) : '<em>Not set</em>'}</span>
+                    <span class="admin-dashboard-item-meta">Password: ${dashboardPasswordHtml(currentRoster.studentPasswords[name])}</span>
                     <span class="admin-dashboard-item-meta">Assigned teacher: ${teacher ? escapeHtml(teacher) : '<em>None</em>'}</span>
                     ${location ? `<span class="admin-dashboard-item-meta">Location: ${escapeHtml(location)}</span>` : ''}
+                    <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtml(name)}" aria-label="Remove student profile">
+                        <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
+                    </button>
                 </div>`;
             }).join('');
         }
@@ -870,12 +1205,99 @@
             } catch {
                 return false;
             }
-            window.location.href = 'test.html';
+            window.location.href = 'login-screen.html';
             return false;
+        }
+
+        let adminRosterDeletePending = null;
+
+        function closeAdminRosterDeleteModal() {
+            const modal = document.getElementById('adminRosterDeleteModal');
+            if (modal) {
+                modal.classList.remove('is-open');
+                modal.setAttribute('aria-hidden', 'true');
+            }
+            adminRosterDeletePending = null;
+        }
+
+        function openAdminRosterDeleteModal(role, name, title, message) {
+            adminRosterDeletePending = { role, name };
+            const titleEl = document.getElementById('adminRosterDeleteTitle');
+            const bodyEl = document.getElementById('adminRosterDeleteBody');
+            const modal = document.getElementById('adminRosterDeleteModal');
+            if (!titleEl || !bodyEl || !modal) return;
+            titleEl.textContent = title;
+            bodyEl.textContent = message;
+            bodyEl.style.whiteSpace = 'pre-line';
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function buildAdminRosterDeleteMessage(role, name) {
+            let confirmMsg = `Delete this ${String(role || '').toLowerCase()} profile?\n\n${name}`;
+            if (role === 'Teacher') {
+                confirmMsg =
+                    `Delete teacher "${name}"?\n\nEvery student assigned to this teacher will be removed. Custom school profiles with no remaining students will be removed. Other teachers are kept.`;
+            } else if (role === 'School') {
+                confirmMsg = `Delete school "${name}"?\n\nAll students in this school will be removed. Teacher profiles are kept.`;
+            } else if (role === 'Student') {
+                confirmMsg = `Delete student "${name}"?\n\nSchools and teachers are kept.`;
+            }
+            return confirmMsg;
+        }
+
+        function adminRosterDeleteTitleForRole(role) {
+            if (role === 'Teacher') return 'Delete teacher?';
+            if (role === 'School') return 'Delete school?';
+            if (role === 'Student') return 'Delete student?';
+            return 'Delete?';
+        }
+
+        function setupAdminRosterDeleteModal() {
+            const modal = document.getElementById('adminRosterDeleteModal');
+            if (!modal || modal.dataset.bound === '1') return;
+            modal.dataset.bound = '1';
+            document.getElementById('adminRosterDeleteBackdrop')?.addEventListener('click', closeAdminRosterDeleteModal);
+            document.getElementById('adminRosterDeleteCancel')?.addEventListener('click', closeAdminRosterDeleteModal);
+            document.getElementById('adminRosterDeleteConfirm')?.addEventListener('click', () => {
+                const p = adminRosterDeletePending;
+                closeAdminRosterDeleteModal();
+                if (p && p.role && p.name) {
+                    applyAdminProfileDeletion(p.role, p.name);
+                    renderDashboard();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape') return;
+                if (!modal.classList.contains('is-open')) return;
+                e.preventDefault();
+                closeAdminRosterDeleteModal();
+            });
+        }
+
+        function setupAdminDashboardDeletes() {
+            const main = document.getElementById('adminMain');
+            if (!main || main.dataset.deletesBound === '1') return;
+            main.dataset.deletesBound = '1';
+            main.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-admin-delete]');
+                if (!btn) return;
+                const role = String(btn.getAttribute('data-admin-role') || '').trim();
+                const name = String(btn.getAttribute('data-admin-name') || '').trim();
+                if (!role || !name) return;
+                openAdminRosterDeleteModal(
+                    role,
+                    name,
+                    adminRosterDeleteTitleForRole(role),
+                    buildAdminRosterDeleteMessage(role, name)
+                );
+            });
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             if (!assertAdminSession()) return;
+            setupAdminRosterDeleteModal();
+            setupAdminDashboardDeletes();
             currentRoster = loadRoster();
             setActiveView('dashboard');
 
@@ -890,7 +1312,7 @@
                 } catch {
                     /* ignore */
                 }
-                window.location.href = 'test.html';
+                window.location.href = 'login-screen.html';
             });
         });
     </script>

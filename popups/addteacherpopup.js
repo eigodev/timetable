@@ -101,8 +101,8 @@
                             </h3>
                             <div class="add-teacher-two-col add-teacher-email-password-row">
                                 <label class="add-student-label add-student-contact-email-wrap">
-                                    <span>Email Address *</span>
-                                    <input type="email" id="addTeacherEmail" name="teacherEmail" autocomplete="email" maxlength="120" placeholder="Enter email address">
+                                    <span>Username *</span>
+                                    <input type="text" id="addTeacherEmail" name="teacherUsername" autocomplete="username" maxlength="120" placeholder="Teacher login username">
                                 </label>
                                 <label class="add-student-label" for="addTeacherPassword">
                                     <span>Password *</span>
