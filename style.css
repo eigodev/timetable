@@ -9480,7 +9480,7 @@ header h1 {
         top: 2.75%;
         left: 21.75%;
         z-index: 1;
-        
+
         padding: 30px;
         --student-modal-actions-right: 20px;
         --student-modal-actions-bottom: 20px;
@@ -9514,9 +9514,6 @@ header h1 {
         top: 3%;
         left: 20.5%;
         z-index: 1;
-        height: 685px;
-        width: 1200px;
-        max-height: 685px;
         padding: 30px;
         --student-modal-actions-right: 20px;
         --student-modal-actions-bottom: 20px;
