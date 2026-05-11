@@ -247,7 +247,15 @@ function getSidebarRenderMode(user = getCurrentUser()) {
     return 'guest';
 }
 
-/** Schools sidebar + Class Report: students the current session may see (admin: all; student: self; teacher: assigned to this tutor). */
+/** Normalize mentor string to the roster `teachers` row when it matches case-insensitively. */
+function canonicalTeacherNameOnRoster(rawLabel) {
+    const label = String(rawLabel || '').trim();
+    if (!label) return '';
+    const found = teachersList.find((t) => String(t || '').trim().toLowerCase() === label.toLowerCase());
+    return found ? String(found) : label;
+}
+
+/** Schools sidebar + Class Report: admin: all; student: self; teacher: assigned tutor (or whole roster if only one teacher). */
 function getStudentNamesVisibleInNavigation() {
     const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
     if (loggedInStudentFullName) {
@@ -255,10 +263,17 @@ function getStudentNamesVisibleInNavigation() {
         return allStudents.filter((name) => name.trim().toLowerCase() === self);
     }
     if (isTeacherLoggedIn && !isAdminLoggedIn && String(loggedInTeacherName || '').trim()) {
-        const t = String(loggedInTeacherName || '').trim().toLowerCase();
-        return allStudents.filter(
-            (name) => String(studentTeacherByName[name] || '').trim().toLowerCase() === t
-        );
+        const loggedCanon = canonicalTeacherNameOnRoster(loggedInTeacherName);
+        const loggedLc = loggedCanon.toLowerCase();
+        const onlyTeacher =
+            teachersList.length === 1 ? canonicalTeacherNameOnRoster(String(teachersList[0] || '')) : '';
+        const isSingleTeacherSession = Boolean(onlyTeacher) && loggedLc === onlyTeacher.toLowerCase();
+        return allStudents.filter((name) => {
+            if (isSingleTeacherSession) return true;
+            const assigned = getStudentTeacherInfo(name);
+            if (!String(assigned || '').trim()) return false;
+            return canonicalTeacherNameOnRoster(assigned).toLowerCase() === loggedLc;
+        });
     }
     return allStudents;
 }
@@ -1267,14 +1282,19 @@ async function refreshTimetableApiBearerTokenIfPossible() {
     }
 }
 
-/** Drop other teachers' schedule keys in memory when the signed-in user is an isolated teacher session. */
+/** Drop other teachers' and unrelated students' schedule keys for isolated teacher sessions (keeps own grid + visible students). */
 function applyTeacherDataIsolationInMemory() {
     if (isAdminLoggedIn || loggedInStudentFullName) return;
     if (!isTeacherLoggedIn || !loggedInTeacherName) return;
-    const keep = String(loggedInTeacherName || '').trim();
-    if (!keep) return;
+    const keep = new Set();
+    const tk = String(loggedInTeacherName || '').trim();
+    if (tk) keep.add(tk);
+    getStudentNamesVisibleInNavigation().forEach((name) => {
+        const k = String(name || '').trim();
+        if (k) keep.add(k);
+    });
     Object.keys(teacherSchedules).forEach((k) => {
-        if (k !== keep) delete teacherSchedules[k];
+        if (!keep.has(k)) delete teacherSchedules[k];
     });
 }
 
@@ -1525,10 +1545,9 @@ function getTutorRosterNameForStudent(studentFullName) {
         }
     }
     if (!tutor) return '';
-    const found = teachersList.find((t) => String(t || '').trim().toLowerCase() === tutor.toLowerCase());
     // If the assigned label does not exactly match a roster teacher, still allow student login
     // (session uses the student as the active profile; schedule keys are by student name).
-    return found ? String(found) : tutor;
+    return canonicalTeacherNameOnRoster(tutor);
 }
 
 const STUDENT_PASSWORD_HASH_PREFIX = 'sha256$';
