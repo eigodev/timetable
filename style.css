@@ -9433,8 +9433,10 @@ header h1 {
         position: fixed;
         top: 2.15%;
         left: 16.5%;
+
         height: 900px;
         width: 1580px;
+        padding: 50px;
     }
 }
 
@@ -9447,6 +9449,7 @@ header h1 {
         position: fixed;
         top: 2.75%;
         left: 22%;
+        
         height: 722.5px;
         width: 1105px;
     }
@@ -9461,7 +9464,9 @@ header h1 {
         position: fixed;
         top: 3%;
         left: 23%;
+
         height: 590px;
         width: 1030px;
+        padding: 30px;
     }
 }
