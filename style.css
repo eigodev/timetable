@@ -9429,7 +9429,8 @@ header h1 {
     .edit-student-dialog,
     .add-modal-dialog,
     .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog {
+    .google-meet-dialog,
+    .calendarPromptPopover {
         position: fixed;
         top: 2.15%;
         left: 16.5%;
@@ -9445,11 +9446,12 @@ header h1 {
     .edit-student-dialog,
     .add-modal-dialog,
     .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog {
+    .google-meet-dialog,
+    .calendarPromptPopover {
         position: fixed;
         top: 2.75%;
         left: 22%;
-        
+
         height: 722.5px;
         width: 1105px;
     }
@@ -9460,7 +9462,8 @@ header h1 {
     .edit-student-dialog,
     .add-modal-dialog,
     .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog {
+    .google-meet-dialog,
+    .calendarPromptPopover {
         position: fixed;
         top: 3%;
         left: 23%;
