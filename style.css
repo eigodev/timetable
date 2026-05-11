@@ -9534,6 +9534,20 @@ header h1 {
     }
 }
 
+@media (max-width: 1920px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog,
+    .google-meet-dialog {
+        position: fixed;
+        top: 2.15%;
+        left: 16.5%;
+        height: 900px;
+        width: 1580px;
+    }
+}
+
 /* Thin screens — keep Add School centered fluid layout (must follow max-width rules above) */
 @media (max-width: 800px) {
     .add-modal.add-modal--school .add-modal-dialog {
