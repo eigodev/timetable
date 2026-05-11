@@ -9437,3 +9437,31 @@ header h1 {
         width: 1580px;
     }
 }
+
+@media (max-width: 1440px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog,
+    .google-meet-dialog {
+        position: fixed;
+        top: 2.75%;
+        left: 22%;
+        height: 722.5px;
+        width: 1105px;
+    }
+}
+
+@media (max-width: 1366px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog,
+    .google-meet-dialog {
+        position: fixed;
+        top: 3%;
+        left: 23%;
+        height: 590px;
+        width: 1030px;
+    }
+}
