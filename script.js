@@ -255,7 +255,7 @@ function canonicalTeacherNameOnRoster(rawLabel) {
     return found ? String(found) : label;
 }
 
-/** Schools sidebar + Class Report: admin: all; student: self; teacher: assigned tutor (or whole roster if only one teacher). */
+/** Schools sidebar + Class Report: admin: all; student: self; teacher: assigned tutor, plus students with no mentor (visible to every teacher). */
 function getStudentNamesVisibleInNavigation() {
     const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
     if (loggedInStudentFullName) {
@@ -271,7 +271,7 @@ function getStudentNamesVisibleInNavigation() {
         return allStudents.filter((name) => {
             if (isSingleTeacherSession) return true;
             const assigned = getStudentTeacherInfo(name);
-            if (!String(assigned || '').trim()) return false;
+            if (!String(assigned || '').trim()) return true;
             return canonicalTeacherNameOnRoster(assigned).toLowerCase() === loggedLc;
         });
     }

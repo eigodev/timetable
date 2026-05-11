@@ -12,14 +12,38 @@ export function allRosterStudentNames(roster) {
     .filter(Boolean);
 }
 
+function tutorValueForStudent(st, studentName) {
+  const nm = String(studentName || '').trim();
+  if (!nm || !st || typeof st !== 'object') return '';
+  const direct = String(st[nm] || '').trim();
+  if (direct) return direct;
+  const nlc = nm.toLowerCase();
+  const key = Object.keys(st).find((k) => String(k || '').trim().toLowerCase() === nlc);
+  return key ? String(st[key] || '').trim() : '';
+}
+
+/** Students with no mentor in `studentTeachers` (visible to all teachers; matches app navigation rules). */
+function rosterStudentNamesWithNoTutor(roster) {
+  const st = roster?.studentTeachers && typeof roster.studentTeachers === 'object' ? roster.studentTeachers : {};
+  const out = new Set();
+  for (const name of allRosterStudentNames(roster)) {
+    const nm = String(name || '').trim();
+    if (!nm) continue;
+    if (!tutorValueForStudent(st, nm)) out.add(nm);
+  }
+  return out;
+}
+
 /** @param {string} teacherProfile */
 export function studentsAssignedToTeacher(roster, teacherProfile) {
   const tutor = String(teacherProfile || '').trim();
   if (!tutor) return new Set();
+  const tutorLc = tutor.toLowerCase();
   const st = roster?.studentTeachers && typeof roster.studentTeachers === 'object' ? roster.studentTeachers : {};
   const out = new Set();
   for (const name of allRosterStudentNames(roster)) {
-    if (String(st[name] || '').trim() === tutor) out.add(name);
+    const val = tutorValueForStudent(st, name);
+    if (val && val.toLowerCase() === tutorLc) out.add(name);
   }
   return out;
 }
@@ -77,6 +101,12 @@ function collectAuthAliasTargetsForActor(roster, role, profile) {
       }
     }
     for (const stu of studentsAssignedToTeacher(roster, pf)) {
+      const su = String(roster.studentUsernames?.[stu] || '').trim().toLowerCase();
+      if (su) targets.add(su);
+      const se = String(roster.studentEmails?.[stu] || '').trim().toLowerCase();
+      if (se) targets.add(se);
+    }
+    for (const stu of rosterStudentNamesWithNoTutor(roster)) {
       const su = String(roster.studentUsernames?.[stu] || '').trim().toLowerCase();
       if (su) targets.add(su);
       const se = String(roster.studentEmails?.[stu] || '').trim().toLowerCase();
@@ -173,14 +203,14 @@ export function filterRosterForActor(roster, actor) {
 
   if (role === 'teacher' || role === 'gate') {
     const tp = profile;
-    const assigned = studentsAssignedToTeacher(roster, tp);
     const inTeachers = (Array.isArray(roster.teachers) ? roster.teachers : []).some(
       (n) => String(n || '').trim() === tp
     );
     const teacherRow = inTeachers ? [tp] : isGateProfile(roster, tp) ? [tp] : [];
 
     const r = JSON.parse(JSON.stringify(roster));
-    const allowedStudents = new Set(assigned);
+    const allowedStudents = new Set(studentsAssignedToTeacher(roster, tp));
+    for (const n of rosterStudentNamesWithNoTutor(roster)) allowedStudents.add(n);
 
     const keepStudent = (name) => allowedStudents.has(String(name || '').trim());
     r.private = (Array.isArray(r.private) ? r.private : []).filter(keepStudent);
@@ -302,7 +332,7 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
     for (const name of patchLists[kind]) {
       const assign = String(stPatch[name] || stBase[name] || '').trim();
       if (!namesInPatch.has(name)) continue;
-      if (assign !== profile) {
+      if (assign && assign !== profile) {
         throw new Error(`Student ${name} must be assigned to you`);
       }
       if (!setNext.has(name)) {
@@ -313,16 +343,15 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
     out[kind] = next.sort(sortNames);
   }
 
-  const allowedAfter = studentsAssignedToTeacher(
-    {
-      ...out,
-      private: out.private,
-      speakon: out.speakon,
-      passport: out.passport,
-      studentTeachers: { ...stBase, ...stPatch },
-    },
-    profile
-  );
+  const rosterForAllowed = {
+    ...out,
+    private: out.private,
+    speakon: out.speakon,
+    passport: out.passport,
+    studentTeachers: { ...stBase, ...stPatch },
+  };
+  const allowedAfter = new Set(studentsAssignedToTeacher(rosterForAllowed, profile));
+  for (const n of rosterStudentNamesWithNoTutor(rosterForAllowed)) allowedAfter.add(n);
 
   for (const name of allRosterStudentNames(patch)) {
     if (!allowedAfter.has(name)) continue;
@@ -436,8 +465,10 @@ export function isStudentVisibleToActor(fullRoster, studentName, actor) {
   if (role === 'admin') return true;
   if (role === 'student') return sn === profile;
   if (role === 'teacher' || role === 'gate') {
-    const st = fullRoster.studentTeachers && fullRoster.studentTeachers[sn];
-    return String(st || '').trim() === profile;
+    const stMap = fullRoster.studentTeachers && typeof fullRoster.studentTeachers === 'object' ? fullRoster.studentTeachers : {};
+    const assigned = tutorValueForStudent(stMap, sn);
+    if (!String(assigned || '').trim()) return true;
+    return assigned.toLowerCase() === profile.toLowerCase();
   }
   return false;
 }
