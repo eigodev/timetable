@@ -2582,10 +2582,7 @@ input.student-reposition-modal-day {
 .student-modal-overlay .student-modal-card {
     position: relative;
     z-index: 1;
-    width: min(1030px, 100%);
     max-width: 100%;
-    height: auto;
-    max-height: min(94vh, 591px);
     padding: 20px;
     box-sizing: border-box;
     --student-modal-actions-right: 20px;
