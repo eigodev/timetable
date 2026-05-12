@@ -1,7 +1,7 @@
 import { verifyStoredPassword } from './password-verify.js';
 
 /** Hardcoded emergency / default admin only; must match client + script.js. Not stored in roster. */
-const BUILTIN_ADMIN_USERNAME = '@admin';
+const BUILTIN_ADMIN_USERNAME = '@Admin';
 const BUILTIN_ADMIN_PASSWORD = 'admin';
 
 function normalizeAdminAccount(account) {

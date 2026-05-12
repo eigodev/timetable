@@ -57,7 +57,7 @@
         return String(s || '').trim().toLowerCase();
     }
 
-    const STORED_DEFAULT_ADMIN_USERNAME = '@admin';
+    const STORED_DEFAULT_ADMIN_USERNAME = '@Admin';
 
     function migrateRosterAuthFields(roster) {
         if (!roster || typeof roster !== 'object' || Array.isArray(roster)) return false;

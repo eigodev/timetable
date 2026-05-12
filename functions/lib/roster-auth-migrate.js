@@ -1,6 +1,6 @@
 import { hashPassword } from './password-verify.js';
 
-const STORED_DEFAULT_ADMIN_USERNAME = '@admin';
+const STORED_DEFAULT_ADMIN_USERNAME = '@Admin';
 const STORED_DEFAULT_ADMIN_PASSWORD = 'admin';
 
 function normalizeUsername(value) {
@@ -54,7 +54,7 @@ function lowerKey(s) {
 /**
  * Email-shaped or empty logins → canonical first+last+_ usernames; gate staff included.
  * Lowercases usernames; extends authLoginAliases so old emails still work at sign-in.
- * Ensures roster.adminAccount exists for dashboard (@admin / hashed admin).
+ * Ensures roster.adminAccount exists for dashboard (@Admin / hashed admin).
  * @returns {Promise<boolean>} true if roster was mutated (caller should KV.put)
  */
 export async function migrateRosterAuthInPlace(roster) {

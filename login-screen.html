@@ -694,7 +694,7 @@
 			const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 			const ROSTER_STORAGE_KEY = 'timetable_roster';
 			const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-			const DEFAULT_ADMIN_USERNAME = '@admin';
+			const DEFAULT_ADMIN_USERNAME = '@Admin';
 			const DEFAULT_ADMIN_PASSWORD = 'admin';
 			const PASSWORD_HASH_PREFIX = 'sha256$';
 
@@ -983,9 +983,7 @@
 							console.error(e);
 						}
 					}
-					if (!timetablePageApiAuthHeaders().Authorization) {
-						return { ok: false };
-					}
+					/* Builtin admin must work without /api/auth-login (local dev, no secret, or KV not seeded). */
 					return { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME };
 				}
 
