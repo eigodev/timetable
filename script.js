@@ -1472,10 +1472,9 @@ function initCrossTabLogoutBroadcastListener() {
 
 /**
  * Re-issues a Bearer JWT from saved credentials. Does not throw.
- * - 503: sets `timetable_api_auth_unconfigured`, clears stored JWT (Workers auth not configured).
- * - 2xx with `token`: clears unconfigured flag, persists JWT (and may rewrite saved creds with resolved username).
- * - 5xx (other than 503), 408, 429: no storage changes (avoid logout on transient failures).
- * - Other responses: clears unconfigured flag and stored JWT (definitive auth failure or unusable body).
+ * Matches `functions/api/auth-login.js`: only JSON 503 bodies that report missing secret/KV
+ * flip legacy `timetable_api_auth_unconfigured`; other 5xx/503 behaves like transient (keep stored JWT).
+ * Clears JWT on success (persist new token) or definitive auth failure; keeps JWT on 408/429 and other transients.
  */
 async function refreshTimetableApiBearerTokenIfPossible() {
     const loginUrl = absoluteHttpApiUrl('/api/auth-login');
@@ -1502,13 +1501,23 @@ async function refreshTimetableApiBearerTokenIfPossible() {
         const data = await res.json().catch(() => null);
 
         if (res.status === 503) {
-            try {
-                sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
-            } catch {
-                /* ignore */
+            const errText =
+                data && typeof data === 'object' && data.error != null
+                    ? String(data.error)
+                    : '';
+            const authStackUnconfigured =
+                errText.includes('TIMETABLE_AUTH_SECRET') ||
+                errText.includes('schedules_kv not configured');
+            if (authStackUnconfigured) {
+                try {
+                    sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
+                } catch {
+                    /* ignore */
+                }
+                clearTimetableApiBearerToken();
+                return;
             }
-            clearTimetableApiBearerToken();
-            return;
+            /* Generic 503 (proxy/CDN): treat like other 5xx below. */
         }
 
         const token = data && String(data.token || '').trim();
@@ -1526,7 +1535,7 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             return;
         }
 
-        /* Transient or inconclusive: keep JWT and legacy flag — server may recover. */
+        /* Transient or inconclusive: keep stored JWT and unconfigured flag — may recover. */
         if ((res.status >= 500 && res.status <= 599) || res.status === 429 || res.status === 408) {
             if (res.status >= 500) {
                 console.warn('API token refresh: server error', res.status);
