@@ -33,8 +33,8 @@ const LOGOUT_BROADCAST_STORAGE_KEY = 'timetable_logout_broadcast_ts';
 /** Session: auto popup for pending data-share invites was already shown for these link ids. */
 const SUPERVISION_NOTICE_SESSION_KEY = 'timetable_supervision_invite_notice_shown_ids';
 const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-const DEFAULT_ADMIN_USERNAME = 'admin_';
-const DEFAULT_ADMIN_PASSWORD = '@Admin';
+const DEFAULT_ADMIN_USERNAME = '@Admin';
+const DEFAULT_ADMIN_PASSWORD = 'admin';
 const PROFILE_AVATARS_STORAGE_KEY = 'timetable_profile_avatars';
 const SCHOOL_THEME_COLORS = [
     '#c2185b','#f57c00','#fbc02d','#388e3c','#009688','#7b1fa2','#e91e63','#ef6c00','#afb42b','#26a69a','#5c6bc0','#6d4c41','#d32f2f','#7cb342','#9575cd','#757575','#e57373','#43a047','#42a5f5','#7986cb','#616161','#ef9a9a','#fdd835','#66bb6a','#1e88e5','#5e35b1','#bdbdbd'

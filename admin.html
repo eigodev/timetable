@@ -505,8 +505,8 @@
             const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
             const ROSTER_STORAGE_KEY = 'timetable_roster';
             const API_BEARER_TOKEN_STORAGE_KEY = 'timetable_api_bearer_token';
-            const DEFAULT_ADMIN_USERNAME = 'admin_';
-            const DEFAULT_ADMIN_PASSWORD = '@Admin';
+            const DEFAULT_ADMIN_USERNAME = '@Admin';
+            const DEFAULT_ADMIN_PASSWORD = 'admin';
             const PASSWORD_HASH_PREFIX = 'sha256$';
 
             const usernameInput = document.getElementById('loginUsername');
@@ -771,6 +771,23 @@
                 const password = sanitizeLoginPasswordTyped(passwordRaw);
                 if (!usernameTyped || !password) return { ok: false };
 
+                if (usernameTyped === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD) {
+                    await refreshTimetablePageApiBearerToken(usernameTyped, password);
+                    let roster = await loadHostedRoster();
+                    if (!roster) roster = loadCachedRoster();
+                    if (roster && window.TimeTableAuthMigrate?.migrateRosterAuthFields(roster)) {
+                        try {
+                            localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+                    if (!timetablePageApiAuthHeaders().Authorization) {
+                        return { ok: false };
+                    }
+                    return { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME };
+                }
+
                 await refreshTimetablePageApiBearerToken(usernameTyped, password);
 
                 let roster = await loadHostedRoster();
@@ -818,11 +835,7 @@
                 }
                 if (storedAccount || createdAccounts.length > 0) return { ok: false };
 
-                const fallbackOk =
-                    usernameEff === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD;
-                return fallbackOk
-                    ? { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME }
-                    : { ok: false };
+                return { ok: false };
             }
 
             window.TimeTableAdminLogin = { verifyLogin };
@@ -854,7 +867,7 @@
                     sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
                     window.location.href = 'index.html';
                 } else {
-                    alert('Username not found, or the password is incorrect.');
+                    alert('User not found. Please check your credentials.');
                 }
             });
             [usernameInput, passwordInput].forEach((input) => {
@@ -868,7 +881,7 @@
         const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
         const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
         const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-        const DEFAULT_ADMIN_USERNAME = 'admin_';
+        const DEFAULT_ADMIN_USERNAME = '@Admin';
 
         let currentView = 'dashboard';
         let currentRoster = getEmptyRoster();

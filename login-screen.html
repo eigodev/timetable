@@ -694,8 +694,8 @@
 			const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 			const ROSTER_STORAGE_KEY = 'timetable_roster';
 			const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-			const DEFAULT_ADMIN_USERNAME = 'admin_';
-			const DEFAULT_ADMIN_PASSWORD = '@Admin';
+			const DEFAULT_ADMIN_USERNAME = '@Admin';
+			const DEFAULT_ADMIN_PASSWORD = 'admin';
 			const PASSWORD_HASH_PREFIX = 'sha256$';
 
 			const usernameInput = document.getElementById('loginUsername');
@@ -970,7 +970,24 @@
 			async function verifyLogin(usernameRaw, passwordRaw) {
 				const usernameTyped = String(usernameRaw || '').trim();
 				const password = sanitizeLoginPasswordTyped(passwordRaw);
-				if (!usernameTyped || !password) return { ok: false, failMessage: '' };
+				if (!usernameTyped || !password) return { ok: false };
+
+				if (usernameTyped === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD) {
+					await refreshTimetablePageApiBearerToken(usernameTyped, password);
+					let roster = await loadHostedRoster();
+					if (!roster) roster = loadCachedRoster();
+					if (roster && window.TimeTableAuthMigrate?.migrateRosterAuthFields(roster)) {
+						try {
+							localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(roster));
+						} catch (e) {
+							console.error(e);
+						}
+					}
+					if (!timetablePageApiAuthHeaders().Authorization) {
+						return { ok: false };
+					}
+					return { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME };
+				}
 
 				const authResult = await refreshTimetablePageApiBearerToken(usernameTyped, password);
 
@@ -998,11 +1015,7 @@
 						const okPw = await verifyPassword(storedAccount.passwordHash, password);
 						return okPw
 							? { ok: true, role: 'admin', resolvedUsername: storedAccount.username }
-							: {
-									ok: false,
-									failMessage:
-										'Incorrect password for this administrator account. If you forgot it, someone who still has admin access must sign in on the admin dashboard and set a new password.'
-							  };
+							: { ok: false };
 					}
 				}
 
@@ -1019,62 +1032,22 @@
 								profileName: matchingCreatedAccount.profileName,
 								resolvedUsername: matchingCreatedAccount.username
 						  }
-						: {
-								ok: false,
-								failMessage:
-									'Incorrect password for this account. Use “Forgot password” flows only if your school set them up; otherwise ask an administrator to reset your password.'
-						  };
+						: { ok: false };
 				}
 				if (storedAccount || createdAccounts.length > 0) {
-					const triedDefaultAdmin =
-						usernameEff === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD;
-					if (triedDefaultAdmin) {
-						return {
-							ok: false,
-							failMessage:
-								'Default admin (username admin_ with password @Admin) is disabled once your site has staff or a custom admin. Clear site data for this page or use a private window if this device only has an old cached copy, then sign in with the real administrator username and password from your admin dashboard.'
-						};
-					}
-					if (!authResult.ok && authResult.status === 401) {
-						return {
-							ok: false,
-							failMessage:
-								'The server did not accept that username and password. Check for typos and extra spaces. Administrator login uses the exact username defined in the cloud roster (often not the display name “Admin”). Coordinators, supervisors, and teachers must use the username they were given, not the default admin_ account.'
-						};
-					}
-					return { ok: false, failMessage: '' };
+					return { ok: false };
 				}
 
-				const fallbackOk =
-					usernameEff === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD;
-				if (fallbackOk) {
-					return { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME };
-				}
 				if (!authResult.ok && authResult.status === 503) {
-					try {
-						if (sessionStorage.getItem('timetable_api_auth_unconfigured') === '1') {
-							return {
-								ok: false,
-								failMessage:
-									'Sign-in is not fully configured on the server (TIMETABLE_AUTH_SECRET / TIMETABLE_REQUIRE_AUTH). See docs/CLOUDFLARE_SETUP.md for your deployment.'
-							};
-						}
-					} catch {
-						/* ignore */
-					}
-					return { ok: false, failMessage: authResult.error || 'Sign-in temporarily unavailable (503).' };
+					return { ok: false };
 				}
 				if (!authResult.ok && authResult.status === 401) {
-					return {
-						ok: false,
-						failMessage:
-							'The server did not accept that username and password. For a brand-new empty site only, try username admin_ and password @Admin (both exact). After any staff exist, use the administrator or staff credentials created for this site.'
-					};
+					return { ok: false };
 				}
 				if (!authResult.ok && authResult.error) {
-					return { ok: false, failMessage: authResult.error };
+					return { ok: false };
 				}
-				return { ok: false, failMessage: '' };
+				return { ok: false };
 			}
 
 			window.TimeTableAdminLogin = { verifyLogin };
@@ -1098,7 +1071,7 @@
 					loginResult = await verifyLogin(username, password);
 				} catch (err) {
 					console.error('Login error:', err);
-					alert('Login could not complete. If this keeps happening, try clearing site data for this site or use http://localhost (not file://) so secure login can run.');
+					alert('User not found. Please check your credentials.');
 					return;
 				}
 				if (loginResult.ok && loginResult.role === 'admin') {
@@ -1116,11 +1089,7 @@
 					return;
 				}
 				if (!loginResult.ok) {
-					const msg = String(loginResult.failMessage || '').trim();
-					alert(
-						msg ||
-							'Username not found, or the password is incorrect. Tip: administrator login is the exact username stored for this site (try admin_ / @Admin only on a brand-new roster with no staff yet).'
-					);
+					alert('User not found. Please check your credentials.');
 					return;
 				}
 			});

@@ -84,7 +84,7 @@
 
         const taken = new Set();
         const adminRaw = roster.adminAccount && typeof roster.adminAccount === 'object' ? roster.adminAccount.username : '';
-        const adminU = String(adminRaw || 'admin_').trim().toLowerCase();
+        const adminU = String(adminRaw || '@Admin').trim().toLowerCase();
         if (adminU) taken.add(adminU);
 
         teachers.forEach((name) => {
@@ -145,8 +145,10 @@
 
         if (roster.adminAccount && typeof roster.adminAccount === 'object' && roster.adminAccount.username) {
             const au = String(roster.adminAccount.username || '').trim();
-            if (au.includes('@')) {
-                const base = buildCanonicalUsernameBaseFromFullName('admin') || 'admin_';
+            if (au === '@Admin') {
+                /* Reserved built-in admin username — do not rewrite. */
+            } else if (au.includes('@')) {
+                const base = buildCanonicalUsernameBaseFromFullName('admin') || 'admin';
                 const neu = pickNextAvailableUsername(base, taken);
                 const auLc = lowerKey(au);
                 const neuLc = lowerKey(neu);
