@@ -2581,10 +2581,6 @@ input.student-reposition-modal-day {
     overflow: visible;
 }
 
-.add-modal-dialog.add-modal-dialog--expanded {
-    max-width: 65vw;
-}
-
 /* Add-student overlay card: overridden below 1440px by Media Queries; narrow defaults when those rules don't match */
 .student-modal-overlay .student-modal-card {
     position: relative;
@@ -9324,7 +9320,6 @@ header h1 {
 }
 
 @media (max-width: 1440px) {
-    .student-modal-overlay .student-modal-card,
     .edit-student-dialog,
     .add-modal-dialog,
     .add-modal.add-modal--school .add-modal-dialog,
@@ -9333,9 +9328,17 @@ header h1 {
         position: fixed;
         top: 2.75%;
         left: 22%;
-
-        height: 722.5px;
-        width: 1105px;
+        
+        height: 620px;
+        width: 1000px;
+    }
+    
+    .student-modal-overlay .student-modal-card {
+        position: fixed;
+        top: 2.75%;
+        left: 22%;
+        height: 720px;
+        width: 1100px;
     }
 }
 
