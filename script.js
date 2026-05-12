@@ -1491,6 +1491,38 @@ function timetableAuthLoginResponseFields(data) {
 }
 
 /**
+ * POST JSON to `/api/auth-login` without using `fetch` (some hosts / CSP / embedded WebViews mishandle fetch here).
+ * Resolves `{ ok, status, parsed }` or `null` on transport failure. Does not throw.
+ */
+function timetablePostAuthLoginRequest(loginUrl, body) {
+    return new Promise((resolve) => {
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', loginUrl, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.timeout = 60000;
+            xhr.onload = () => {
+                const status = xhr.status;
+                const ok = status >= 200 && status < 300;
+                let parsed = null;
+                try {
+                    const t = xhr.responseText || '';
+                    parsed = t ? JSON.parse(t) : null;
+                } catch {
+                    parsed = null;
+                }
+                resolve({ ok, status, parsed });
+            };
+            xhr.onerror = () => resolve(null);
+            xhr.ontimeout = () => resolve(null);
+            xhr.send(body);
+        } catch {
+            resolve(null);
+        }
+    });
+}
+
+/**
  * Re-issues a Bearer JWT from saved credentials. Does not throw and does not reject the returned Promise.
  * Matches `functions/api/auth-login.js`: only JSON 503 bodies that report missing secret/KV
  * flip legacy `timetable_api_auth_unconfigured`; other 5xx/503 behaves like transient (keep stored JWT).
@@ -1519,17 +1551,15 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             return;
         }
 
-        const res = await fetch(loginUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body
-        });
-        const rawJson = await res.json().catch(() => null);
+        const pack = await timetablePostAuthLoginRequest(loginUrl, body);
+        if (!pack) {
+            console.warn('API token refresh: network error or request aborted');
+            return;
+        }
+        const { ok: resOk, status: resStatus, parsed: rawJson } = pack;
         const { token, errorText, resolvedUsername: ruFromBody } = timetableAuthLoginResponseFields(rawJson);
 
-        if (res.status === 503) {
+        if (resStatus === 503) {
             const authStackUnconfigured =
                 errorText.includes('TIMETABLE_AUTH_SECRET') ||
                 errorText.includes('schedules_kv not configured');
@@ -1545,7 +1575,7 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             /* Generic 503 (proxy/CDN): treat like other 5xx below. */
         }
 
-        if (res.ok && token) {
+        if (resOk && token) {
             try {
                 sessionStorage.removeItem('timetable_api_auth_unconfigured');
             } catch {
@@ -1560,9 +1590,9 @@ async function refreshTimetableApiBearerTokenIfPossible() {
         }
 
         /* Transient or inconclusive: keep stored JWT and unconfigured flag — may recover. */
-        if ((res.status >= 500 && res.status <= 599) || res.status === 429 || res.status === 408) {
-            if (res.status >= 500) {
-                console.warn('API token refresh: server error', res.status);
+        if ((resStatus >= 500 && resStatus <= 599) || resStatus === 429 || resStatus === 408) {
+            if (resStatus >= 500) {
+                console.warn('API token refresh: server error', resStatus);
             }
             return;
         }
