@@ -6875,10 +6875,15 @@ function absoluteHttpApiUrl(pathnameAndSearch) {
     }
 }
 
-// Polling interval for checking updates (in milliseconds)
-const POLL_INTERVAL = 2000; // 2 seconds - faster polling for better sync
+/**
+ * Cloudflare KV free tier has a low daily read cap (~100k/day). Each poll hits `/api/schedules` (3 KV reads)
+ * and we poll roster separately. Keep intervals conservative to avoid "KV get() limit exceeded for the day."
+ */
+const POLL_INTERVAL = 10000;
+/** Roster changes less often than schedule cells; polling it every schedule tick doubled KV reads. */
+const ROSTER_POLL_INTERVAL_MS = 20000;
 /** Class-report uploads KV sync runs on its own interval so feed updates feel snappier than schedule polling. */
-const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 600;
+const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 8000;
 
 // Track if we're currently saving
 let isSaving = false;
@@ -6893,6 +6898,7 @@ let schedulesCloudSavePending = false;
 
 // Polling timer for checking updates
 let pollTimer = null;
+let rosterPollTimer = null;
 let classReportUploadCloudPollTimer = null;
 
 // Track if status update is pending
@@ -7255,6 +7261,10 @@ function startPolling() {
         clearInterval(pollTimer);
         pollTimer = null;
     }
+    if (rosterPollTimer) {
+        clearInterval(rosterPollTimer);
+        rosterPollTimer = null;
+    }
     if (classReportUploadCloudPollTimer) {
         clearInterval(classReportUploadCloudPollTimer);
         classReportUploadCloudPollTimer = null;
@@ -7263,6 +7273,8 @@ function startPolling() {
     console.log(
         'Starting polling: schedules every',
         POLL_INTERVAL / 1000,
+        's, roster every',
+        ROSTER_POLL_INTERVAL_MS / 1000,
         's, class-report uploads every',
         CLASS_REPORT_UPLOAD_CLOUD_POLL_MS / 1000,
         's'
@@ -7345,8 +7357,11 @@ function startPolling() {
                 console.error('Polling error:', error);
             }
         }
-        await pollRosterUpdates();
     }, POLL_INTERVAL);
+
+    rosterPollTimer = window.setInterval(() => {
+        void pollRosterUpdates();
+    }, ROSTER_POLL_INTERVAL_MS);
 
     classReportUploadCloudPollTimer = window.setInterval(() => {
         void pollClassReportUploadsFromCloud();
@@ -15382,6 +15397,9 @@ window.addEventListener('beforeunload', () => {
     // Clean up polling
     if (pollTimer) {
         clearInterval(pollTimer);
+    }
+    if (rosterPollTimer) {
+        clearInterval(rosterPollTimer);
     }
     if (classReportUploadCloudPollTimer) {
         clearInterval(classReportUploadCloudPollTimer);
