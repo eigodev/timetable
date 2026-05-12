@@ -30,6 +30,8 @@ const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
 /** Bumped in localStorage on logout so other tabs/windows receive `storage` and sign out too. */
 const LOGOUT_BROADCAST_STORAGE_KEY = 'timetable_logout_broadcast_ts';
+/** Session: auto popup for pending data-share invites was already shown for these link ids. */
+const SUPERVISION_NOTICE_SESSION_KEY = 'timetable_supervision_invite_notice_shown_ids';
 const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
 const DEFAULT_ADMIN_USERNAME = 'admin_';
 const DEFAULT_ADMIN_PASSWORD = '@Admin';
@@ -263,6 +265,18 @@ function normSchoolTitleKeyForSupervision(title) {
     return String(title || '').trim().toLowerCase();
 }
 
+/** Align with server `supervision-links.js` aliases: accepted → active, cancelled → revoked. */
+function normalizeSupervisionStatusClient(s) {
+    const x = String(s || '').trim();
+    if (x === 'accepted') return 'active';
+    if (x === 'cancelled') return 'revoked';
+    return x;
+}
+
+function isSupervisionLinkActiveClient(l) {
+    return normalizeSupervisionStatusClient(l?.status) === 'active';
+}
+
 /**
  * Supervisee teachers linked by active class-supervisor supervision (accepted + school scope on the link).
  */
@@ -272,7 +286,7 @@ function getClassSupervisorActiveSuperviseeTeacherNames() {
     const supLc = sup.toLowerCase();
     const out = new Set();
     supervisionLinks.forEach((l) => {
-        if (String(l?.status || '') !== 'active') return;
+        if (!isSupervisionLinkActiveClient(l)) return;
         if (String(l?.superiorAppRole || '').trim() !== 'class-supervisor') return;
         if (String(l?.superiorProfile || '').trim().toLowerCase() !== supLc) return;
         const tp = String(l?.teacherProfile || '').trim();
@@ -291,7 +305,7 @@ function getStudentNamesVisibleToClassSupervisor() {
     const supLc = sup.toLowerCase();
     const visible = new Set();
     supervisionLinks.forEach((link) => {
-        if (String(link?.status || '') !== 'active') return;
+        if (!isSupervisionLinkActiveClient(link)) return;
         if (String(link?.superiorAppRole || '').trim() !== 'class-supervisor') return;
         if (String(link?.superiorProfile || '').trim().toLowerCase() !== supLc) return;
         const teacherProf = canonicalTeacherNameOnRoster(String(link?.teacherProfile || '').trim());
@@ -539,6 +553,13 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const supervisionPendingNoticeModal = document.getElementById('supervisionPendingNoticeModal');
+            if (supervisionPendingNoticeModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeSupervisionPendingNoticeModal();
+                return;
+            }
+
             const supervisionInviteModal = document.getElementById('supervisionInviteModal');
             if (supervisionInviteModal?.classList.contains('is-open')) {
                 e.preventDefault();
@@ -708,6 +729,7 @@ function setupGlobalPointerDownToDismissOverlays() {
             const modalDismissOrder = [
                 { id: 'googleMeetLinksLayer', close: closeGoogleMeetLinksLayer },
                 { id: 'studentRepositionModal', close: closeStudentRepositionModal },
+                { id: 'supervisionPendingNoticeModal', close: closeSupervisionPendingNoticeModal },
                 { id: 'supervisionInviteModal', close: closeSupervisionInviteModal },
                 { id: 'supervisionModal', close: closeSupervisionModal },
                 { id: 'appMessageModal', close: closeAppMessageModal },
@@ -1396,7 +1418,10 @@ async function refreshTimetableApiBearerTokenIfPossible() {
     const loginUrl = absoluteHttpApiUrl('/api/auth-login');
     if (!loginUrl) return;
     const creds = loadSavedLoginCredentials();
-    if (!creds?.username || !creds.password) return;
+    if (!creds) return;
+    const username = resolveAuthLoginTyped(String(creds.username || '').trim());
+    const password = sanitizeTypedLoginPassword(creds.password);
+    if (!username || !password) return;
     try {
         const res = await fetch(loginUrl, {
             method: 'POST',
@@ -1404,8 +1429,8 @@ async function refreshTimetableApiBearerTokenIfPossible() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                username: creds.username,
-                password: creds.password
+                username,
+                password
             })
         });
         const data = await res.json().catch(() => null);
@@ -1428,6 +1453,10 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             return;
         }
         persistTimetableApiBearerToken(data.token);
+        const ru = String(data.resolvedUsername || username || '').trim();
+        if (ru && password) {
+            saveLoginCredentials(ru, password);
+        }
     } catch (e) {
         console.warn('API token refresh:', e);
     }
@@ -1447,7 +1476,7 @@ function applyTeacherDataIsolationInMemory() {
     if (isGateStaffAccountSession()) {
         const supLc = tk.toLowerCase();
         supervisionLinks.forEach((row) => {
-            if (String(row?.status || '') !== 'active') return;
+            if (!isSupervisionLinkActiveClient(row)) return;
             if (String(row?.superiorProfile || '').trim().toLowerCase() !== supLc) return;
             if (
                 getGateSessionAppRole() === 'class-supervisor' &&
@@ -6142,7 +6171,7 @@ function getActiveSupervisionSuperiorListsForTeacher() {
     }
     const me = String(loggedInTeacherName || '').trim().toLowerCase();
     supervisionLinks.forEach((row) => {
-        if (String(row?.status || '') !== 'active') return;
+        if (!isSupervisionLinkActiveClient(row)) return;
         if (String(row?.teacherProfile || '').trim().toLowerCase() !== me) return;
         const sup = String(row?.superiorProfile || '').trim();
         if (!sup) return;
@@ -6168,7 +6197,7 @@ function shouldMaskSuperviseeScheduleAvailabilityOnly() {
     const teachLc = ct.toLowerCase();
     return supervisionLinks.some(
         (l) =>
-            String(l?.status || '') === 'active' &&
+            isSupervisionLinkActiveClient(l) &&
             String(l?.superiorProfile || '')
                 .trim()
                 .toLowerCase() === supLc &&
@@ -6214,6 +6243,110 @@ function getSchoolTitlesForSupervisionShare() {
 }
 
 let supervisionModalLinkId = '';
+
+let supervisionPendingNoticeLinkRef = null;
+
+function getSupervisionNoticeShownIdSet() {
+    try {
+        const raw = sessionStorage.getItem(SUPERVISION_NOTICE_SESSION_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(arr) ? arr.map((x) => String(x || '').trim()).filter(Boolean) : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function markSupervisionNoticeShownForSession(linkId) {
+    const id = String(linkId || '').trim();
+    if (!id) return;
+    const s = getSupervisionNoticeShownIdSet();
+    s.add(id);
+    try {
+        sessionStorage.setItem(SUPERVISION_NOTICE_SESSION_KEY, JSON.stringify([...s]));
+    } catch {
+        /* ignore */
+    }
+}
+
+function formatSupervisionInviterRoleTitle(superiorAppRole) {
+    const r = String(superiorAppRole || '').trim();
+    if (r === 'class-supervisor') return 'Class Supervisor';
+    if (r === 'coordinator') return 'Coordinator';
+    return 'Supervisor';
+}
+
+function formatSupervisionPendingNoticeBody(link) {
+    const roleTitle = formatSupervisionInviterRoleTitle(link?.superiorAppRole);
+    const name = String(link?.superiorProfile || '').trim() || 'Supervisor';
+    return `${roleTitle} ${name} is requesting access to your school data. Do you want to share one of your schools?`;
+}
+
+function closeSupervisionPendingNoticeModal() {
+    const modal = document.getElementById('supervisionPendingNoticeModal');
+    if (modal?.classList.contains('is-open')) {
+        closeModalWithAnimation(modal);
+    } else if (modal) {
+        modal.classList.remove('is-open', 'is-closing');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    supervisionPendingNoticeLinkRef = null;
+}
+
+function openSupervisionPendingNoticeModal(link) {
+    setupSupervisionPendingNoticeModal();
+    const modal = document.getElementById('supervisionPendingNoticeModal');
+    const body = document.getElementById('supervisionPendingNoticeModalBody');
+    if (!modal || !body || !link) return;
+    supervisionPendingNoticeLinkRef = link;
+    body.textContent = formatSupervisionPendingNoticeBody(link);
+    openModalWithAnimation(modal);
+}
+
+function setupSupervisionPendingNoticeModal() {
+    if (document.body.dataset.supervisionPendingNoticeModalBound === '1') return;
+    document.body.dataset.supervisionPendingNoticeModalBound = '1';
+    const modal = document.getElementById('supervisionPendingNoticeModal');
+    const backdrop = document.getElementById('supervisionPendingNoticeModalBackdrop');
+    const decline = document.getElementById('supervisionPendingNoticeDeclineBtn');
+    const accept = document.getElementById('supervisionPendingNoticeAcceptBtn');
+    if (!modal || !backdrop || !decline || !accept) return;
+    backdrop.addEventListener('click', () => closeSupervisionPendingNoticeModal());
+    decline.addEventListener('click', () => {
+        const l = supervisionPendingNoticeLinkRef;
+        const id = l?.id ? String(l.id).trim() : '';
+        closeSupervisionPendingNoticeModal();
+        if (id) void postSupervisionRespond(id, 'decline');
+    });
+    accept.addEventListener('click', () => {
+        const l = supervisionPendingNoticeLinkRef;
+        if (!l) return;
+        closeSupervisionPendingNoticeModal();
+        openSupervisionAcceptModal(l);
+    });
+}
+
+function maybeAutoShowSupervisionPendingNotice() {
+    if (!isTeacherLoggedIn || loggedInStudentFullName || isGateStaffAccountSession()) return;
+    const modal = document.getElementById('supervisionPendingNoticeModal');
+    if (!modal) return;
+    if (modal.classList.contains('is-open')) return;
+    if (document.getElementById('supervisionModal')?.classList.contains('is-open')) return;
+    if (document.getElementById('supervisionInviteModal')?.classList.contains('is-open')) return;
+    if (!getTimetableApiAuthHeaders().Authorization) return;
+
+    const meLc = String(loggedInTeacherName || '').trim().toLowerCase();
+    const pending = supervisionLinks.filter(
+        (l) => normalizeSupervisionStatusClient(l?.status) === 'pending' && String(l?.teacherProfile || '').trim().toLowerCase() === meLc
+    );
+    if (!pending.length) return;
+
+    const shown = getSupervisionNoticeShownIdSet();
+    const next = pending.find((l) => l && String(l.id || '').trim() && !shown.has(String(l.id).trim()));
+    if (!next) return;
+
+    markSupervisionNoticeShownForSession(next.id);
+    openSupervisionPendingNoticeModal(next);
+}
 
 function closeSupervisionModal() {
     const modal = document.getElementById('supervisionModal');
@@ -6273,6 +6406,9 @@ function setupSupervisionInviteModal() {
 
 async function postSupervisionInvite(teacherUsername) {
     await refreshTimetableApiBearerTokenIfPossible();
+    if (!getTimetableApiAuthHeaders().Authorization) {
+        await refreshTimetableApiBearerTokenIfPossible();
+    }
     const sendBtn = document.getElementById('supervisionInviteModalSendBtn');
     if (sendBtn) sendBtn.disabled = true;
     try {
@@ -6288,6 +6424,10 @@ async function postSupervisionInvite(teacherUsername) {
         if (!headers.Authorization) {
             let msg =
                 'No API token yet. Sign out, open the login page on this same site (not as a file), sign in again, then try Send.';
+            if (loadSavedLoginCredentials()) {
+                msg =
+                    'Could not obtain an API token (login may be out of date). Sign out, sign in again on this site, then try Send.';
+            }
             try {
                 if (sessionStorage.getItem('timetable_api_auth_unconfigured') === '1') {
                     msg =
@@ -6341,14 +6481,13 @@ function setupSupervisionModal() {
         const id = String(supervisionModalLinkId || '').trim();
         if (!id) return;
         const fieldset = document.getElementById('supervisionSchoolFieldset');
-        const checked = fieldset
-            ? [...fieldset.querySelectorAll('input[type="checkbox"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean)
-            : [];
-        if (checked.length === 0) {
-            showAppMessage('Select at least one school to share.');
+        const picked = fieldset?.querySelector('input[type="radio"][name="supervisionSchoolChoice"]:checked');
+        const school = picked ? String(picked.value || '').trim() : '';
+        if (!school) {
+            showAppMessage('Select one school to share.');
             return;
         }
-        void postSupervisionRespond(id, 'accept', checked);
+        void postSupervisionRespond(id, 'accept', [school]);
     });
 }
 
@@ -6359,10 +6498,10 @@ function openSupervisionAcceptModal(link) {
     const hint = document.getElementById('supervisionModalHint');
     if (!modal || !fieldset || !hint) return;
     supervisionModalLinkId = String(link?.id || '').trim();
-    hint.textContent = `Choose which school data ${String(link?.superiorProfile || 'this supervisor')} may see.`;
+    hint.textContent = `${formatSupervisionInviterRoleTitle(link?.superiorAppRole)} ${String(link?.superiorProfile || '').trim() || 'Supervisor'} — choose one school to share.`;
     fieldset.innerHTML = '';
     const legend = document.createElement('legend');
-    legend.textContent = 'Schools to share';
+    legend.textContent = 'School to share (choose one)';
     fieldset.appendChild(legend);
     const schools = getSchoolTitlesForSupervisionShare();
     if (schools.length === 0) {
@@ -6371,15 +6510,17 @@ function openSupervisionAcceptModal(link) {
         p.textContent = 'You have no assigned students with a school. Assign students first.';
         fieldset.appendChild(p);
     }
-    schools.forEach((sch) => {
+    schools.forEach((sch, i) => {
         const safeId = `sup-sch-${Math.random().toString(36).slice(2, 10)}`;
         const lbl = document.createElement('label');
         lbl.className = 'supervision-school-label';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = sch;
-        cb.id = safeId;
-        lbl.appendChild(cb);
+        const rb = document.createElement('input');
+        rb.type = 'radio';
+        rb.name = 'supervisionSchoolChoice';
+        rb.value = sch;
+        rb.id = safeId;
+        if (i === 0) rb.checked = true;
+        lbl.appendChild(rb);
         lbl.appendChild(document.createTextNode(` ${sch}`));
         fieldset.appendChild(lbl);
     });
@@ -6389,6 +6530,9 @@ function openSupervisionAcceptModal(link) {
 
 async function postSupervisionRespond(linkId, action, schoolTitles) {
     await refreshTimetableApiBearerTokenIfPossible();
+    if (!getTimetableApiAuthHeaders().Authorization) {
+        await refreshTimetableApiBearerTokenIfPossible();
+    }
     const url = absoluteHttpApiUrl('/api/supervision-respond');
     if (!url) {
         showAppMessage('Serve the app over HTTPS to respond to invites.');
@@ -6401,6 +6545,10 @@ async function postSupervisionRespond(linkId, action, schoolTitles) {
     if (!headers.Authorization) {
         let msg =
             'No API token yet. Sign out, open the login page on this same site (not as a file), sign in again, then try again.';
+        if (loadSavedLoginCredentials()) {
+            msg =
+                'Could not obtain an API token (login may be out of date). Sign out, sign in again on this site, then try again.';
+        }
         try {
             if (sessionStorage.getItem('timetable_api_auth_unconfigured') === '1') {
                 msg =
@@ -6459,7 +6607,7 @@ function renderTeacherSupervisionPendingInTeachersPane(teachersInner) {
 
     const meLc = String(loggedInTeacherName || '').trim().toLowerCase();
     const pendingForTeacher = supervisionLinks.filter(
-        (l) => String(l?.status) === 'pending' && String(l?.teacherProfile || '').trim().toLowerCase() === meLc
+        (l) => normalizeSupervisionStatusClient(l?.status) === 'pending' && String(l?.teacherProfile || '').trim().toLowerCase() === meLc
     );
     if (!pendingForTeacher.length) return;
 
@@ -7242,7 +7390,7 @@ function getSchedulesPayloadForCloudPost() {
     const allowed = new Set();
     if (self) allowed.add(self);
     supervisionLinks.forEach((l) => {
-        if (String(l?.status || '') !== 'active') return;
+        if (!isSupervisionLinkActiveClient(l)) return;
         if (String(l?.superiorProfile || '').trim().toLowerCase() !== self.toLowerCase()) return;
         if (String(l?.superiorAppRole || '').trim() !== 'class-supervisor') return;
         const tp = String(l?.teacherProfile || '').trim();
@@ -8329,6 +8477,7 @@ function renderSidebar() {
 
     populateClassReportStudentLists(classReportInner);
     refreshAdminPanelIfShowingOverview();
+    maybeAutoShowSupervisionPendingNotice();
 }
 
 function populateClassReportStudentLists(container) {
@@ -15159,6 +15308,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupAppMessageModal();
     setupSupervisionModal();
     setupSupervisionInviteModal();
+    setupSupervisionPendingNoticeModal();
     setupStudentRepositionModal();
     setupGlobalEscapeToDismissOverlays();
     setupGlobalPointerDownToDismissOverlays();

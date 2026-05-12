@@ -953,7 +953,19 @@
             <input type="text" id="supervisionInviteUsernameInput" class="supervision-invite-modal-input" autocomplete="username" spellcheck="false" autocapitalize="none" />
             <div class="supervision-modal-actions">
                 <button type="button" id="supervisionInviteModalCancelBtn" class="supervision-modal-btn">Cancel</button>
-                <button type="button" id="supervisionInviteModalSendBtn" class="supervision-modal-btn supervision-modal-btn--primary">Send invitation</button>
+                <button type="button" id="supervisionInviteModalSendBtn" class="supervision-modal-btn supervision-modal-btn--primary">Send Invitation</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="supervisionPendingNoticeModal" class="supervision-modal" aria-hidden="true">
+        <div class="supervision-modal-backdrop" id="supervisionPendingNoticeModalBackdrop"></div>
+        <div class="supervision-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="supervisionPendingNoticeModalTitle">
+            <h3 id="supervisionPendingNoticeModalTitle" class="supervision-modal-title">Data sharing request</h3>
+            <p id="supervisionPendingNoticeModalBody" class="supervision-modal-hint"></p>
+            <div class="supervision-modal-actions">
+                <button type="button" id="supervisionPendingNoticeDeclineBtn" class="supervision-modal-btn">Decline</button>
+                <button type="button" id="supervisionPendingNoticeAcceptBtn" class="supervision-modal-btn supervision-modal-btn--primary">Accept</button>
             </div>
         </div>
     </div>

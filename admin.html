@@ -599,7 +599,12 @@
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ username: usernameTyped, password: passwordTyped })
+                        body: JSON.stringify({
+                            username: String(usernameTyped || '').trim(),
+                            password: String(passwordTyped || '')
+                                .replace(/\u200b|\uFEFF|\u2060/g, '')
+                                .trim()
+                        })
                     });
                     const data = await res.json().catch(() => null);
                     if (res.status === 503) {

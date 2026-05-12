@@ -1,6 +1,6 @@
-/** @typedef {'pending' | 'active' | 'revoked' | 'declined'} SupervisionStatus */
+/** @typedef {'pending' | 'active' | 'declined' | 'revoked' | 'expired'} SupervisionStatus */
 
-export const SUPERVISION_STATUSES = /** @type {const} */ (['pending', 'active', 'revoked', 'declined']);
+export const SUPERVISION_STATUSES = /** @type {const} */ (['pending', 'active', 'declined', 'revoked', 'expired']);
 
 export const SUPERVISOR_INVITER_APP_ROLES = /** @type {const} */ (['coordinator', 'class-supervisor']);
 
@@ -15,16 +15,39 @@ export function isSupervisorInviterAppRole(role) {
 }
 
 /**
- * Status transitions: pending → active | declined; active → revoked; declined/revoked terminal.
- * @param {SupervisionStatus} from
- * @param {SupervisionStatus} to
+ * Canonical status in KV: pending | active | declined | revoked | expired.
+ * Aliases: accepted → active, cancelled → revoked (normalized on read/write).
+ */
+export function normalizeSupervisionStatus(raw) {
+  const s = String(raw || '').trim();
+  if (s === 'accepted') return 'active';
+  if (s === 'cancelled') return 'revoked';
+  return s;
+}
+
+export function isActiveSupervisionStatus(status) {
+  return normalizeSupervisionStatus(status) === 'active';
+}
+
+export function isPendingSupervisionInviteStatus(status) {
+  return normalizeSupervisionStatus(status) === 'pending';
+}
+
+/** Blocks creating a duplicate invite (pending or active share). */
+export function blocksDuplicateSupervisionInviteStatus(status) {
+  const n = normalizeSupervisionStatus(status);
+  return n === 'pending' || n === 'active';
+}
+
+/**
+ * Status transitions.
  */
 export function isValidSupervisionStatusTransition(from, to) {
-  const a = String(from || '').trim();
-  const b = String(to || '').trim();
+  const a = normalizeSupervisionStatus(from);
+  const b = normalizeSupervisionStatus(to);
   if (!SUPERVISION_STATUSES.includes(a) || !SUPERVISION_STATUSES.includes(b)) return false;
-  if (a === 'pending') return b === 'active' || b === 'declined';
-  if (a === 'active') return b === 'revoked';
+  if (a === 'pending') return b === 'active' || b === 'declined' || b === 'revoked' || b === 'expired';
+  if (a === 'active') return b === 'revoked' || b === 'expired';
   return false;
 }
 
@@ -38,21 +61,23 @@ export function coerceSupervisionLink(raw) {
   const superiorProfile = String(raw.superiorProfile || '').trim();
   const superiorAppRole = String(raw.superiorAppRole || '').trim();
   const teacherProfile = String(raw.teacherProfile || '').trim();
-  const status = String(raw.status || '').trim();
+  const statusNorm = normalizeSupervisionStatus(raw.status);
   const schoolTitles = Array.isArray(raw.schoolTitles) ? raw.schoolTitles.map((s) => String(s || '').trim()).filter(Boolean) : [];
-  if (!id || !superiorProfile || !teacherProfile || !SUPERVISION_STATUSES.includes(status)) return null;
+  if (!id || !superiorProfile || !teacherProfile || !SUPERVISION_STATUSES.includes(statusNorm)) return null;
   if (!INVITER_SET.has(superiorAppRole)) return null;
   const createdAt = String(raw.createdAt || '').trim();
   const respondedAt = String(raw.respondedAt || '').trim();
+  const expiresAt = String(raw.expiresAt || '').trim();
   return {
     id,
     superiorProfile,
     superiorAppRole,
     teacherProfile,
     schoolTitles,
-    status,
+    status: statusNorm,
     ...(createdAt ? { createdAt } : {}),
     ...(respondedAt ? { respondedAt } : {}),
+    ...(expiresAt ? { expiresAt } : {}),
   };
 }
 
@@ -69,6 +94,17 @@ export function getSupervisionLinksArray(roster) {
     if (c) out.push(c);
   }
   return out;
+}
+
+/**
+ * Pending invite past expiresAt is treated as expired (checks stored pending row only).
+ */
+export function isSupervisionInvitePastExpiry(link) {
+  if (!link || normalizeSupervisionStatus(link.status) !== 'pending') return false;
+  const exp = String(link.expiresAt || '').trim();
+  if (!exp) return false;
+  const t = Date.parse(exp);
+  return Number.isFinite(t) && Date.now() > t;
 }
 
 /**
@@ -98,7 +134,7 @@ export function studentsVisibleViaSupervision(roster, superiorProfile) {
 
   for (const link of getSupervisionLinksArray(roster)) {
     if (String(link.superiorProfile || '').trim() !== sup) continue;
-    if (link.status !== 'active') continue;
+    if (!isActiveSupervisionStatus(link.status)) continue;
     const teacherProf = String(link.teacherProfile || '').trim();
     const schoolKeys = new Set((link.schoolTitles || []).map(normSchoolTitleKey));
     if (!teacherProf || schoolKeys.size === 0) continue;
@@ -125,7 +161,7 @@ export function supervisedTeacherProfilesForSuperior(roster, superiorProfile) {
   if (!sup) return out;
   for (const link of getSupervisionLinksArray(roster)) {
     if (String(link.superiorProfile || '').trim() !== sup) continue;
-    if (link.status !== 'active') continue;
+    if (!isActiveSupervisionStatus(link.status)) continue;
     const tp = String(link.teacherProfile || '').trim();
     if (tp) out.add(tp);
   }
@@ -144,7 +180,7 @@ export function supervisedTeacherProfilesForClassSupervisor(roster, superiorProf
   if (!sup) return out;
   for (const link of getSupervisionLinksArray(roster)) {
     if (String(link.superiorProfile || '').trim() !== sup) continue;
-    if (link.status !== 'active') continue;
+    if (!isActiveSupervisionStatus(link.status)) continue;
     if (String(link.superiorAppRole || '').trim() !== 'class-supervisor') continue;
     const tp = String(link.teacherProfile || '').trim();
     if (tp) out.add(tp);

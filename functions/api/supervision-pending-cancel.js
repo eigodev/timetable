@@ -1,12 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
-import {
-  coerceSupervisionLink,
-  isValidSupervisionStatusTransition,
-  normSchoolTitleKey,
-  isSupervisionInvitePastExpiry,
-} from '../lib/supervision-links.js';
-import { studentsAssignedToTeacher } from '../lib/roster-scope.js';
+import { coerceSupervisionLink, getSupervisionLinksArray, isSupervisorInviterAppRole } from '../lib/supervision-links.js';
 
 const corsHeaders = (extra = {}) =>
   ({
@@ -15,19 +9,6 @@ const corsHeaders = (extra = {}) =>
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     ...extra,
   });
-
-/** Schools the teacher may grant: from assigned students' school labels. */
-function permittedSchoolTitlesForTeacher(roster, teacherProfile) {
-  const tp = String(teacherProfile || '').trim();
-  const out = new Set();
-  if (!tp) return out;
-  const schools = roster?.studentSchools && typeof roster.studentSchools === 'object' ? roster.studentSchools : {};
-  for (const stu of studentsAssignedToTeacher(roster, tp)) {
-    const sch = String(schools[stu] || '').trim();
-    if (sch) out.add(sch);
-  }
-  return out;
-}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -71,9 +52,10 @@ export async function onRequest(context) {
 
   const role = auth.payload.role;
   const profile = String(auth.payload.profile || '').trim();
+  const gateAppRole = String(auth.payload.gateAppRole || '').trim();
 
-  if (role !== 'teacher') {
-    return new Response(JSON.stringify({ success: false, error: 'Only teachers may respond' }), {
+  if (role !== 'gate' || !isSupervisorInviterAppRole(gateAppRole)) {
+    return new Response(JSON.stringify({ success: false, error: 'Only coordinators and class supervisors may cancel' }), {
       status: 403,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
     });
@@ -85,13 +67,9 @@ export async function onRequest(context) {
   } catch {
     body = null;
   }
-
   const linkId = String(body?.linkId || '').trim();
-  const action = String(body?.action || '').trim().toLowerCase();
-  const schoolTitlesIn = Array.isArray(body?.schoolTitles) ? body.schoolTitles : null;
-
-  if (!linkId || (action !== 'accept' && action !== 'decline')) {
-    return new Response(JSON.stringify({ success: false, error: 'linkId and action accept|decline required' }), {
+  if (!linkId) {
+    return new Response(JSON.stringify({ success: false, error: 'linkId required' }), {
       status: 400,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
     });
@@ -115,7 +93,7 @@ export async function onRequest(context) {
   }
 
   const cur = coerceSupervisionLink(rawList[idx]);
-  if (!cur || String(cur.teacherProfile || '').trim() !== profile) {
+  if (!cur || String(cur.superiorProfile || '').trim() !== profile) {
     return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
       status: 403,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
@@ -123,66 +101,18 @@ export async function onRequest(context) {
   }
 
   if (cur.status !== 'pending') {
-    return new Response(JSON.stringify({ success: false, error: 'This invite is no longer pending' }), {
+    return new Response(JSON.stringify({ success: false, error: 'Only pending invitations can be cancelled' }), {
       status: 409,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
     });
-  }
-
-  if (isSupervisionInvitePastExpiry(cur)) {
-    const ts = new Date().toISOString();
-    const expiredPatch = {
-      ...rawList[idx],
-      status: 'expired',
-      respondedAt: ts,
-    };
-    const expiredCoerced = coerceSupervisionLink(expiredPatch);
-    const nextExpired = JSON.parse(JSON.stringify(roster));
-    const nextLinksExp = Array.isArray(nextExpired.supervisionLinks) ? [...nextExpired.supervisionLinks] : [];
-    nextLinksExp[idx] = expiredCoerced || expiredPatch;
-    nextExpired.supervisionLinks = nextLinksExp;
-    await KV.put('all_roster', JSON.stringify(nextExpired));
-    await KV.put('roster_last_updated', ts);
-    return new Response(JSON.stringify({ success: false, error: 'This invitation has expired' }), {
-      status: 409,
-      headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-    });
-  }
-
-  const nextStatus = action === 'accept' ? 'active' : 'declined';
-  if (!isValidSupervisionStatusTransition('pending', nextStatus)) {
-    return new Response(JSON.stringify({ success: false, error: 'Invalid transition' }), {
-      status: 400,
-      headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-    });
-  }
-
-  let schoolTitles = [];
-  if (action === 'accept') {
-    if (!schoolTitlesIn || schoolTitlesIn.length !== 1) {
-      return new Response(JSON.stringify({ success: false, error: 'Select exactly one school to share' }), {
-        status: 400,
-        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-      });
-    }
-    const permitted = permittedSchoolTitlesForTeacher(roster, profile);
-    const permittedLc = new Set([...permitted].map(normSchoolTitleKey));
-    schoolTitles = schoolTitlesIn.map((s) => String(s || '').trim()).filter(Boolean);
-    const ok = schoolTitles.length === 1 && schoolTitles.every((t) => permittedLc.has(normSchoolTitleKey(t)));
-    if (!ok) {
-      return new Response(JSON.stringify({ success: false, error: 'That school is not one you own for your assigned students' }), {
-        status: 400,
-        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-      });
-    }
   }
 
   const respondedAt = new Date().toISOString();
   const updated = {
     ...rawList[idx],
-    status: nextStatus,
-    ...(action === 'accept' ? { schoolTitles } : {}),
+    status: 'revoked',
     respondedAt,
+    cancelledBySuperior: true,
   };
 
   const coerced = coerceSupervisionLink(updated);

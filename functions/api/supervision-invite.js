@@ -4,6 +4,7 @@ import {
   coerceSupervisionLink,
   isSupervisorInviterAppRole,
   getSupervisionLinksArray,
+  blocksDuplicateSupervisionInviteStatus,
 } from '../lib/supervision-links.js';
 
 const corsHeaders = (extra = {}) =>
@@ -30,7 +31,7 @@ function hasBlockingLink(links, superiorProfile, teacherProfile) {
   for (const row of links) {
     if (String(row.superiorProfile || '').trim() !== sup) continue;
     if (String(row.teacherProfile || '').trim() !== teach) continue;
-    if (row.status === 'pending' || row.status === 'active') return true;
+    if (blocksDuplicateSupervisionInviteStatus(row.status)) return true;
   }
   return false;
 }
@@ -96,6 +97,13 @@ export async function onRequest(context) {
   const teacherProfileRaw = String(body?.teacherProfile || '').trim();
   const teacherUsername = String(body?.teacherUsername || '').trim();
 
+  if (!teacherProfileRaw && !teacherUsername) {
+    return new Response(JSON.stringify({ success: false, error: 'Teacher username is required' }), {
+      status: 400,
+      headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+    });
+  }
+
   const roster = (await KV.get('all_roster', 'json')) || {};
   if (!roster || typeof roster !== 'object') {
     return new Response(JSON.stringify({ success: false, error: 'Roster not found' }), {
@@ -110,10 +118,13 @@ export async function onRequest(context) {
   }
 
   if (!teacherProfile) {
-    return new Response(JSON.stringify({ success: false, error: 'Teacher profile or teacherUsername required' }), {
-      status: 400,
-      headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ success: false, error: 'No teacher account uses that username. Check spelling and try again.' }),
+      {
+        status: 404,
+        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   const teachers = Array.isArray(roster.teachers) ? roster.teachers : [];
@@ -141,6 +152,7 @@ export async function onRequest(context) {
 
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const row = coerceSupervisionLink({
     id,
     superiorProfile: profile,
@@ -149,6 +161,7 @@ export async function onRequest(context) {
     schoolTitles: [],
     status: 'pending',
     createdAt,
+    expiresAt,
   });
 
   const next = JSON.parse(JSON.stringify(roster));
