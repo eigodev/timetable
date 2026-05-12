@@ -82,7 +82,8 @@ body {
 .sidebar-header-row {
     display: flex;
     align-items: center;
-    justify-content: space-evenly;
+    justify-content: center;
+    gap: 10px;
 }
 
 /* Logged-out: keep header band height but hide avatar + name/role */
@@ -199,9 +200,9 @@ body {
 }
 
 .sidebar-profile-avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    border-radius: 30%;
     background: linear-gradient(145deg, #f8fbff 0%, #d9e2ff 100%);
     color: #2f3da0;
     font-size: 1rem;
@@ -1339,7 +1340,8 @@ body {
     position: fixed;
     inset: 0;
     /* Above .student-modal-overlay (z-index 9999) so save/validation errors are visible while add-student is open */
-    z-index: 12000;
+    /* Above supervision modals (12000) so notices appear on top when an invite dialog is open */
+    z-index: 12200;
     align-items: center;
     justify-content: center;
     padding: 20px;
@@ -1391,7 +1393,8 @@ body {
 .delete-school-modal.is-open .delete-school-modal-backdrop,
 .class-topic-modal.is-open .class-topic-modal-backdrop,
 .app-message-modal.is-open .app-message-modal-backdrop,
-.student-reposition-modal.is-open .app-message-modal-backdrop {
+.student-reposition-modal.is-open .app-message-modal-backdrop,
+.supervision-modal.is-open .supervision-modal-backdrop {
     animation: modal-backdrop-in 0.28s ease-out both;
 }
 
@@ -1401,7 +1404,8 @@ body {
 .delete-school-modal.is-open .delete-school-dialog,
 .class-topic-modal.is-open .class-topic-dialog,
 .app-message-modal.is-open .app-message-dialog,
-.student-reposition-modal.is-open .app-message-dialog {
+.student-reposition-modal.is-open .app-message-dialog,
+.supervision-modal.is-open .supervision-modal-dialog {
     animation: modal-popup-in 220ms ease both;
 }
 
@@ -1412,7 +1416,8 @@ body {
 .delete-school-modal.is-closing .delete-school-modal-backdrop,
 .class-topic-modal.is-closing .class-topic-modal-backdrop,
 .app-message-modal.is-closing .app-message-modal-backdrop,
-.student-reposition-modal.is-closing .app-message-modal-backdrop {
+.student-reposition-modal.is-closing .app-message-modal-backdrop,
+.supervision-modal.is-closing .supervision-modal-backdrop {
     animation: modal-backdrop-out 0.22s ease-in both;
 }
 
@@ -1423,7 +1428,8 @@ body {
 .delete-school-modal.is-closing .delete-school-dialog,
 .class-topic-modal.is-closing .class-topic-dialog,
 .app-message-modal.is-closing .app-message-dialog,
-.student-reposition-modal.is-closing .app-message-dialog {
+.student-reposition-modal.is-closing .app-message-dialog,
+.supervision-modal.is-closing .supervision-modal-dialog {
     animation: modal-popup-out 220ms ease both;
 }
 
@@ -1438,7 +1444,8 @@ body {
 .school-settings-modal.is-closing,
 .class-topic-modal.is-closing,
 .app-message-modal.is-closing,
-.student-reposition-modal.is-closing {
+.student-reposition-modal.is-closing,
+.supervision-modal.is-closing {
     display: flex;
 }
 
@@ -1460,7 +1467,7 @@ body {
 
 .student-reposition-modal {
     /* Match app-message / add-student overlay stacking so reposition prompts stay usable */
-    z-index: 12000;
+    z-index: 12200;
 }
 
 .student-reposition-fields {
@@ -4854,7 +4861,10 @@ tr td.add-teacher-availability-table-day {
 .sidebar-pane-class-report-inner,
 .sidebar-pane-materials-inner,
 .sidebar-pane-reposition-classes-inner,
-.sidebar-pane-finances-inner {
+.sidebar-pane-finances-inner,
+.sidebar-pane-coordinator-inner,
+.sidebar-pane-class-supervisor-inner,
+.sidebar-pane-teacher-assistant-inner {
     display: block;
     padding: 15px;
     background: #fff;
@@ -4873,7 +4883,10 @@ tr td.add-teacher-availability-table-day {
 .sidebar.is-logged-in .sidebar-pane-class-report-inner,
 .sidebar.is-logged-in .sidebar-pane-materials-inner,
 .sidebar.is-logged-in .sidebar-pane-reposition-classes-inner,
-.sidebar.is-logged-in .sidebar-pane-finances-inner {
+.sidebar.is-logged-in .sidebar-pane-finances-inner,
+.sidebar.is-logged-in .sidebar-pane-coordinator-inner,
+.sidebar.is-logged-in .sidebar-pane-class-supervisor-inner,
+.sidebar.is-logged-in .sidebar-pane-teacher-assistant-inner {
     padding: 0;
 }
 
@@ -4898,7 +4911,10 @@ tr td.add-teacher-availability-table-day {
 .sidebar-pane.is-collapsed .sidebar-pane-class-report-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-materials-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-reposition-classes-inner,
-.sidebar-pane.is-collapsed .sidebar-pane-finances-inner {
+.sidebar-pane.is-collapsed .sidebar-pane-finances-inner,
+.sidebar-pane.is-collapsed .sidebar-pane-coordinator-inner,
+.sidebar-pane.is-collapsed .sidebar-pane-class-supervisor-inner,
+.sidebar-pane.is-collapsed .sidebar-pane-teacher-assistant-inner {
     max-height: 0;
     opacity: 0;
     transform: translateY(-4px);
@@ -5877,8 +5893,6 @@ tr td.add-teacher-availability-table-day {
     display: flex;
     align-items: stretch;
     align-content: stretch;
-    gap: 7.5px;
-    flex: 1;
 
     height: 100%;
     width: 100%;
@@ -5892,16 +5906,14 @@ tr td.add-teacher-availability-table-day {
 }
 
 .main-content .calendar-wrapper {
+    flex: 1 1 auto;
     height: 100%;
-    width: 150%;
+    min-width: 0;
+    width: 100%;
     padding: var(--calendar-surface-padding, 20px);
     
     background: #fff;
     border-radius: var(--calendar-surface-radius, 20px);
-}
-
-.main-content .summary-panel {
-    background-color: #ffffff;
 }
 
 .main-content .student-class-report-panel {
@@ -5980,7 +5992,6 @@ tr td.add-teacher-availability-table-day {
 }
 
 .calendar-wrapper[hidden],
-.summary-panel[hidden],
 .student-class-report-panel[hidden],
 .admin-control-panel[hidden] {
     display: none !important;
@@ -6611,7 +6622,7 @@ tr td.add-teacher-availability-table-day {
     color: #a12626;
 }
 
-/* Calendar grid + summary are direct children of .main-content */
+/* Calendar grid is a direct child of .main-content */
 .calendar-wrapper {
     --calendar-time-col-width: 88px;
     --calendar-grid-template: var(--calendar-time-col-width) repeat(7, minmax(0, 1fr));
@@ -8006,135 +8017,6 @@ header h1 {
     box-shadow: 1px 1px 1px 1px rgba(0, 0, 35, 0.5);
 }
 
-.summary-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    flex: 0 0 22.5%;
-    width: 22.5%;
-    max-width: 22.5%;
-    padding: 20px;
-    background: #ffffff;
-    border-radius: 20px;
-    overflow: hidden;
-    transition:
-        width 620ms cubic-bezier(0.22, 1, 0.36, 1),
-        max-width 620ms cubic-bezier(0.22, 1, 0.36, 1),
-        flex-basis 620ms cubic-bezier(0.22, 1, 0.36, 1),
-        padding 420ms ease,
-        box-shadow 420ms ease,
-        transform 420ms ease;
-    will-change: width, max-width, flex-basis;
-}
-
-.summary-content {
-    flex: 1 1 auto;
-    
-    max-height: min(89vh, 720px);
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    background: #fffdfa;
-    border-radius: 20px;
-
-    overflow-x: hidden;
-    overflow-y: auto;
-    overflow-wrap: break-word;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    transition: opacity 0.5s ease, transform 1s ease;
-}
-
-.summary-panel.summary-panel--has-slots {
-    flex-basis: 17.5%;
-    width: 17.5%;
-    max-width: 17.5%;
-}
-
-.summary-panel.summary-panel--has-slots .summary-content {
-    opacity: 1;
-    box-shadow: 0 16px 34px rgba(30, 40, 55, 0.28);
-    transform: translateX(0);
-    animation: summary-content-shadow-in 620ms cubic-bezier(0.41, -0.14, 1, 1) both;
-}
-
-.summary-panel:not(.summary-panel--has-slots) .summary-content {
-    box-shadow: none;
-    opacity: 0.98;
-    transform: translateX(1px);
-    animation: none;
-}
-
-@keyframes summary-content-shadow-in {
-    from {
-        box-shadow: 0 0 0 rgba(30, 40, 55, 0);
-    }
-    to {
-        box-shadow: 2.5px 2.5px 5px rgba(30, 40, 55, 0.28);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .summary-panel,
-    .summary-content {
-        transition: none !important;
-    }
-}
-
-.summary-content::-webkit-scrollbar {
-    display: none;
-}
-
-.day-summary {
-    padding: 15px;
-    background: #fffdfa;
-}
-
-.day-summary h3 {
-    color: #495057;
-    margin-bottom: 10px;
-    font-size: 1.2em;
-}
-
-.day-summary-available h3 {
-    color: #334461;
-}
-
-.summary-day-block {
-    margin-bottom: 14px;
-}
-
-.summary-day-block:last-child {
-    margin-bottom: 0;
-}
-
-.summary-day-name {
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 6px;
-    font-size: 0.95em;
-}
-
-.summary-time-line {
-    padding-left: 5px;
-    color: #444;
-    line-height: 1.55;
-    font-size: 0.92em;
-}
-
-.day-summary .hours {
-    color: #666;
-    line-height: 1.8;
-}
-
-.empty-message {
-    text-align: center;
-    color: #999;
-    font-style: italic;
-    padding: 20px;
-}
-
 /* Context Menu */
 .context-menu {
     position: fixed;
@@ -9472,4 +9354,162 @@ header h1 {
         width: 1030px;
         padding: 30px;
     }
+}
+
+/* --- School-scoped supervision (coordinator / class supervisor / teacher assistant) --- */
+.sidebar-pane-coordinator,
+.sidebar-pane-class-supervisor,
+.sidebar-pane-teacher-assistant {
+    flex: 0 0 auto;
+}
+
+.supervision-pending-btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.15));
+    background: var(--surface-elevated, #f4f4f5);
+    font: inherit;
+    cursor: pointer;
+}
+
+.supervision-pending-btn:hover:not(:disabled) {
+    filter: brightness(0.97);
+}
+
+.supervision-pending-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.supervision-pending-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.supervision-pending-label {
+    flex: 1;
+    min-width: 120px;
+}
+
+.supervision-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.supervision-modal.is-open {
+    display: flex;
+}
+
+.supervision-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.supervision-modal-dialog {
+    position: relative;
+    z-index: 1;
+    max-width: 420px;
+    width: 100%;
+    background: var(--surface-modal, #fff);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.supervision-modal-title {
+    margin: 0 0 8px;
+    font-size: 1.125rem;
+}
+
+.supervision-modal-hint {
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+    opacity: 0.85;
+}
+
+.supervision-invite-modal-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.supervision-invite-modal-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.15));
+    font: inherit;
+}
+
+.supervision-school-fieldset {
+    border: none;
+    margin: 0 0 16px;
+    padding: 0;
+}
+
+.supervision-school-fieldset legend {
+    font-weight: 600;
+    margin-bottom: 8px;
+    padding: 0;
+}
+
+.supervision-school-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    cursor: pointer;
+}
+
+.supervision-modal-warn {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--danger, #b45309);
+}
+
+.supervision-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.supervision-modal-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.15));
+    background: var(--surface-elevated, #f4f4f5);
+    font: inherit;
+    cursor: pointer;
+}
+
+.supervision-modal-btn--primary {
+    background: var(--primary-action-bg, #2563eb);
+    color: var(--primary-action-fg, #fff);
+    border-color: transparent;
+}
+
+.supervision-modal-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.teacher-item--supervision-readonly {
+    cursor: default;
+    opacity: 0.92;
+}
+
+.teacher-item--supervision-readonly .teacher-item-name {
+    font-weight: 500;
 }

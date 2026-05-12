@@ -1,6 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
-import { filterSchedulesForActor, mergeSchedulesForTeacher } from '../lib/roster-scope.js';
+import { filterSchedulesForActor, mergeSchedulesForTeacher, mergeSchedulesForClassSupervisor } from '../lib/roster-scope.js';
 
 const corsHeaders = (extra = {}) => ({
   'Access-Control-Allow-Origin': '*',
@@ -55,7 +55,8 @@ export async function onRequest(context) {
             out = {};
           }
         } else {
-          out = filterSchedulesForActor(schedules, actor);
+          const fullRoster = (await KV_SCHEDULES.get('all_roster', 'json')) || {};
+          out = filterSchedulesForActor(schedules, actor, fullRoster);
         }
       }
       return new Response(
@@ -95,7 +96,12 @@ export async function onRequest(context) {
           const base = (await KV_SCHEDULES.get('all_schedules', 'json')) || {};
           let merged;
           try {
-            merged = mergeSchedulesForTeacher(base, schedules, profile);
+            if (role === 'gate' && String(auth.payload.gateAppRole || '').trim() === 'class-supervisor') {
+              const rosterFull = (await KV_SCHEDULES.get('all_roster', 'json')) || {};
+              merged = mergeSchedulesForClassSupervisor(base, schedules, profile, rosterFull);
+            } else {
+              merged = mergeSchedulesForTeacher(base, schedules, profile);
+            }
           } catch (e) {
             return new Response(JSON.stringify({ success: false, error: e.message || 'Forbidden' }), {
               status: 403,

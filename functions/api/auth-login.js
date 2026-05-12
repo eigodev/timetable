@@ -67,10 +67,21 @@ export async function onRequest(context) {
 
     const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
     const tokenRole = hit.role === 'gate' ? 'gate' : hit.role;
-    const token = await signAuthToken(
-      { v: 1, role: tokenRole, profile: hit.profile, u: hit.resolvedUsername, exp },
-      secret
-    );
+    let gateAppRole = '';
+    if (hit.role === 'gate') {
+      const gs = Array.isArray(roster.gateStaffAccounts) ? roster.gateStaffAccounts : [];
+      const ent = gs.find((e) => String(e?.profileName || '').trim() === String(hit.profile || '').trim());
+      gateAppRole = String(ent?.appRole || '').trim();
+    }
+    const tokenPayload = {
+      v: 1,
+      role: tokenRole,
+      profile: hit.profile,
+      u: hit.resolvedUsername,
+      exp,
+      ...(gateAppRole ? { gateAppRole } : {}),
+    };
+    const token = await signAuthToken(tokenPayload, secret);
 
     return new Response(
       JSON.stringify({
@@ -80,6 +91,7 @@ export async function onRequest(context) {
         profile: hit.profile,
         resolvedUsername: hit.resolvedUsername,
         expiresAtEpochSec: exp,
+        ...(gateAppRole ? { gateAppRole } : {}),
       }),
       { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
     );

@@ -148,6 +148,8 @@ let teacherEmailsByName = {};
 let teacherPasswordsByName = {};
 /** Staff profiles from signup (coordinator, class supervisor, assistant); login uses teacher-like session until role rules exist. */
 let gateStaffAccounts = [];
+/** Supervision invites/links returned in scoped roster (server-filtered). */
+let supervisionLinks = [];
 /** Per-teacher app role (e.g. teacher); reserved for future permission logic. */
 let teacherAppRolesByName = {};
 /** School titles to show in sidebar with no students yet (persisted). */
@@ -255,12 +257,74 @@ function canonicalTeacherNameOnRoster(rawLabel) {
     return found ? String(found) : label;
 }
 
-/** Schools sidebar + Class Report: admin: all; student: self; teacher: assigned tutor, plus students with no mentor (visible to every teacher). */
+function normSchoolTitleKeyForSupervision(title) {
+    return String(title || '').trim().toLowerCase();
+}
+
+/**
+ * Supervisee teachers linked by active class-supervisor supervision (accepted + school scope on the link).
+ */
+function getClassSupervisorActiveSuperviseeTeacherNames() {
+    const sup = String(loggedInTeacherName || '').trim();
+    if (!sup) return [];
+    const supLc = sup.toLowerCase();
+    const out = new Set();
+    supervisionLinks.forEach((l) => {
+        if (String(l?.status || '') !== 'active') return;
+        if (String(l?.superiorAppRole || '').trim() !== 'class-supervisor') return;
+        if (String(l?.superiorProfile || '').trim().toLowerCase() !== supLc) return;
+        const tp = String(l?.teacherProfile || '').trim();
+        if (tp) out.add(canonicalTeacherNameOnRoster(tp));
+    });
+    return [...out].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+/**
+ * Students a class supervisor may see: assigned to a supervised teacher, school on the active link only.
+ */
+function getStudentNamesVisibleToClassSupervisor() {
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    const sup = String(loggedInTeacherName || '').trim();
+    if (!sup) return [];
+    const supLc = sup.toLowerCase();
+    const visible = new Set();
+    supervisionLinks.forEach((link) => {
+        if (String(link?.status || '') !== 'active') return;
+        if (String(link?.superiorAppRole || '').trim() !== 'class-supervisor') return;
+        if (String(link?.superiorProfile || '').trim().toLowerCase() !== supLc) return;
+        const teacherProf = canonicalTeacherNameOnRoster(String(link?.teacherProfile || '').trim());
+        const schoolKeys = new Set(
+            (Array.isArray(link.schoolTitles) ? link.schoolTitles : []).map((s) =>
+                normSchoolTitleKeyForSupervision(s)
+            )
+        );
+        if (!teacherProf || schoolKeys.size === 0) return;
+        allStudents.forEach((name) => {
+            const assigned = canonicalTeacherNameOnRoster(getStudentTeacherInfo(name));
+            if (!assigned || assigned.toLowerCase() !== teacherProf.toLowerCase()) return;
+            const sch = String(getStudentSchoolName(name) || '').trim();
+            if (!sch) return;
+            if (schoolKeys.has(normSchoolTitleKeyForSupervision(sch))) visible.add(name);
+        });
+    });
+    return [...visible];
+}
+
+/** Schools sidebar + Class Report: admin: all; student: self; class-supervisor: shared supervisees only; other teachers: assigned students + unassigned. */
 function getStudentNamesVisibleInNavigation() {
     const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
     if (loggedInStudentFullName) {
         const self = String(loggedInStudentFullName || '').trim().toLowerCase();
         return allStudents.filter((name) => name.trim().toLowerCase() === self);
+    }
+    if (
+        isTeacherLoggedIn &&
+        !isAdminLoggedIn &&
+        !loggedInStudentFullName &&
+        isGateStaffAccountSession() &&
+        getGateSessionAppRole() === 'class-supervisor'
+    ) {
+        return getStudentNamesVisibleToClassSupervisor();
     }
     if (isTeacherLoggedIn && !isAdminLoggedIn && String(loggedInTeacherName || '').trim()) {
         const loggedCanon = canonicalTeacherNameOnRoster(loggedInTeacherName);
@@ -473,6 +537,20 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const supervisionInviteModal = document.getElementById('supervisionInviteModal');
+            if (supervisionInviteModal?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeSupervisionInviteModal();
+                return;
+            }
+
+            const supervisionModalEl = document.getElementById('supervisionModal');
+            if (supervisionModalEl?.classList.contains('is-open')) {
+                e.preventDefault();
+                closeSupervisionModal();
+                return;
+            }
+
             const appMessageModal = document.getElementById('appMessageModal');
             if (appMessageModal?.classList.contains('is-open')) {
                 e.preventDefault();
@@ -628,6 +706,8 @@ function setupGlobalPointerDownToDismissOverlays() {
             const modalDismissOrder = [
                 { id: 'googleMeetLinksLayer', close: closeGoogleMeetLinksLayer },
                 { id: 'studentRepositionModal', close: closeStudentRepositionModal },
+                { id: 'supervisionInviteModal', close: closeSupervisionInviteModal },
+                { id: 'supervisionModal', close: closeSupervisionModal },
                 { id: 'appMessageModal', close: closeAppMessageModal },
                 { id: 'classTopicModal', close: closeClassTopicModal },
                 { id: 'adminDashboardDeleteModal', close: closeAdminDashboardDeleteModal },
@@ -1293,6 +1373,21 @@ function applyTeacherDataIsolationInMemory() {
         const k = String(name || '').trim();
         if (k) keep.add(k);
     });
+    if (isGateStaffAccountSession()) {
+        const supLc = tk.toLowerCase();
+        supervisionLinks.forEach((row) => {
+            if (String(row?.status || '') !== 'active') return;
+            if (String(row?.superiorProfile || '').trim().toLowerCase() !== supLc) return;
+            if (
+                getGateSessionAppRole() === 'class-supervisor' &&
+                String(row?.superiorAppRole || '').trim() !== 'class-supervisor'
+            ) {
+                return;
+            }
+            const tp = String(row?.teacherProfile || '').trim();
+            if (tp) keep.add(tp);
+        });
+    }
     Object.keys(teacherSchedules).forEach((k) => {
         if (!keep.has(k)) delete teacherSchedules[k];
     });
@@ -1862,6 +1957,13 @@ function isTeacherSelectionAllowed(name) {
     if (loggedInStudentFullName) {
         return requested.toLowerCase() === String(loggedInStudentFullName || '').trim().toLowerCase();
     }
+    if (isGateStaffAccountSession() && getGateSessionAppRole() === 'class-supervisor') {
+        const sup = String(loggedInTeacherName || '').trim();
+        if (!sup) return false;
+        if (requested.toLowerCase() === sup.toLowerCase()) return true;
+        const supervisees = getClassSupervisorActiveSuperviseeTeacherNames();
+        return supervisees.some((t) => t.toLowerCase() === requested.toLowerCase());
+    }
     if (!loggedInTeacherName) return false;
     return requested.toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase();
 }
@@ -2004,6 +2106,7 @@ async function initRoster(preloadedRoster = null) {
         teacherEmailsByName = {};
         teacherPasswordsByName = {};
         gateStaffAccounts = [];
+        supervisionLinks = [];
         teacherAppRolesByName = {};
         customSchoolsList = [];
         schoolExternalLinks = {};
@@ -2182,6 +2285,9 @@ async function initRoster(preloadedRoster = null) {
                   appRole: String(entry.appRole || '').trim()
               }))
               .filter((entry) => entry.profileName && entry.username && entry.password && entry.appRole)
+        : [];
+    supervisionLinks = Array.isArray(saved.supervisionLinks)
+        ? saved.supervisionLinks.filter((row) => row && typeof row === 'object' && String(row.id || '').trim())
         : [];
     const teacherAppRolesRaw =
         saved.teacherAppRoles && typeof saved.teacherAppRoles === 'object' && !Array.isArray(saved.teacherAppRoles)
@@ -3497,7 +3603,6 @@ function syncSpeakOnWeeklyToAllTeacherSchedules() {
         slotStates = getScheduleSlotMapWithoutMeta(teacherSchedules[currentTeacher]);
         if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
             refreshCalendarDisplay();
-            updateSummary();
         }
     } else if (
         currentTeacher &&
@@ -3509,7 +3614,6 @@ function syncSpeakOnWeeklyToAllTeacherSchedules() {
             slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tk);
             if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
                 refreshCalendarDisplay();
-                updateSummary();
             }
         }
     }
@@ -3540,6 +3644,7 @@ function getStudentSchoolKey(name) {
 }
 
 function isStudentNameVisibleBySchoolFilter(name) {
+    if (isAdminLoggedIn) return true;
     ensureCalendarSchoolFilterSelection();
     if (!calendarStudentNamesInCellsVisible) return false;
     if (calendarNameVisibleSchoolKeys.size === 0) return false;
@@ -3769,6 +3874,10 @@ function teacherBookGreenSlotForStudent(day, hour, studentName) {
         showAppMessage('View only — your teacher manages this schedule.');
         return false;
     }
+    if (isGateViewingAlienTeacherGrid() && getGateSessionAppRole() !== 'class-supervisor') {
+        showAppMessage('Only a class supervisor can book classes on this teacher schedule.');
+        return false;
+    }
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
     const nm = String(studentName || '').trim();
     if (!nm) return false;
@@ -3786,6 +3895,12 @@ function teacherBookGreenSlotForStudent(day, hour, studentName) {
         teacherUnavailableStudentNamesByTeacher[currentTeacher] = {};
     }
     teacherUnavailableStudentNamesByTeacher[currentTeacher][slotKey] = nm;
+    if (isGateViewingAlienTeacherGrid() && getGateSessionAppRole() === 'class-supervisor') {
+        if (!supervisorSlotBookingsByTeacher[currentTeacher]) {
+            supervisorSlotBookingsByTeacher[currentTeacher] = {};
+        }
+        supervisorSlotBookingsByTeacher[currentTeacher][slotKey] = true;
+    }
     setSlotState(day, hour, BOOKED_CLASS_SLOT_STATE);
     return true;
 }
@@ -4545,6 +4660,10 @@ function animateGoogleMeetSaveButtonOk() {
 
 const SIDEBAR_ADD_TEACHER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5"/></svg>';
+
+/** Share (Heroicons) — class supervisor “Share data” header control opens invite modal */
+const SIDEBAR_SHARE_DATA_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M15.75 4.5a3 3 0 1 1 .825 2.066l-8.421 4.679a3.002 3.002 0 0 1 0 1.51l8.421 4.679a3 3 0 1 1-.729 1.31l-8.421-4.678a3 3 0 1 1 0-4.132l8.421-4.679a3 3 0 0 1-.096-.755Z" clip-rule="evenodd" /></svg>';
 
 const SIDEBAR_LOGIN_TEACHER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25"/></svg>';
@@ -5911,6 +6030,437 @@ function setupStudentClassReportPanel() {
     }
 }
 
+function isGateStaffAccountSession() {
+    const p = String(loggedInTeacherName || '').trim();
+    if (!p || !isTeacherLoggedIn || isAdminLoggedIn || loggedInStudentFullName) return false;
+    return gateStaffAccounts.some(
+        (e) => String(e.profileName || '').trim().toLowerCase() === p.toLowerCase()
+    );
+}
+
+function getGateSessionAppRole() {
+    const p = String(loggedInTeacherName || '').trim();
+    if (!p) return '';
+    const ent = gateStaffAccounts.find(
+        (e) => String(e.profileName || '').trim().toLowerCase() === p.toLowerCase()
+    );
+    return String(ent?.appRole || '').trim();
+}
+
+function isGateViewingAlienTeacherGrid() {
+    if (!isGateStaffAccountSession() || !String(currentTeacher || '').trim()) return false;
+    return (
+        String(currentTeacher || '').trim().toLowerCase() !==
+        String(loggedInTeacherName || '').trim().toLowerCase()
+    );
+}
+
+function getActiveSupervisionSuperiorListsForTeacher() {
+    const classSupervisors = new Set();
+    const coordinators = new Set();
+    if (
+        !isTeacherLoggedIn ||
+        isAdminLoggedIn ||
+        loggedInStudentFullName ||
+        isGateStaffAccountSession()
+    ) {
+        return {
+            classSupervisors: /** @type {string[]} */ ([]),
+            coordinators: /** @type {string[]} */ ([])
+        };
+    }
+    const me = String(loggedInTeacherName || '').trim().toLowerCase();
+    supervisionLinks.forEach((row) => {
+        if (String(row?.status || '') !== 'active') return;
+        if (String(row?.teacherProfile || '').trim().toLowerCase() !== me) return;
+        const sup = String(row?.superiorProfile || '').trim();
+        if (!sup) return;
+        const role = String(row?.superiorAppRole || '').trim();
+        if (role === 'class-supervisor') classSupervisors.add(sup);
+        else if (role === 'coordinator') coordinators.add(sup);
+    });
+    const sortNames = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+    return {
+        classSupervisors: [...classSupervisors].sort(sortNames),
+        coordinators: [...coordinators].sort(sortNames)
+    };
+}
+
+function shouldMaskSuperviseeScheduleAvailabilityOnly() {
+    if (isAdminLoggedIn) return false;
+    if (!isGateStaffAccountSession() || getGateSessionAppRole() !== 'class-supervisor') return false;
+    const self = String(loggedInTeacherName || '').trim();
+    const ct = String(currentTeacher || '').trim();
+    if (!self || !ct || ct.toLowerCase() === self.toLowerCase()) return false;
+    if (!isActiveTeacherName(ct)) return false;
+    const supLc = self.toLowerCase();
+    const teachLc = ct.toLowerCase();
+    return supervisionLinks.some(
+        (l) =>
+            String(l?.status || '') === 'active' &&
+            String(l?.superiorProfile || '')
+                .trim()
+                .toLowerCase() === supLc &&
+            String(l?.teacherProfile || '')
+                .trim()
+                .toLowerCase() === teachLc &&
+            String(l?.superiorAppRole || '').trim() === 'class-supervisor'
+    );
+}
+
+function getDisplaySlotState(day, hour) {
+    const key = `${day}-${hour}`;
+    const raw = slotStates[key] ?? null;
+    if (isAdminLoggedIn) return raw;
+    if (!shouldMaskSuperviseeScheduleAvailabilityOnly()) return raw;
+    const low = String(raw || '').trim().toLowerCase();
+    if (low === 'available') return raw;
+    return null;
+}
+
+function isGateCoordinatorOrClassSupervisorSession() {
+    const p = String(loggedInTeacherName || '').trim();
+    if (!p || !isGateStaffAccountSession()) return false;
+    const ent = gateStaffAccounts.find(
+        (e) => String(e.profileName || '').trim().toLowerCase() === p.toLowerCase()
+    );
+    const r = String(ent?.appRole || '').trim();
+    return r === 'coordinator' || r === 'class-supervisor';
+}
+
+function getSchoolTitlesForSupervisionShare() {
+    const me = canonicalTeacherNameOnRoster(loggedInTeacherName);
+    if (!me) return [];
+    const meLc = me.toLowerCase();
+    const out = new Set();
+    for (const name of [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]) {
+        const asg = canonicalTeacherNameOnRoster(getStudentTeacherInfo(name));
+        if (!asg || asg.toLowerCase() !== meLc) continue;
+        const sch = String(getStudentSchoolName(name) || '').trim();
+        if (sch) out.add(sch);
+    }
+    return [...out].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+let supervisionModalLinkId = '';
+
+function closeSupervisionModal() {
+    const modal = document.getElementById('supervisionModal');
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    supervisionModalLinkId = '';
+}
+
+function closeSupervisionInviteModal() {
+    const modal = document.getElementById('supervisionInviteModal');
+    if (modal?.classList.contains('is-open')) {
+        closeModalWithAnimation(modal);
+    } else if (modal) {
+        modal.classList.remove('is-open', 'is-closing');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    const input = document.getElementById('supervisionInviteUsernameInput');
+    if (input) input.value = '';
+}
+
+function openSupervisionInviteModal() {
+    setupSupervisionInviteModal();
+    const modal = document.getElementById('supervisionInviteModal');
+    const input = document.getElementById('supervisionInviteUsernameInput');
+    if (!modal || !input) return;
+    input.value = '';
+    openModalWithAnimation(modal);
+    window.requestAnimationFrame(() => input.focus());
+}
+
+function setupSupervisionInviteModal() {
+    if (document.body.dataset.supervisionInviteModalBound === '1') return;
+    document.body.dataset.supervisionInviteModalBound = '1';
+    const modal = document.getElementById('supervisionInviteModal');
+    const backdrop = document.getElementById('supervisionInviteModalBackdrop');
+    const cancel = document.getElementById('supervisionInviteModalCancelBtn');
+    const send = document.getElementById('supervisionInviteModalSendBtn');
+    const input = document.getElementById('supervisionInviteUsernameInput');
+    if (!modal || !backdrop || !cancel || !send || !input) return;
+    backdrop.addEventListener('click', () => closeSupervisionInviteModal());
+    cancel.addEventListener('click', () => closeSupervisionInviteModal());
+    send.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const field = document.getElementById('supervisionInviteUsernameInput');
+        void postSupervisionInvite(field ? field.value : '');
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            void postSupervisionInvite(document.getElementById('supervisionInviteUsernameInput')?.value || '');
+        }
+    });
+}
+
+async function postSupervisionInvite(teacherUsername) {
+    await refreshTimetableApiBearerTokenIfPossible();
+    const sendBtn = document.getElementById('supervisionInviteModalSendBtn');
+    if (sendBtn) sendBtn.disabled = true;
+    try {
+        const url = absoluteHttpApiUrl('/api/supervision-invite');
+        if (!url) {
+            showAppMessage('Serve the app over HTTPS to send supervision invites.');
+            return;
+        }
+        const headers = {
+            'Content-Type': 'application/json',
+            ...getTimetableApiAuthHeaders()
+        };
+        if (!headers.Authorization) {
+            showAppMessage('Configure API login to send invitations.');
+            return;
+        }
+        const u = String(teacherUsername || '').trim();
+        if (!u) {
+            showAppMessage("Enter the teacher's username.");
+            return;
+        }
+        const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ teacherUsername: u })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+            showAppMessage(data?.error || 'Invite failed.');
+            return;
+        }
+        closeSupervisionInviteModal();
+        showAppMessage('Invitation sent.');
+        if (data.lastUpdated) rosterLastUpdateTimestamp = data.lastUpdated;
+        else rosterLastUpdateTimestamp = null;
+        void pollRosterUpdates();
+    } catch (e) {
+        console.warn(e);
+        showAppMessage('Invite request failed.');
+    } finally {
+        if (sendBtn) sendBtn.disabled = false;
+    }
+}
+
+function setupSupervisionModal() {
+    if (document.body.dataset.supervisionModalBound === '1') return;
+    document.body.dataset.supervisionModalBound = '1';
+    const modal = document.getElementById('supervisionModal');
+    const backdrop = document.getElementById('supervisionModalBackdrop');
+    const cancel = document.getElementById('supervisionModalCancelBtn');
+    const confirm = document.getElementById('supervisionModalConfirmBtn');
+    if (!modal || !backdrop || !cancel || !confirm) return;
+    backdrop.addEventListener('click', () => closeSupervisionModal());
+    cancel.addEventListener('click', () => closeSupervisionModal());
+    confirm.addEventListener('click', () => {
+        const id = String(supervisionModalLinkId || '').trim();
+        if (!id) return;
+        const fieldset = document.getElementById('supervisionSchoolFieldset');
+        const checked = fieldset
+            ? [...fieldset.querySelectorAll('input[type="checkbox"]:checked')].map((el) => String(el.value || '').trim()).filter(Boolean)
+            : [];
+        if (checked.length === 0) {
+            showAppMessage('Select at least one school to share.');
+            return;
+        }
+        void postSupervisionRespond(id, 'accept', checked);
+    });
+}
+
+function openSupervisionAcceptModal(link) {
+    setupSupervisionModal();
+    const modal = document.getElementById('supervisionModal');
+    const fieldset = document.getElementById('supervisionSchoolFieldset');
+    const hint = document.getElementById('supervisionModalHint');
+    if (!modal || !fieldset || !hint) return;
+    supervisionModalLinkId = String(link?.id || '').trim();
+    hint.textContent = `Choose which school data ${String(link?.superiorProfile || 'this supervisor')} may see.`;
+    fieldset.innerHTML = '';
+    const legend = document.createElement('legend');
+    legend.textContent = 'Schools to share';
+    fieldset.appendChild(legend);
+    const schools = getSchoolTitlesForSupervisionShare();
+    if (schools.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'supervision-modal-warn';
+        p.textContent = 'You have no assigned students with a school. Assign students first.';
+        fieldset.appendChild(p);
+    }
+    schools.forEach((sch) => {
+        const safeId = `sup-sch-${Math.random().toString(36).slice(2, 10)}`;
+        const lbl = document.createElement('label');
+        lbl.className = 'supervision-school-label';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = sch;
+        cb.id = safeId;
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(` ${sch}`));
+        fieldset.appendChild(lbl);
+    });
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+async function postSupervisionRespond(linkId, action, schoolTitles) {
+    const url = absoluteHttpApiUrl('/api/supervision-respond');
+    if (!url) {
+        showAppMessage('Serve the app over HTTPS to respond to invites.');
+        return;
+    }
+    const headers = {
+        'Content-Type': 'application/json',
+        ...getTimetableApiAuthHeaders()
+    };
+    if (!headers.Authorization) {
+        showAppMessage('Configure API login to respond.');
+        return;
+    }
+    const body = {
+        linkId: String(linkId || '').trim(),
+        action: action === 'accept' ? 'accept' : 'decline'
+    };
+    if (action === 'accept' && Array.isArray(schoolTitles)) body.schoolTitles = schoolTitles;
+    try {
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+            showAppMessage(data?.error || 'Could not update invite.');
+            return;
+        }
+        closeSupervisionModal();
+        showAppMessage(action === 'accept' ? 'Supervision accepted.' : 'Invitation declined.');
+        rosterLastUpdateTimestamp = null;
+        void pollRosterUpdates();
+    } catch (e) {
+        console.warn(e);
+        showAppMessage('Request failed.');
+    }
+}
+
+function appendGateOnlyRoleSelfRow(container) {
+    const self = String(loggedInTeacherName || '').trim();
+    if (!self) return;
+    const onRoster = teachersList.some((t) => String(t || '').trim().toLowerCase() === self.toLowerCase());
+    if (onRoster) return;
+    const row = document.createElement('div');
+    row.className = 'teacher-item category-gate-role-self';
+    row.dataset.teacher = self;
+    const nameEl = document.createElement('span');
+    nameEl.className = 'teacher-item-name';
+    nameEl.textContent = self;
+    row.appendChild(nameEl);
+    row.addEventListener('click', (e) => {
+        if (e.target.closest('.teacher-item-edit')) return;
+        selectTeacher(self, { view: 'calendar' });
+    });
+    container.appendChild(row);
+}
+
+function renderTeacherSupervisionPendingInTeachersPane(teachersInner) {
+    teachersInner.querySelectorAll('.sidebar-teachers-supervision-pending-wrap').forEach((n) => n.remove());
+    if (!isTeacherLoggedIn || loggedInStudentFullName || isGateStaffAccountSession()) return;
+
+    const meLc = String(loggedInTeacherName || '').trim().toLowerCase();
+    const pendingForTeacher = supervisionLinks.filter(
+        (l) => String(l?.status) === 'pending' && String(l?.teacherProfile || '').trim().toLowerCase() === meLc
+    );
+    if (!pendingForTeacher.length) return;
+
+    const hasBearer = !!getTimetableApiAuthHeaders().Authorization;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'sidebar-category sidebar-teachers-supervision-pending-wrap';
+    const title = document.createElement('div');
+    title.className = 'sidebar-section-title';
+    title.textContent = 'Invitations for you';
+    wrap.appendChild(title);
+    const body = document.createElement('div');
+    body.className = 'sidebar-category-items';
+
+    if (!hasBearer) {
+        const note = document.createElement('p');
+        note.className = 'class-report-empty';
+        note.textContent = 'Enable API auth to accept from the server.';
+        body.appendChild(note);
+    }
+    pendingForTeacher.forEach((l) => {
+        const row = document.createElement('div');
+        row.className = 'supervision-pending-row';
+        const label = document.createElement('span');
+        label.className = 'supervision-pending-label';
+        label.textContent = `${l.superiorProfile} (${l.superiorAppRole || 'supervisor'})`;
+        const accept = document.createElement('button');
+        accept.type = 'button';
+        accept.textContent = 'Accept…';
+        accept.className = 'supervision-pending-btn';
+        accept.disabled = !hasBearer;
+        accept.addEventListener('click', () => openSupervisionAcceptModal(l));
+        const decline = document.createElement('button');
+        decline.type = 'button';
+        decline.textContent = 'Decline';
+        decline.className = 'supervision-pending-btn';
+        decline.disabled = !hasBearer;
+        decline.addEventListener('click', () => void postSupervisionRespond(l.id, 'decline'));
+        row.appendChild(label);
+        row.appendChild(accept);
+        row.appendChild(decline);
+        body.appendChild(row);
+    });
+    wrap.appendChild(body);
+    teachersInner.prepend(wrap);
+}
+
+/**
+ * Coordinator / Class Supervisor / Teacher Assistant sidebar panes (gate sessions) + teacher invitation strip in Teachers pane.
+ */
+function renderSupervisionRoleSidebarPanes({
+    paneCoordinator,
+    coordinatorInner,
+    paneClassSupervisor,
+    classSupervisorInner,
+    paneTeacherAssistant,
+    teacherAssistantInner,
+    teachersInner
+}) {
+    coordinatorInner.innerHTML = '';
+    classSupervisorInner.innerHTML = '';
+    teacherAssistantInner.innerHTML = '';
+
+    const isCoordSession =
+        isTeacherLoggedIn && !loggedInStudentFullName && isGateStaffAccountSession() && getGateSessionAppRole() === 'coordinator';
+    const isClassSupSession =
+        isTeacherLoggedIn && !loggedInStudentFullName && isGateStaffAccountSession() && getGateSessionAppRole() === 'class-supervisor';
+    const isAssistantSession =
+        isTeacherLoggedIn && !loggedInStudentFullName && isGateStaffAccountSession() && getGateSessionAppRole() === 'assistant';
+
+    paneCoordinator.hidden = !isCoordSession;
+    paneClassSupervisor.hidden = !isClassSupSession;
+    paneTeacherAssistant.hidden = !isAssistantSession;
+
+    if (isCoordSession) {
+        appendGateOnlyRoleSelfRow(coordinatorInner);
+    }
+    if (isClassSupSession) {
+        appendGateOnlyRoleSelfRow(classSupervisorInner);
+    }
+
+    if (isAssistantSession) {
+        appendGateOnlyRoleSelfRow(teacherAssistantInner);
+        const note = document.createElement('p');
+        note.className = 'class-report-empty';
+        note.textContent =
+            'Teacher assistants use the calendar from this profile; supervision invites are sent by coordinators and class supervisors.';
+        teacherAssistantInner.appendChild(note);
+    }
+
+    renderTeacherSupervisionPendingInTeachersPane(teachersInner);
+}
+
 function saveRoster() {
     normalizeCustomSchoolsList();
     const rosterPayload = {
@@ -5949,7 +6499,8 @@ function saveRoster() {
         adminAccount: {
             username: String(adminAccount?.username || DEFAULT_ADMIN_USERNAME).trim(),
             passwordHash: String(adminAccount?.passwordHash || '').trim()
-        }
+        },
+        supervisionLinks
     };
     try {
         localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(rosterPayload));
@@ -5980,6 +6531,8 @@ let currentContextMenuMode = 'school';
 const teacherUnavailableStudentNamesByTeacher = {};
 const TEACHER_UNAVAILABLE_STUDENTS_META_KEY = '__unavailableStudentNames';
 let studentVisibleRescheduledNamesBySlot = {};
+/** Session-only: slots booked by a class supervisor on another teacher's grid (for allowed clears). */
+let supervisorSlotBookingsByTeacher = {};
 
 function getScheduleSlotMapWithoutMeta(schedule) {
     const out = {};
@@ -6128,7 +6681,11 @@ async function saveRosterToCloud(rosterPayload) {
             isTeacherLoggedIn &&
             !loggedInStudentFullName &&
             String(loggedInTeacherName || '').trim();
-        const payload = isScopedTeacher ? { roster: rosterPayload, merge: true } : { roster: rosterPayload };
+        let rosterForRequest = rosterPayload;
+        if (isScopedTeacher && isGateStaffAccountSession() && String(loggedInTeacherName || '').trim()) {
+            rosterForRequest = { ...rosterPayload, teachers: [String(loggedInTeacherName || '').trim()] };
+        }
+        const payload = isScopedTeacher ? { roster: rosterForRequest, merge: true } : { roster: rosterPayload };
         const response = await fetch(rosterUrl, {
             method: 'POST',
             headers: {
@@ -6584,6 +7141,28 @@ function saveAllSchedules() {
     }, 800);
 }
 
+/** Cloud schedule POST: class supervisors may only submit keys the server merge accepts. */
+function getSchedulesPayloadForCloudPost() {
+    if (!isGateStaffAccountSession() || getGateSessionAppRole() !== 'class-supervisor') {
+        return teacherSchedules;
+    }
+    const self = String(loggedInTeacherName || '').trim();
+    const allowed = new Set();
+    if (self) allowed.add(self);
+    supervisionLinks.forEach((l) => {
+        if (String(l?.status || '') !== 'active') return;
+        if (String(l?.superiorProfile || '').trim().toLowerCase() !== self.toLowerCase()) return;
+        if (String(l?.superiorAppRole || '').trim() !== 'class-supervisor') return;
+        const tp = String(l?.teacherProfile || '').trim();
+        if (tp) allowed.add(tp);
+    });
+    const out = {};
+    for (const k of Object.keys(teacherSchedules)) {
+        if (allowed.has(k)) out[k] = teacherSchedules[k];
+    }
+    return out;
+}
+
 // Actually perform the save operation
 async function performSave() {
     // Clear any pending status updates
@@ -6612,7 +7191,7 @@ async function performSave() {
                 ...getTimetableApiAuthHeaders()
             },
             body: JSON.stringify({
-                schedules: teacherSchedules,
+                schedules: getSchedulesPayloadForCloudPost(),
             }),
         });
 
@@ -6696,6 +7275,24 @@ function getSidebarProfileInitials(fullName) {
     return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 }
 
+/** Human-readable role under the sidebar profile name (matches gate / roster roles). */
+function getSidebarProfileRoleLabel() {
+    if (!isTeacherLoggedIn) return 'Guest';
+    if (isAdminLoggedIn) return 'Admin';
+    if (loggedInStudentFullName) return 'Student';
+    if (isGateStaffAccountSession()) {
+        const r = getGateSessionAppRole();
+        if (r === 'coordinator') return 'Coordinator';
+        if (r === 'class-supervisor') return 'Class Supervisor';
+        if (r === 'assistant') return 'Teacher Assistant';
+    }
+    const tap = String(teacherAppRolesByName[loggedInTeacherName] || '').trim();
+    if (tap === 'coordinator') return 'Coordinator';
+    if (tap === 'class-supervisor') return 'Class Supervisor';
+    if (tap === 'assistant') return 'Teacher Assistant';
+    return 'Teacher';
+}
+
 function renderSidebarHeaderProfile() {
     const nameEl = document.getElementById('sidebarProfileName');
     const roleEl = document.getElementById('sidebarProfileRole');
@@ -6706,7 +7303,7 @@ function renderSidebarHeaderProfile() {
     const displayName = isTeacherLoggedIn
         ? String(activeTeacherName || 'Teacher').trim()
         : 'Guest profile';
-    const displayRole = !isTeacherLoggedIn ? 'Guest' : (isAdminLoggedIn ? 'Admin' : (loggedInStudentFullName ? 'Student' : 'Teacher'));
+    const displayRole = getSidebarProfileRoleLabel();
 
     nameEl.textContent = displayName;
     roleEl.textContent = displayRole;
@@ -6843,6 +7440,7 @@ function performTeacherSessionLogout() {
     loggedInStudentFullName = '';
     currentTeacher = null;
     clearTimetableApiBearerToken();
+    supervisorSlotBookingsByTeacher = {};
     resetClassStartNotificationCache();
     notifyUpcomingClasses();
     try {
@@ -7199,7 +7797,72 @@ function renderSidebar() {
     paneMaterials.appendChild(materialsHeader);
     paneMaterials.appendChild(materialsInner);
 
+    const paneCoordinator = document.createElement('div');
+    paneCoordinator.className = 'sidebar-pane sidebar-pane-coordinator';
+    paneCoordinator.hidden = true;
+    const coordinatorHeader = document.createElement('div');
+    coordinatorHeader.className = 'sidebar-section-header';
+    const coordinatorHeaderLabel = document.createElement('span');
+    coordinatorHeaderLabel.className = 'sidebar-section-header-label';
+    coordinatorHeaderLabel.textContent = 'Coordinator';
+    coordinatorHeader.appendChild(coordinatorHeaderLabel);
+    const coordinatorInner = document.createElement('div');
+    coordinatorInner.className = 'sidebar-pane-coordinator-inner';
+    paneCoordinator.appendChild(coordinatorHeader);
+    paneCoordinator.appendChild(coordinatorInner);
+
+    const paneClassSupervisor = document.createElement('div');
+    paneClassSupervisor.className = 'sidebar-pane sidebar-pane-class-supervisor';
+    paneClassSupervisor.hidden = true;
+    const classSupervisorHeader = document.createElement('div');
+    classSupervisorHeader.className = 'sidebar-section-header sidebar-section-header--with-action';
+    const classSupervisorHeaderLabel = document.createElement('span');
+    classSupervisorHeaderLabel.className = 'sidebar-section-header-label';
+    classSupervisorHeaderLabel.textContent = 'Class Supervisor';
+    const shareDataBtn = document.createElement('button');
+    shareDataBtn.type = 'button';
+    shareDataBtn.id = 'sidebarShareDataBtn';
+    shareDataBtn.className = 'sidebar-add-btn sidebar-section-add-btn';
+    shareDataBtn.setAttribute('aria-label', 'Share data');
+    shareDataBtn.innerHTML = SIDEBAR_SHARE_DATA_SVG;
+    const isClassSupervisorGateSession =
+        isTeacherLoggedIn &&
+        !loggedInStudentFullName &&
+        isGateStaffAccountSession() &&
+        getGateSessionAppRole() === 'class-supervisor';
+    shareDataBtn.hidden = !isClassSupervisorGateSession;
+    shareDataBtn.addEventListener('click', () => {
+        openSupervisionInviteModal();
+    });
+    bindSidebarCursorTooltip(shareDataBtn, 'Invite teachers to share data');
+    const classSupervisorHeaderActions = document.createElement('div');
+    classSupervisorHeaderActions.className = 'sidebar-section-actions';
+    classSupervisorHeaderActions.appendChild(shareDataBtn);
+    classSupervisorHeader.appendChild(classSupervisorHeaderLabel);
+    classSupervisorHeader.appendChild(classSupervisorHeaderActions);
+    const classSupervisorInner = document.createElement('div');
+    classSupervisorInner.className = 'sidebar-pane-class-supervisor-inner';
+    paneClassSupervisor.appendChild(classSupervisorHeader);
+    paneClassSupervisor.appendChild(classSupervisorInner);
+
+    const paneTeacherAssistant = document.createElement('div');
+    paneTeacherAssistant.className = 'sidebar-pane sidebar-pane-teacher-assistant';
+    paneTeacherAssistant.hidden = true;
+    const teacherAssistantHeader = document.createElement('div');
+    teacherAssistantHeader.className = 'sidebar-section-header';
+    const teacherAssistantHeaderLabel = document.createElement('span');
+    teacherAssistantHeaderLabel.className = 'sidebar-section-header-label';
+    teacherAssistantHeaderLabel.textContent = 'Teacher Assistant';
+    teacherAssistantHeader.appendChild(teacherAssistantHeaderLabel);
+    const teacherAssistantInner = document.createElement('div');
+    teacherAssistantInner.className = 'sidebar-pane-teacher-assistant-inner';
+    paneTeacherAssistant.appendChild(teacherAssistantHeader);
+    paneTeacherAssistant.appendChild(teacherAssistantInner);
+
+    teacherList.appendChild(paneCoordinator);
+    teacherList.appendChild(paneClassSupervisor);
     teacherList.appendChild(paneTeachers);
+    teacherList.appendChild(paneTeacherAssistant);
     teacherList.appendChild(paneStudents);
     teacherList.appendChild(paneClassReport);
     teacherList.appendChild(paneMaterials);
@@ -7231,6 +7894,16 @@ function renderSidebar() {
 
         return;
     }
+
+    renderSupervisionRoleSidebarPanes({
+        paneCoordinator,
+        coordinatorInner,
+        paneClassSupervisor,
+        classSupervisorInner,
+        paneTeacherAssistant,
+        teacherAssistantInner,
+        teachersInner,
+    });
 
     const studentGroups = new Map();
     const rosterScopeStudents = getStudentNamesVisibleInNavigation();
@@ -7292,12 +7965,56 @@ function renderSidebar() {
         studentsInner.appendChild(schoolsPlaceholder);
     }
 
-    const visibleTeachers = loggedInStudentFullName
+    const supLists = getActiveSupervisionSuperiorListsForTeacher();
+    const supervisionCategories = [];
+    if (supLists.coordinators.length > 0) {
+        supervisionCategories.push({
+            title: 'Coordinator',
+            names: supLists.coordinators,
+            itemClass: 'category-supervision-coord',
+            deletable: false,
+            parent: teachersInner,
+            collapsible: true,
+            initialExpanded: true,
+            noCalendarSelect: true
+        });
+    }
+    if (supLists.classSupervisors.length > 0) {
+        supervisionCategories.push({
+            title: 'Class Supervisor',
+            names: supLists.classSupervisors,
+            itemClass: 'category-supervision-cs',
+            deletable: false,
+            parent: teachersInner,
+            collapsible: true,
+            initialExpanded: true,
+            noCalendarSelect: true
+        });
+    }
+
+    let visibleTeachers = loggedInStudentFullName
         ? []
         : (isTeacherLoggedIn && loggedInTeacherName
-            ? teachersList.filter((name) => String(name || '').trim().toLowerCase() === String(loggedInTeacherName || '').trim().toLowerCase())
+            ? isGateStaffAccountSession()
+                ? getGateSessionAppRole() === 'class-supervisor'
+                    ? getClassSupervisorActiveSuperviseeTeacherNames()
+                    : teachersList
+                : teachersList.filter(
+                      (name) =>
+                          String(name || '').trim().toLowerCase() ===
+                          String(loggedInTeacherName || '').trim().toLowerCase()
+                  )
             : teachersList);
+    if (isAdminLoggedIn && !loggedInStudentFullName) {
+        const nmSet = new Set(visibleTeachers.map((n) => String(n || '').trim()).filter(Boolean));
+        gateStaffAccounts.forEach((e) => {
+            const g = String(e?.profileName || '').trim();
+            if (g) nmSet.add(g);
+        });
+        visibleTeachers = [...nmSet].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }
     const categories = [
+        ...(loggedInStudentFullName ? [] : supervisionCategories),
         ...(loggedInStudentFullName
             ? []
             : [
@@ -7315,7 +8032,8 @@ function renderSidebar() {
 
     categories.forEach((category) => {
         const isCollapsible = category.collapsible !== false;
-        const defaultCollapsed = category.title === 'Teachers' ? false : true;
+        const defaultCollapsed =
+            category.initialExpanded === true ? false : category.title === 'Teachers' ? false : true;
         const prev = collapsedByTitle[category.title];
         const collapsed = isCollapsible && (typeof prev === 'boolean' ? prev : defaultCollapsed);
 
@@ -7415,14 +8133,19 @@ function renderSidebar() {
         const isSchoolSection = category.parent === studentsInner;
         sectionItems.classList.toggle('empty', !isSchoolSection && category.names.length === 0);
 
-        category.names.forEach(name => {
-            if (!teacherSchedules[name]) {
-                teacherSchedules[name] = {};
+        category.names.forEach((name) => {
+            if (!category.noCalendarSelect) {
+                if (!teacherSchedules[name]) {
+                    teacherSchedules[name] = {};
+                }
             }
 
             const teacherItem = document.createElement('div');
             teacherItem.className = 'teacher-item';
             teacherItem.classList.add(category.itemClass);
+            if (category.noCalendarSelect) {
+                teacherItem.classList.add('teacher-item--supervision-readonly');
+            }
             if (isSchoolSection) {
                 teacherItem.classList.add('sidebar-student-row');
                 teacherItem.dataset.studentId = buildGoogleMeetStudentId(name);
@@ -7470,6 +8193,7 @@ function renderSidebar() {
             }
 
             teacherItem.addEventListener('click', (e) => {
+                if (category.noCalendarSelect) return;
                 if (e.target.closest('.teacher-item-edit')) {
                     return;
                 }
@@ -7844,6 +8568,45 @@ function renderAdminOverviewPanel() {
                   })
                   .join('');
 
+    const gateRows =
+        gateStaffAccounts.length === 0
+            ? '<p class="admin-dashboard-empty">No coordinator or class supervisor profiles yet.</p>'
+            : gateStaffAccounts
+                  .map((e) => {
+                      const name = String(e?.profileName || '').trim();
+                      if (!name) return '';
+                      const appRole = String(e?.appRole || '').trim();
+                      const loginUser = String(e?.username || '').trim();
+                      let dashRole = '';
+                      let roleLabel = appRole;
+                      if (appRole === 'coordinator') {
+                          dashRole = 'GateCoordinator';
+                          roleLabel = 'Coordinator';
+                      } else if (appRole === 'class-supervisor') {
+                          dashRole = 'GateClassSupervisor';
+                          roleLabel = 'Class Supervisor';
+                      } else {
+                          return '';
+                      }
+                      const rawPw = String(e?.password || '').trim();
+                      const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
+                      return `<div class="admin-dashboard-item">
+                        <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
+                        <span class="admin-dashboard-item-meta">${escapeHtmlAttr(roleLabel)}</span>
+                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtmlAttr(loginUser) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
+                        <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="${escapeHtmlAttr(dashRole)}" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove gate staff account">
+                            <div class="admin-dashboard-button-remove">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                                      <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                        </button>
+                      </div>`;
+                  })
+                  .filter(Boolean)
+                  .join('');
+
     const schoolSummaries = getAdminSchoolSummaries();
     const schoolRows =
         schoolSummaries.length === 0
@@ -7912,6 +8675,10 @@ function renderAdminOverviewPanel() {
                 <section class="admin-dashboard-category" aria-labelledby="admin-dash-teachers">
                     <h3 id="admin-dash-teachers" class="admin-dashboard-category-title">Teachers</h3>
                     <div class="admin-dashboard-category-body">${teacherRows}</div>
+                </section>
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-gate">
+                    <h3 id="admin-dash-gate" class="admin-dashboard-category-title">Coordinators &amp; class supervisors</h3>
+                    <div class="admin-dashboard-category-body">${gateRows}</div>
                 </section>
                 <section class="admin-dashboard-category" aria-labelledby="admin-dash-schools">
                     <h3 id="admin-dash-schools" class="admin-dashboard-category-title">Schools</h3>
@@ -7998,6 +8765,79 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
     return true;
 }
 
+/**
+ * Remove a gate staff login (coordinator or class supervisor).
+ * Coordinator: only the gate account row (roster teachers, students, schedules, supervision links unchanged).
+ * Class supervisor: account row, class-supervisor supervision links where they are the superior, and their
+ * schedule blob when they are not also a roster teacher ("gate-only" schedule).
+ */
+function removeGateStaffAccountByProfile(profileNameRaw, expectedAppRole) {
+    if (!hasEffectiveAdminSession()) {
+        denyStudentAction('Permission denied: only admins can remove gate staff.');
+        return;
+    }
+    const profileName = String(profileNameRaw || '').trim();
+    if (!profileName) return;
+    const plower = profileName.toLowerCase();
+    const idx = gateStaffAccounts.findIndex(
+        (e) => String(e?.profileName || '').trim().toLowerCase() === plower
+    );
+    if (idx === -1) {
+        showAppMessage('Gate staff profile not found.');
+        return;
+    }
+    const ent = gateStaffAccounts[idx];
+    const appRole = String(ent?.appRole || '').trim();
+    if (appRole !== expectedAppRole) {
+        showAppMessage('That profile is not listed with this gate role.');
+        return;
+    }
+
+    if (expectedAppRole === 'class-supervisor') {
+        supervisionLinks = supervisionLinks.filter((l) => {
+            if (String(l?.superiorProfile || '').trim().toLowerCase() !== plower) return true;
+            return String(l?.superiorAppRole || '').trim() !== 'class-supervisor';
+        });
+    }
+
+    gateStaffAccounts.splice(idx, 1);
+
+    if (expectedAppRole === 'class-supervisor') {
+        const onRosterTeacher = teachersList.some(
+            (t) => String(t || '').trim().toLowerCase() === plower
+        );
+        if (!onRosterTeacher) {
+            delete teacherSchedules[profileName];
+        }
+    }
+
+    if (currentTeacher && String(currentTeacher || '').trim().toLowerCase() === plower) {
+        currentTeacher = null;
+        slotStates = {};
+    }
+
+    saveRoster();
+    if (expectedAppRole === 'class-supervisor') {
+        markSchedulePendingCloudUpload();
+        syncSpeakOnWeeklyToAllTeacherSchedules();
+        saveAllSchedulesLocal();
+        saveAllSchedules();
+    }
+    renderSidebar();
+    refreshAdminPanelIfShowingOverview();
+
+    if (loggedInTeacherName && String(loggedInTeacherName || '').trim().toLowerCase() === plower) {
+        performTeacherSessionLogout();
+        return;
+    }
+
+    showAppMessage(
+        expectedAppRole === 'coordinator'
+            ? 'Coordinator profile removed. Supervision links and other roster data are unchanged.'
+            : 'Class Supervisor removed; their class-supervisor supervision links and gate-only schedule data were cleared where applicable.'
+    );
+}
+
 function removeAccountFromAdmin(role, name) {
     if (!hasEffectiveAdminSession()) {
         denyStudentAction('Permission denied: only admins can remove account records.');
@@ -8010,6 +8850,14 @@ function removeAccountFromAdmin(role, name) {
     if (role === 'School') {
         deleteSchoolFromSidebarConfirmed(name);
         showAppMessage('School removed. Students in that school were deleted; teachers were kept.');
+        return;
+    }
+    if (role === 'GateCoordinator') {
+        removeGateStaffAccountByProfile(name, 'coordinator');
+        return;
+    }
+    if (role === 'GateClassSupervisor') {
+        removeGateStaffAccountByProfile(name, 'class-supervisor');
         return;
     }
     if (role === 'Teacher') {
@@ -8096,11 +8944,9 @@ function setAdminDashboard() {
     }
     hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
-    const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
     if (calendarWrapper) calendarWrapper.hidden = true;
-    if (summaryPanel) summaryPanel.hidden = true;
     if (reportPanel) reportPanel.hidden = true;
     if (adminPanel) {
         adminPanel.hidden = false;
@@ -8115,11 +8961,9 @@ function showAdminBlankMainPanel() {
     }
     hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
-    const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
     if (calendarWrapper) calendarWrapper.hidden = true;
-    if (summaryPanel) summaryPanel.hidden = true;
     if (reportPanel) reportPanel.hidden = true;
     if (adminPanel) {
         adminPanel.hidden = false;
@@ -8130,11 +8974,9 @@ function showAdminBlankMainPanel() {
 function setLoggedOutDashboard() {
     hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
-    const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
     if (calendarWrapper) calendarWrapper.hidden = true;
-    if (summaryPanel) summaryPanel.hidden = true;
     if (reportPanel) reportPanel.hidden = true;
     if (adminPanel) {
         adminPanel.hidden = true;
@@ -8158,11 +9000,9 @@ function showMaterialsMainView() {
     if (!host || !iframe) return;
 
     const calendarWrapper = document.getElementById('calendarWrapper');
-    const summaryPanel = document.getElementById('summaryPanel');
     const reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
     if (calendarWrapper) calendarWrapper.hidden = true;
-    if (summaryPanel) summaryPanel.hidden = true;
     if (reportPanel) reportPanel.hidden = true;
     if (adminPanel) adminPanel.hidden = true;
 
@@ -8379,6 +9219,10 @@ function buildAdminDashboardDeleteMessage(role, name) {
         confirmMsg = `Delete school "${name}"?\n\nAll students in this school will be removed. Teacher profiles are kept.`;
     } else if (role === 'Student') {
         confirmMsg = `Delete this student account?\n\n${name}\n\nSchools and teachers are kept.`;
+    } else if (role === 'GateCoordinator') {
+        confirmMsg = `Delete coordinator "${name}"?\n\nThis removes only their gate login profile. Teachers, students, schedules, and supervision links stay as they are.`;
+    } else if (role === 'GateClassSupervisor') {
+        confirmMsg = `Delete class supervisor "${name}"?\n\nThis removes their gate profile, class-supervisor supervision links, and their schedule row if they are not also a roster teacher. Teacher-managed data otherwise stays intact.`;
     }
     return confirmMsg;
 }
@@ -8387,6 +9231,8 @@ function adminDashboardDeleteTitleForRole(role) {
     if (role === 'Teacher') return 'Delete teacher?';
     if (role === 'School') return 'Delete school?';
     if (role === 'Student') return 'Delete student?';
+    if (role === 'GateCoordinator') return 'Delete coordinator?';
+    if (role === 'GateClassSupervisor') return 'Delete class supervisor?';
     return 'Delete?';
 }
 
@@ -8784,7 +9630,6 @@ function submitStudentRepositionBooking() {
     if (currentTeacher && String(currentTeacher).trim().toLowerCase() === studentName.toLowerCase()) {
         loadTeacherSchedule(currentTeacher);
         refreshCalendarDisplay();
-        updateSummary();
     }
 
     resetClassStartNotificationCache();
@@ -8912,10 +9757,23 @@ async function initTeachers() {
         return;
     }
 
-    if (restoredTeacher || teachersList.length > 0) {
-        const initialTeacher = restoredTeacher || loggedInTeacherName || teachersList[0];
-        const restoredView = loggedInStudentFullName ? { view: 'classReport' } : { view: 'calendar' };
-        selectTeacher(initialTeacher, restoredTeacher ? restoredView : undefined);
+    if (restoredTeacher || teachersList.length > 0 || String(loggedInTeacherName || '').trim()) {
+        let initialTeacher = restoredTeacher;
+        if (
+            !initialTeacher &&
+            isGateStaffAccountSession() &&
+            getGateSessionAppRole() === 'class-supervisor'
+        ) {
+            const supervisees = getClassSupervisorActiveSuperviseeTeacherNames();
+            initialTeacher = String(loggedInTeacherName || '').trim() || supervisees[0] || '';
+        }
+        if (!initialTeacher) {
+            initialTeacher = loggedInTeacherName || teachersList[0] || '';
+        }
+        if (initialTeacher) {
+            const restoredView = loggedInStudentFullName ? { view: 'classReport' } : { view: 'calendar' };
+            selectTeacher(initialTeacher, restoredTeacher ? restoredView : undefined);
+        }
     }
 }
 
@@ -8926,12 +9784,6 @@ async function initTeachers() {
 function selectTeacher(teacherName, opts) {
     if (!isTeacherLoggedIn) {
         setLoggedOutDashboard();
-        return;
-    }
-
-    if (hasEffectiveAdminSession()) {
-        // Admin view stays anchored in the full-width control panel.
-        setAdminDashboard();
         return;
     }
 
@@ -8996,7 +9848,6 @@ function selectTeacher(teacherName, opts) {
     refreshContextMenuTheme();
 
     const calendarWrapper = document.getElementById('calendarWrapper');
-    const summaryPanel = document.getElementById('summaryPanel');
     let reportPanel = document.getElementById('studentClassReportPanel');
     const adminPanel = document.getElementById('adminControlPanel');
 
@@ -9004,18 +9855,15 @@ function selectTeacher(teacherName, opts) {
 
     if (showClassReport) {
         if (calendarWrapper) calendarWrapper.hidden = true;
-        if (summaryPanel) summaryPanel.hidden = true;
         renderStudentClassReportTable(teacherName);
         reportPanel = document.getElementById('studentClassReportPanel');
         if (reportPanel) reportPanel.hidden = false;
         if (adminPanel) adminPanel.hidden = true;
     } else {
         if (calendarWrapper) calendarWrapper.hidden = false;
-        if (summaryPanel) summaryPanel.hidden = false;
         if (reportPanel) reportPanel.hidden = true;
         if (adminPanel) adminPanel.hidden = true;
         refreshCalendarDisplay();
-        updateSummary();
     }
 }
 
@@ -12634,7 +13482,17 @@ function saveTeacherSchedule(teacherName) {
     }
     markSchedulePendingCloudUpload();
     saveAllSchedulesLocal();
-    saveAllSchedules();
+    const flushCloud =
+        isGateViewingAlienTeacherGrid() && getGateSessionAppRole() === 'class-supervisor';
+    if (flushCloud) {
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+        }
+        void performSave();
+    } else {
+        saveAllSchedules();
+    }
 }
 
 /**
@@ -13228,7 +14086,7 @@ function refreshCalendarDisplay() {
     DAYS.forEach(day => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
-            const state = slotStates[key] || null;
+            const state = getDisplaySlotState(day, hour);
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
@@ -13266,6 +14124,53 @@ function setSlotState(day, hour, state) {
     
     if (!slot) return;
 
+    if (isGateViewingAlienTeacherGrid()) {
+        const role = getGateSessionAppRole();
+        if (role !== 'coordinator' && role !== 'class-supervisor') {
+            showAppMessage('You cannot edit this teacher schedule.');
+            return;
+        }
+        if (role === 'coordinator') {
+            showAppMessage('Coordinators cannot edit this teacher schedule.');
+            return;
+        }
+        if (role === 'class-supervisor') {
+            const nextLow = String(state || '').trim().toLowerCase();
+            const cur = slotStates[key];
+            const curLow = String(cur || '').trim().toLowerCase();
+            const managedToken = getSchoolManagedTeacherStateTokenForSlot(currentTeacher, day, hour);
+
+            if (!state || nextLow === '' || nextLow === 'null') {
+                if (managedToken) {
+                    showAppMessage('This class is managed by Schools. Only the teacher can change it here.');
+                    return;
+                }
+                if (curLow === BOOKED_CLASS_SLOT_STATE) {
+                    if (!supervisorSlotBookingsByTeacher[currentTeacher]?.[key]) {
+                        showAppMessage('Only the teacher can cancel this booking.');
+                        return;
+                    }
+                } else {
+                    showAppMessage('Only the teacher can change availability.');
+                    return;
+                }
+            } else if (nextLow === BOOKED_CLASS_SLOT_STATE) {
+                if (curLow !== 'available') {
+                    showAppMessage('You can only book a free (green) slot.');
+                    return;
+                }
+            } else {
+                const resolvedNext = resolveSchoolTokenInfoFromState(state);
+                const nextTok = String(resolvedNext?.token || nextLow || '').trim().toLowerCase();
+                const managedLow = String(managedToken || '').trim().toLowerCase();
+                if (!managedToken || nextTok !== managedLow) {
+                    showAppMessage('Only the teacher can change this slot.');
+                    return;
+                }
+            }
+        }
+    }
+
     if (isActiveTeacherName(currentTeacher)) {
         const managedToken = getSchoolManagedTeacherStateTokenForSlot(currentTeacher, day, hour);
         if (managedToken) {
@@ -13290,6 +14195,10 @@ function setSlotState(day, hour, state) {
         if (byTeacher && Object.prototype.hasOwnProperty.call(byTeacher, key)) {
             delete byTeacher[key];
         }
+        const supMap = supervisorSlotBookingsByTeacher[currentTeacher];
+        if (supMap && Object.prototype.hasOwnProperty.call(supMap, key)) {
+            delete supMap[key];
+        }
     }
     
     if (state) {
@@ -13297,15 +14206,15 @@ function setSlotState(day, hour, state) {
     } else {
         slotStates[key] = null;
     }
-    applyStateVisualToSlot(slot, state);
-    renderStudentNamesInSlot(slot, day, hour, state);
+    const displayForUi = getDisplaySlotState(day, hour);
+    applyStateVisualToSlot(slot, displayForUi);
+    renderStudentNamesInSlot(slot, day, hour, displayForUi);
     
     // Save to teacher schedule and localStorage
     saveTeacherSchedule(currentTeacher);
     resetClassStartNotificationCache();
     notifyUpcomingClasses();
     
-    updateSummary();
 }
 
 // Cycle through states on left click: null <-> available
@@ -13316,6 +14225,10 @@ function cycleSlotState(day, hour) {
         if (String(st || '').trim().toLowerCase() === 'available') {
             openStudentRepositionModal(day, hour);
         }
+        return;
+    }
+    if (isGateViewingAlienTeacherGrid()) {
+        showAppMessage('Only the teacher adjusts availability here. Use the menu to book a class when allowed.');
         return;
     }
     if (isSchoolManagedTeacherSlotLocked(day, hour)) {
@@ -13754,72 +14667,6 @@ function refreshContextMenuTheme() {
     if (rows[1]) rows[1].style.setProperty('--menu-option-color', cfg.extraColor);
 }
 
-// Update the summary panel - show only Available slots (teacher open time; merged view for students)
-function updateSummary() {
-    if (!currentTeacher) return;
-
-    const summaryContent = document.getElementById('summaryContent');
-    const summaryPanel = document.getElementById('summaryPanel');
-    const studentSeesTutorOpen = isLoggedInStudentCalendarReadOnly();
-
-    const availableSlots = {};
-
-    DAYS.forEach((day) => {
-        for (let hour = START_HOUR; hour < END_HOUR; hour++) {
-            const state = getSlotState(day, hour);
-            if (state === 'available') {
-                if (!availableSlots[day]) {
-                    availableSlots[day] = [];
-                }
-                availableSlots[day].push(hour);
-            }
-        }
-    });
-
-    const hasAvailable = Object.values(availableSlots).some((hours) => hours.length > 0);
-
-    const availTitle = studentSeesTutorOpen ? 'Teacher open time' : 'Available';
-    const availEmptyMsg = studentSeesTutorOpen
-        ? 'Your teacher has not marked open time slots yet.'
-        : 'No available hours selected yet. Left-click to mark available time slots.';
-
-    if (!hasAvailable) {
-        summaryContent.innerHTML =
-            '<div class="day-summary day-summary-available">' +
-            `<h3>${availTitle}</h3>` +
-            `<p class="empty-message">${availEmptyMsg}</p>` +
-            '</div>';
-    } else {
-        let html = '';
-        html += '<div class="day-summary day-summary-available">';
-        html += `<h3>${availTitle}</h3>`;
-
-        DAYS.forEach((day) => {
-            if (!availableSlots[day] || availableSlots[day].length === 0) return;
-            const ranges = groupConsecutiveHours(availableSlots[day]);
-            const hoursFlat = [];
-            for (const range of ranges) {
-                for (let h = range.start; h <= range.end; h++) {
-                    hoursFlat.push(h);
-                }
-            }
-            html += '<div class="summary-day-block">';
-            html += `<div class="summary-day-name">${day}:</div>`;
-            for (const h of hoursFlat) {
-                html += `<div class="summary-time-line">\u2014 ${formatHour(h)}</div>`;
-            }
-            html += '</div>';
-        });
-
-        html += '</div>';
-        summaryContent.innerHTML = html;
-    }
-
-    if (summaryPanel) {
-        summaryPanel.classList.toggle('summary-panel--has-slots', hasAvailable);
-    }
-}
-
 // Group consecutive hours into ranges
 function groupConsecutiveHours(hours) {
     if (hours.length === 0) return [];
@@ -13850,6 +14697,10 @@ function selectAll() {
         showAppMessage('View only — your teacher manages this schedule.');
         return;
     }
+    if (isGateViewingAlienTeacherGrid()) {
+        showAppMessage('Only the teacher can change availability in bulk here.');
+        return;
+    }
 
     for (let hour = START_HOUR; hour < END_HOUR; hour++) {
         DAYS.forEach(day => {
@@ -13873,7 +14724,6 @@ function selectAll() {
     
     // Save once after all changes
     saveTeacherSchedule(currentTeacher);
-    updateSummary();
 }
 
 // Clear all selections
@@ -13881,6 +14731,10 @@ function clearAll() {
     if (!currentTeacher) return;
     if (isLoggedInStudentCalendarReadOnly()) {
         showAppMessage('View only — your teacher manages this schedule.');
+        return;
+    }
+    if (isGateViewingAlienTeacherGrid()) {
+        showAppMessage('Only the teacher can change availability in bulk here.');
         return;
     }
 
@@ -13903,7 +14757,6 @@ function clearAll() {
     
     // Save once after all changes
     saveTeacherSchedule(currentTeacher);
-    updateSummary();
 }
 
 // Export schedule as text
@@ -14206,6 +15059,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await initTeachers();
     setupAppMessageModal();
+    setupSupervisionModal();
+    setupSupervisionInviteModal();
     setupStudentRepositionModal();
     setupGlobalEscapeToDismissOverlays();
     setupGlobalPointerDownToDismissOverlays();
@@ -14215,7 +15070,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initCalendar();
     if (currentTeacher) {
         refreshCalendarDisplay();
-        updateSummary();
     }
     setupAdminControlPanel();
     setupAddStudentModal();

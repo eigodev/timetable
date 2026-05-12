@@ -35,7 +35,7 @@ function bytesToBase64url(buf) {
 }
 
 /**
- * @param {{ v: number, role: string, profile: string, u?: string, exp?: number }} payloadObj
+ * @param {{ v: number, role: string, profile: string, u?: string, exp?: number, gateAppRole?: string }} payloadObj
  * @param {string} secret
  */
 export async function signAuthToken(payloadObj, secret) {
@@ -55,7 +55,7 @@ export async function signAuthToken(payloadObj, secret) {
 }
 
 /**
- * @returns {Promise<null | { v:number, role:string, profile:string, u?:string, exp?:number }>}
+ * @returns {Promise<null | { v:number, role:string, profile:string, u?:string, exp?:number, gateAppRole?:string }>}
  */
 export async function verifyAuthToken(token, secret) {
   const secretStr = String(secret || '').trim();

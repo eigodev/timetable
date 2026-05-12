@@ -208,7 +208,10 @@
         }
 
         .admin-stat-card {
-            padding: 14px;
+            display: flex;
+            padding: 15px;
+            align-items: center;
+            gap: 10px;
         }
 
         .admin-stat-value {
@@ -447,7 +450,10 @@
                 <section class="admin-sidebar-section">
                     <h2 class="admin-sidebar-heading">- Management</h2>
                     <div class="admin-nav">
+                        <button type="button" class="admin-nav-btn" data-view="coordinator"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.5 2.25A.75.75 0 0 1 5.25 3v18a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h1.5ZM9 4.5a.75.75 0 0 1 .75-.75H15a.75.75 0 0 1 .75.75v15a.75.75 0 0 1-.75.75H9.75A.75.75 0 0 1 9 19.5v-15ZM18.75 6a.75.75 0 0 1 .75.75V19.5a.75.75 0 0 1-.75.75H18a.75.75 0 0 1-.75-.75V6.75a.75.75 0 0 1 .75-.75h.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Coordinator</span></button>
+                        <button type="button" class="admin-nav-btn" data-view="class-supervisor"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.7 2.25a.75.75 0 0 1 .6-.3h6.75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.22.53l-2.25 2.25a.75.75 0 1 1-1.06-1.06l1.97-1.97H12.75V15h3a.75.75 0 0 1 0 1.5h-3.75a.75.75 0 0 1-.75-.75V3.81L9.53 6.78a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 .53-.22Z" /><path fill-rule="evenodd" d="M9 13.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM5.625 21.75a5.625 5.625 0 1 1 11.25 0 .75.75 0 0 1-.75.75h-9.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Class Supervisor</span></button>
                         <button type="button" class="admin-nav-btn" data-view="teachers"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Teachers</span></button>
+                        <button type="button" class="admin-nav-btn" data-view="teacher-assistant"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122Z" /></svg><span class="admin-nav-label">Teacher Assistant</span></button>
                         <button type="button" class="admin-nav-btn" data-view="schools"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 2.25a.75.75 0 0 0 0 1.5v16.5h-.75a.75.75 0 0 0 0 1.5H15v-18a.75.75 0 0 0 0-1.5H3ZM16.5 6.75v15h5.25a.75.75 0 0 0 0-1.5H21v-12a.75.75 0 0 0 0-1.5h-4.5Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Schools</span></button>
                         <button type="button" class="admin-nav-btn" data-view="students"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Students</span></button>
                         <button type="button" class="admin-nav-btn" data-view="classes"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Classes</span></button>
@@ -830,7 +836,8 @@
                 studentUsernames: {},
                 studentPasswords: {},
                 studentCities: {},
-                studentCountries: {}
+                studentCountries: {},
+                gateStaffAccounts: []
             };
         }
 
@@ -870,7 +877,17 @@
                     studentUsernames: asObject(parsed.studentUsernames),
                     studentPasswords: asObject(parsed.studentPasswords),
                     studentCities: asObject(parsed.studentCities),
-                    studentCountries: asObject(parsed.studentCountries)
+                    studentCountries: asObject(parsed.studentCountries),
+                    gateStaffAccounts: Array.isArray(parsed.gateStaffAccounts)
+                        ? parsed.gateStaffAccounts
+                              .map((e) => ({
+                                  profileName: String(e?.profileName || '').trim(),
+                                  username: String(e?.username || '').trim(),
+                                  password: String(e?.password || '').trim(),
+                                  appRole: String(e?.appRole || '').trim()
+                              }))
+                              .filter((e) => e.profileName && e.username && e.password && e.appRole)
+                        : []
                 };
             } catch {
                 return getEmptyRoster();
@@ -1005,6 +1022,26 @@
             }
         }
 
+        function deleteGateStaffRaw(raw, profileNameQuery, expectedAppRole) {
+            const q = String(profileNameQuery || '').trim().toLowerCase();
+            if (!q) return;
+            const arr = Array.isArray(raw.gateStaffAccounts) ? raw.gateStaffAccounts : [];
+            const idx = arr.findIndex((e) => String(e?.profileName || '').trim().toLowerCase() === q);
+            if (idx === -1) return;
+            const ent = arr[idx];
+            if (String(ent?.appRole || '').trim() !== expectedAppRole) return;
+
+            if (expectedAppRole === 'class-supervisor' && Array.isArray(raw.supervisionLinks)) {
+                raw.supervisionLinks = raw.supervisionLinks.filter((l) => {
+                    if (String(l?.superiorProfile || '').trim().toLowerCase() !== q) return true;
+                    return String(l?.superiorAppRole || '').trim() !== 'class-supervisor';
+                });
+            }
+
+            arr.splice(idx, 1);
+            raw.gateStaffAccounts = arr;
+        }
+
         function applyAdminProfileDeletion(role, name) {
             const raw = loadRosterRaw();
             if (role === 'Teacher') deleteTeacherAdmin(raw, name);
@@ -1012,7 +1049,9 @@
             else if (role === 'Student') {
                 const st = getAllStudents().find((s) => s.name === name);
                 if (st) deleteStudentFromRosterAdmin(raw, name, st.kind);
-            }
+            } else if (role === 'GateCoordinator') deleteGateStaffRaw(raw, name, 'coordinator');
+            else if (role === 'GateClassSupervisor') deleteGateStaffRaw(raw, name, 'class-supervisor');
+            else if (role === 'GateTeacherAssistant') deleteGateStaffRaw(raw, name, 'assistant');
             saveRosterRaw(raw);
             currentRoster = loadRoster();
         }
@@ -1096,6 +1135,46 @@
                 }).join('');
         }
 
+        function renderGateStaffRows(appRoleFilter) {
+            const list = (currentRoster.gateStaffAccounts || []).filter(
+                (e) => String(e.appRole || '').trim() === appRoleFilter
+            );
+            if (!list.length) {
+                const emptyByRole = {
+                    coordinator: '<p class="admin-dashboard-empty">No coordinator profiles yet.</p>',
+                    'class-supervisor': '<p class="admin-dashboard-empty">No class supervisor profiles yet.</p>',
+                    assistant: '<p class="admin-dashboard-empty">No teacher assistant profiles yet.</p>'
+                };
+                return emptyByRole[appRoleFilter] || '<p class="admin-dashboard-empty">No profiles yet.</p>';
+            }
+            const dashRoleByFilter = {
+                coordinator: 'GateCoordinator',
+                'class-supervisor': 'GateClassSupervisor',
+                assistant: 'GateTeacherAssistant'
+            };
+            const dashRole = dashRoleByFilter[appRoleFilter] || 'GateStaff';
+            return list
+                .slice()
+                .sort((a, b) =>
+                    String(a.profileName || '').localeCompare(String(b.profileName || ''), undefined, {
+                        sensitivity: 'base'
+                    })
+                )
+                .map((e) => {
+                    const name = String(e.profileName || '').trim();
+                    const loginUser = String(e.username || '').trim();
+                    return `<div class="admin-dashboard-item">
+                        <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
+                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtml(loginUser) : '<em>Not set</em>'}</span>
+                        <span class="admin-dashboard-item-meta">Password: ${dashboardPasswordHtml(e.password)}</span>
+                        <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="${dashRole}" data-admin-name="${escapeHtml(name)}" aria-label="Remove gate staff profile">
+                            <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
+                        </button>
+                    </div>`;
+                })
+                .join('');
+        }
+
         function renderSchoolRows() {
             const schools = getSchoolSummaries();
             if (!schools.length) return '<p class="admin-dashboard-empty">No schools yet.</p>';
@@ -1143,6 +1222,21 @@
         }
 
         function titleForView(view) {
+            const labels = {
+                dashboard: 'Dashboard',
+                teachers: 'Teachers',
+                coordinator: 'Coordinator',
+                'class-supervisor': 'Class Supervisor',
+                'teacher-assistant': 'Teacher Assistant',
+                schools: 'Schools',
+                students: 'Students',
+                classes: 'Classes',
+                payments: 'Payments',
+                report: 'Report',
+                settings: 'Settings',
+                'audit-logs': 'Audit Logs'
+            };
+            if (labels[view]) return labels[view];
             return view[0].toUpperCase() + view.slice(1).replaceAll('-', ' ');
         }
 
@@ -1158,9 +1252,21 @@
                 </div>
                 ${renderStats()}
                 <div class="admin-dashboard-grid">
+                    <section class="admin-dashboard-category${sectionClass('coordinator')}">
+                        <h3 class="admin-dashboard-category-title">Coordinators</h3>
+                        <div class="admin-dashboard-category-body">${renderGateStaffRows('coordinator')}</div>
+                    </section>
+                    <section class="admin-dashboard-category${sectionClass('class-supervisor')}">
+                        <h3 class="admin-dashboard-category-title">Class Supervisors</h3>
+                        <div class="admin-dashboard-category-body">${renderGateStaffRows('class-supervisor')}</div>
+                    </section>
                     <section class="admin-dashboard-category${sectionClass('teachers')}">
                         <h3 class="admin-dashboard-category-title">Teachers</h3>
                         <div class="admin-dashboard-category-body">${renderTeacherRows()}</div>
+                    </section>
+                    <section class="admin-dashboard-category${sectionClass('teacher-assistant')}">
+                        <h3 class="admin-dashboard-category-title">Teacher Assistants</h3>
+                        <div class="admin-dashboard-category-body">${renderGateStaffRows('assistant')}</div>
                     </section>
                     <section class="admin-dashboard-category${sectionClass('schools')}">
                         <h3 class="admin-dashboard-category-title">Schools</h3>
@@ -1186,7 +1292,7 @@
                         <p class="admin-panel-subtitle">This standalone admin page renders roster overview data directly from localStorage.</p>
                     </div>
                 </div>
-                <div class="admin-placeholder">Use Dashboard, Teachers, Schools, or Students to view registered records.</div>
+                <div class="admin-placeholder">Use Dashboard, Coordinators, Class Supervisors, Teachers, Teacher Assistants, Schools, or Students to view registered records.</div>
             `;
         }
 
@@ -1195,7 +1301,7 @@
             document.querySelectorAll('[data-view]').forEach((btn) => {
                 btn.classList.toggle('is-active', btn.getAttribute('data-view') === view);
             });
-            if (['dashboard', 'teachers', 'schools', 'students'].includes(view)) {
+            if (['dashboard', 'teachers', 'coordinator', 'class-supervisor', 'teacher-assistant', 'schools', 'students'].includes(view)) {
                 renderDashboard();
             } else {
                 renderPlaceholder(view);
@@ -1245,6 +1351,12 @@
                 confirmMsg = `Delete school "${name}"?\n\nAll students in this school will be removed. Teacher profiles are kept.`;
             } else if (role === 'Student') {
                 confirmMsg = `Delete student "${name}"?\n\nSchools and teachers are kept.`;
+            } else if (role === 'GateCoordinator') {
+                confirmMsg = `Delete coordinator "${name}"?\n\nThis removes only their gate login profile. Teachers, students, schedules, and supervision links stay as they are.`;
+            } else if (role === 'GateClassSupervisor') {
+                confirmMsg = `Delete class supervisor "${name}"?\n\nThis removes their gate profile and class-supervisor supervision links where they are the superior.`;
+            } else if (role === 'GateTeacherAssistant') {
+                confirmMsg = `Delete teacher assistant "${name}"?\n\nThis removes only their gate login profile.`;
             }
             return confirmMsg;
         }
@@ -1253,6 +1365,9 @@
             if (role === 'Teacher') return 'Delete teacher?';
             if (role === 'School') return 'Delete school?';
             if (role === 'Student') return 'Delete student?';
+            if (role === 'GateCoordinator') return 'Delete coordinator?';
+            if (role === 'GateClassSupervisor') return 'Delete class supervisor?';
+            if (role === 'GateTeacherAssistant') return 'Delete teacher assistant?';
             return 'Delete?';
         }
 

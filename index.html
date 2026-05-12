@@ -76,15 +76,6 @@
                 </div>
             </div>
 
-            <div class="summary-panel" id="summaryPanel" aria-label="Selected availability">
-                <div id="summaryContent" class="summary-content">
-                    <div class="day-summary day-summary-available">
-                        <h3>Available</h3>
-                        <p class="empty-message">No available hours selected yet. Left-click to mark available time slots.</p>
-                    </div>
-                </div>
-            </div>
-
             <div id="materialsFrameHost" class="materials-frame-host" aria-hidden="true">
                 <iframe id="materialsFrame" class="materials-frame" title="Materials" src="about:blank"></iframe>
             </div>
@@ -937,6 +928,33 @@
                     </div>
                 </footer>
             </form>
+        </div>
+    </div>
+
+    <div id="supervisionModal" class="supervision-modal" aria-hidden="true">
+        <div class="supervision-modal-backdrop" id="supervisionModalBackdrop"></div>
+        <div class="supervision-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="supervisionModalTitle">
+            <h3 id="supervisionModalTitle" class="supervision-modal-title">Supervision access</h3>
+            <p id="supervisionModalHint" class="supervision-modal-hint"></p>
+            <fieldset id="supervisionSchoolFieldset" class="supervision-school-fieldset"></fieldset>
+            <div class="supervision-modal-actions">
+                <button type="button" id="supervisionModalCancelBtn" class="supervision-modal-btn">Cancel</button>
+                <button type="button" id="supervisionModalConfirmBtn" class="supervision-modal-btn supervision-modal-btn--primary">Accept</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="supervisionInviteModal" class="supervision-modal" aria-hidden="true">
+        <div class="supervision-modal-backdrop" id="supervisionInviteModalBackdrop"></div>
+        <div class="supervision-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="supervisionInviteModalTitle">
+            <h3 id="supervisionInviteModalTitle" class="supervision-modal-title">Share data with a teacher</h3>
+            <p class="supervision-modal-hint">Enter the teacher&rsquo;s login username (same as they use to sign in).</p>
+            <label for="supervisionInviteUsernameInput" class="supervision-invite-modal-label">Teacher username</label>
+            <input type="text" id="supervisionInviteUsernameInput" class="supervision-invite-modal-input" autocomplete="username" spellcheck="false" autocapitalize="none" />
+            <div class="supervision-modal-actions">
+                <button type="button" id="supervisionInviteModalCancelBtn" class="supervision-modal-btn">Cancel</button>
+                <button type="button" id="supervisionInviteModalSendBtn" class="supervision-modal-btn supervision-modal-btn--primary">Send invitation</button>
+            </div>
         </div>
     </div>
 

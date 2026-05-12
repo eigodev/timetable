@@ -1,3 +1,11 @@
+import {
+  filterSupervisionLinksForActor,
+  getSupervisionLinksArray,
+  studentsVisibleViaSupervision,
+  supervisedTeacherProfilesForSuperior,
+  supervisedTeacherProfilesForClassSupervisor,
+} from './supervision-links.js';
+
 function sortNames(a, b) {
   return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
 }
@@ -198,6 +206,7 @@ export function filterRosterForActor(roster, actor) {
     r.customSchools = (Array.isArray(r.customSchools) ? r.customSchools : []).filter((s) =>
       studentSchoolTitles.has(String(s || '').trim())
     );
+    r.supervisionLinks = [];
     return r;
   }
 
@@ -211,13 +220,20 @@ export function filterRosterForActor(roster, actor) {
     const r = JSON.parse(JSON.stringify(roster));
     const allowedStudents = new Set(studentsAssignedToTeacher(roster, tp));
     for (const n of rosterStudentNamesWithNoTutor(roster)) allowedStudents.add(n);
+    if (role === 'gate') {
+      for (const s of studentsVisibleViaSupervision(roster, tp)) allowedStudents.add(s);
+    }
 
     const keepStudent = (name) => allowedStudents.has(String(name || '').trim());
     r.private = (Array.isArray(r.private) ? r.private : []).filter(keepStudent);
     r.speakon = (Array.isArray(r.speakon) ? r.speakon : []).filter(keepStudent);
     r.passport = (Array.isArray(r.passport) ? r.passport : []).filter(keepStudent);
 
-    r.teachers = [...teacherRow].sort(sortNames);
+    const teacherRowSet = new Set(teacherRow.map((x) => String(x || '').trim()).filter(Boolean));
+    if (role === 'gate') {
+      for (const tname of supervisedTeacherProfilesForSuperior(roster, tp)) teacherRowSet.add(String(tname || '').trim());
+    }
+    r.teachers = [...teacherRowSet].sort(sortNames);
 
     const te =
       r.teacherEmails && typeof r.teacherEmails === 'object' ? { ...r.teacherEmails } : {};
@@ -280,6 +296,8 @@ export function filterRosterForActor(roster, actor) {
     r.passportHeaderPageLink = '';
     r.calendarToolbarExternalLink = '';
     r.authLoginAliases = filterAuthLoginAliases(roster, actor);
+    const rawLinks = getSupervisionLinksArray(roster);
+    r.supervisionLinks = filterSupervisionLinksForActor(rawLinks, actor);
     return r;
   }
 
@@ -436,14 +454,53 @@ export function mergeSchedulesForTeacher(baseSchedules, incomingSchedules, teach
   return base;
 }
 
-export function filterSchedulesForActor(schedules, actor) {
+/**
+ * Class Supervisor may merge their own schedule key and supervisees' keys (class-supervisor invitations only).
+ * @param {object} baseSchedules
+ * @param {object} incomingSchedules
+ * @param {string} gateProfile
+ * @param {object} fullRoster
+ */
+export function mergeSchedulesForClassSupervisor(baseSchedules, incomingSchedules, gateProfile, fullRoster) {
+  const profile = String(gateProfile || '').trim();
+  if (!profile) throw new Error('Missing gate profile');
+  if (!fullRoster || typeof fullRoster !== 'object') throw new Error('Roster required');
+  const base = baseSchedules && typeof baseSchedules === 'object' ? { ...baseSchedules } : {};
+  const inc = incomingSchedules && typeof incomingSchedules === 'object' ? incomingSchedules : {};
+  const allowed = new Set([profile]);
+  for (const tp of supervisedTeacherProfilesForClassSupervisor(fullRoster, profile)) {
+    allowed.add(tp);
+  }
+  for (const k of Object.keys(inc)) {
+    const key = String(k || '').trim();
+    if (!key) continue;
+    if (!allowed.has(key)) {
+      throw new Error('Cannot modify this schedule');
+    }
+    base[key] = inc[key];
+  }
+  return base;
+}
+
+/**
+ * @param {object} schedules
+ * @param {{ role: string, profile: string }} actor
+ * @param {object} [fullRoster] — required for gate supervision (merged teacher schedules)
+ */
+export function filterSchedulesForActor(schedules, actor, fullRoster) {
   if (!schedules || typeof schedules !== 'object') return {};
   const role = String(actor?.role || '').trim();
   const profile = String(actor?.profile || '').trim();
   if (role === 'admin') return { ...schedules };
   if ((role === 'teacher' || role === 'gate') && profile) {
-    const slot = schedules[profile];
-    return slot !== undefined ? { [profile]: slot } : {};
+    const out = {};
+    if (schedules[profile] !== undefined) out[profile] = schedules[profile];
+    if (role === 'gate' && fullRoster && typeof fullRoster === 'object') {
+      for (const tp of supervisedTeacherProfilesForSuperior(fullRoster, profile)) {
+        if (tp !== profile && schedules[tp] !== undefined) out[tp] = schedules[tp];
+      }
+    }
+    return out;
   }
   if (role === 'student' && profile) {
     return {};
@@ -468,7 +525,9 @@ export function isStudentVisibleToActor(fullRoster, studentName, actor) {
     const stMap = fullRoster.studentTeachers && typeof fullRoster.studentTeachers === 'object' ? fullRoster.studentTeachers : {};
     const assigned = tutorValueForStudent(stMap, sn);
     if (!String(assigned || '').trim()) return true;
-    return assigned.toLowerCase() === profile.toLowerCase();
+    if (assigned.toLowerCase() === profile.toLowerCase()) return true;
+    if (role === 'gate' && studentsVisibleViaSupervision(fullRoster, profile).has(sn)) return true;
+    return false;
   }
   return false;
 }
