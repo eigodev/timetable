@@ -1483,16 +1483,19 @@ async function refreshTimetableApiBearerTokenIfPossible() {
     const username = resolveAuthLoginTyped(String(creds.username || '').trim());
     const password = sanitizeTypedLoginPassword(creds.password);
     if (!username || !password) return;
+    let body;
+    try {
+        body = JSON.stringify({ username, password });
+    } catch {
+        return;
+    }
     try {
         const res = await fetch(loginUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                username,
-                password
-            })
+            body
         });
         const data = await res.json().catch(() => null);
 
@@ -7339,18 +7342,37 @@ async function loadAllSchedules() {
             return;
         }
 
+        const authHeaders = timetableCloudPollAuthHeadersOrNull();
+        if (!authHeaders) {
+            updateSyncStatus(
+                'local-only',
+                '⚠ Sign in (or wait for session) for cloud schedules — localStorage only'
+            );
+            loadAllSchedulesLocal();
+            startPolling();
+            void pollClassReportUploadsFromCloud();
+            return;
+        }
+
         const response = await fetch(schedulesUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-                ...getTimetableApiAuthHeaders()
+                ...authHeaders
             },
         });
         
         if (response.ok) {
-            const data = await response.json();
-            
-                if (data.success) {
+            const data = await response.json().catch(() => null);
+            if (!data) {
+                updateSyncStatus('local-only', '⚠ Cloud error - using local storage');
+                loadAllSchedulesLocal();
+                startPolling();
+                void pollClassReportUploadsFromCloud();
+                return;
+            }
+
+            if (data.success) {
                 if (data.schedules && !skipCloudClobberPendingUpload) {
                     Object.assign(teacherSchedules, data.schedules);
                     applyTeacherDataIsolationInMemory();
@@ -7384,8 +7406,8 @@ async function loadAllSchedules() {
             // Get error details
             let errorDetails = `HTTP ${response.status}`;
             try {
-                const errorData = await response.json();
-                if (errorData.error) {
+                const errorData = await response.json().catch(() => null);
+                if (errorData?.error) {
                     errorDetails = errorData.error;
                 }
             } catch (e) {
@@ -7652,21 +7674,38 @@ async function performSave() {
             return;
         }
 
+        const authHeaders = timetableCloudPollAuthHeadersOrNull();
+        if (!authHeaders) {
+            saveAllSchedulesLocal();
+            updateSyncStatus('local-only', '⚠ Cloud save needs sign-in — saved locally only');
+            return;
+        }
+
+        let body;
+        try {
+            body = JSON.stringify({
+                schedules: getSchedulesPayloadForCloudPost(),
+            });
+        } catch (e) {
+            console.error('Error serializing schedules for cloud:', e);
+            saveAllSchedulesLocal();
+            updateSyncStatus('local-only', '⚠ Save failed — using local storage');
+            return;
+        }
+
         const response = await fetch(postUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getTimetableApiAuthHeaders()
+                ...authHeaders
             },
-            body: JSON.stringify({
-                schedules: getSchedulesPayloadForCloudPost(),
-            }),
+            body,
         });
 
         if (response.ok) {
-            const data = await response.json();
+            const data = await response.json().catch(() => null);
 
-            if (data.success) {
+            if (data && data.success) {
                 lastUpdateTimestamp = data.lastUpdated;
                 console.log('Successfully saved to cloud. Timestamp:', data.lastUpdated);
 
@@ -7682,7 +7721,7 @@ async function performSave() {
                     }, 1500);
                 }, 300);
             } else {
-                throw new Error(data.error || 'Save failed');
+                throw new Error((data && data.error) || 'Save failed');
             }
         } else {
             let errorDetails = `HTTP ${response.status}`;
