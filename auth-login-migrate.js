@@ -57,8 +57,12 @@
         return String(s || '').trim().toLowerCase();
     }
 
+    const STORED_DEFAULT_ADMIN_USERNAME = '@admin';
+
     function migrateRosterAuthFields(roster) {
         if (!roster || typeof roster !== 'object' || Array.isArray(roster)) return false;
+
+        let dirty = false;
 
         const aliases =
             roster.authLoginAliases && typeof roster.authLoginAliases === 'object' && !Array.isArray(roster.authLoginAliases)
@@ -80,27 +84,41 @@
             ...(Array.isArray(roster.speakon) ? roster.speakon : []),
             ...(Array.isArray(roster.passport) ? roster.passport : [])
         ];
-        const gateStaffAccounts = Array.isArray(roster.gateStaffAccounts) ? roster.gateStaffAccounts : [];
+        const gateStaffAccounts = Array.isArray(roster.gateStaffAccounts) ? roster.gateStaffAccounts.map((e) => ({ ...e })) : [];
 
         const taken = new Set();
-        const adminRaw = roster.adminAccount && typeof roster.adminAccount === 'object' ? roster.adminAccount.username : '';
-        const adminU = String(adminRaw || '@Admin').trim().toLowerCase();
-        if (adminU) taken.add(adminU);
+
+        const reserve = (u) => {
+            const s = String(u || '').trim().toLowerCase();
+            if (s) taken.add(s);
+        };
 
         teachers.forEach((name) => {
             const L = String(teacherEmails[name] || '').trim();
-            if (L && !L.includes('@')) taken.add(L.toLowerCase());
+            if (L) reserve(L);
         });
         studentNames.forEach((name) => {
             const L = String(studentUsernames[name] || '').trim();
-            if (L && !L.includes('@')) taken.add(L.toLowerCase());
+            if (L) reserve(L);
         });
         gateStaffAccounts.forEach((entry) => {
-            const L = String(entry && entry.username ? entry.username : '').trim();
-            if (L && !L.includes('@')) taken.add(L.toLowerCase());
+            const L = String(entry?.username || '').trim();
+            if (L) reserve(L);
         });
 
-        let dirty = false;
+        if (roster.adminAccount && typeof roster.adminAccount === 'object' && roster.adminAccount.username) {
+            reserve(roster.adminAccount.username);
+        }
+        reserve(STORED_DEFAULT_ADMIN_USERNAME);
+
+        const applyLowercaseAlias = (cur, neu, setField) => {
+            const curLc = lowerKey(cur);
+            const neuLc = String(neu || '').trim().toLowerCase();
+            if (!curLc || !neuLc || curLc === neuLc) return false;
+            aliases[curLc] = neu;
+            setField(neu);
+            return true;
+        };
 
         teachers
             .slice()
@@ -110,8 +128,22 @@
                 if (!n) return;
                 const pw = String(teacherPasswords[n] || '').trim();
                 if (!pw) return;
-                const cur = String(teacherEmails[n] || '').trim();
-                if (cur && !cur.includes('@')) return;
+                let cur = String(teacherEmails[n] || '').trim();
+                if (cur && !cur.includes('@')) {
+                    const low = cur.toLowerCase();
+                    if (cur !== low) {
+                        if (
+                            applyLowercaseAlias(cur, low, (v) => {
+                                teacherEmails[n] = v;
+                            })
+                        ) {
+                            dirty = true;
+                        }
+                    } else {
+                        reserve(cur);
+                    }
+                    return;
+                }
                 const base = buildCanonicalUsernameBaseFromFullName(n);
                 if (!base) return;
                 const neu = pickNextAvailableUsername(base, taken);
@@ -120,8 +152,10 @@
                 if (cur && curLc !== neuLc) {
                     aliases[curLc] = neu;
                 }
-                if (cur !== neu) dirty = true;
-                teacherEmails[n] = neu;
+                if (cur !== neu) {
+                    teacherEmails[n] = neu;
+                    dirty = true;
+                }
             });
 
         studentNames.forEach((name) => {
@@ -129,8 +163,22 @@
             if (!n) return;
             const pw = String(studentPasswords[n] || '').trim();
             if (!pw) return;
-            const cur = String(studentUsernames[n] || '').trim();
-            if (cur && !cur.includes('@')) return;
+            let cur = String(studentUsernames[n] || '').trim();
+            if (cur && !cur.includes('@')) {
+                const low = cur.toLowerCase();
+                if (cur !== low) {
+                    if (
+                        applyLowercaseAlias(cur, low, (v) => {
+                            studentUsernames[n] = v;
+                        })
+                    ) {
+                        dirty = true;
+                    }
+                } else {
+                    reserve(cur);
+                }
+                return;
+            }
             const base = buildCanonicalUsernameBaseFromFullName(n);
             if (!base) return;
             const neu = pickNextAvailableUsername(base, taken);
@@ -139,16 +187,57 @@
             if (cur && curLc !== neuLc) {
                 aliases[curLc] = neu;
             }
-            if (cur !== neu) dirty = true;
-            studentUsernames[n] = neu;
+            if (cur !== neu) {
+                studentUsernames[n] = neu;
+                dirty = true;
+            }
+        });
+
+        gateStaffAccounts.forEach((entry, idx) => {
+            const profileName = String(entry.profileName || '').trim();
+            const pw = String(entry.password || '').trim();
+            if (!profileName || !pw) return;
+            let cur = String(entry.username || '').trim();
+            if (cur && !cur.includes('@')) {
+                const low = cur.toLowerCase();
+                if (cur !== low) {
+                    if (
+                        applyLowercaseAlias(cur, low, (v) => {
+                            gateStaffAccounts[idx].username = v;
+                        })
+                    ) {
+                        dirty = true;
+                    }
+                } else {
+                    reserve(cur);
+                }
+                return;
+            }
+            const base = buildCanonicalUsernameBaseFromFullName(profileName);
+            if (!base) return;
+            const neu = pickNextAvailableUsername(base, taken);
+            const curLc = lowerKey(cur);
+            const neuLc = lowerKey(neu);
+            if (cur && curLc !== neuLc) {
+                aliases[curLc] = neu;
+            }
+            if (cur !== neu) {
+                gateStaffAccounts[idx].username = neu;
+                dirty = true;
+            }
         });
 
         if (roster.adminAccount && typeof roster.adminAccount === 'object' && roster.adminAccount.username) {
             const au = String(roster.adminAccount.username || '').trim();
-            if (au === '@Admin') {
-                /* Reserved built-in admin username — do not rewrite. */
+            if (au.toLowerCase() === '@admin' || au === '@Admin' || au === 'admin_') {
+                if (au !== STORED_DEFAULT_ADMIN_USERNAME) {
+                    aliases[lowerKey(au)] = STORED_DEFAULT_ADMIN_USERNAME;
+                    roster.adminAccount = { ...roster.adminAccount, username: STORED_DEFAULT_ADMIN_USERNAME };
+                    dirty = true;
+                }
             } else if (au.includes('@')) {
-                const base = buildCanonicalUsernameBaseFromFullName('admin') || 'admin';
+                let base = buildCanonicalUsernameBaseFromFullName('admin');
+                if (!base) base = 'admin_';
                 const neu = pickNextAvailableUsername(base, taken);
                 const auLc = lowerKey(au);
                 const neuLc = lowerKey(neu);
@@ -156,18 +245,36 @@
                     aliases[auLc] = neu;
                 }
                 roster.adminAccount = { ...roster.adminAccount, username: neu };
-                try {
-                    localStorage.setItem('timetable_admin_account', JSON.stringify(roster.adminAccount));
-                } catch {
-                    /* ignore */
-                }
                 dirty = true;
             }
         }
 
+        let adminObj = roster.adminAccount && typeof roster.adminAccount === 'object' ? { ...roster.adminAccount } : {};
+        let adminU = String(adminObj.username || '').trim();
+
+        if (!adminU) {
+            adminObj.username = STORED_DEFAULT_ADMIN_USERNAME;
+            adminU = STORED_DEFAULT_ADMIN_USERNAME;
+            dirty = true;
+        } else if (adminU.toLowerCase() === '@admin' && adminU !== STORED_DEFAULT_ADMIN_USERNAME) {
+            aliases[lowerKey(adminU)] = STORED_DEFAULT_ADMIN_USERNAME;
+            adminObj.username = STORED_DEFAULT_ADMIN_USERNAME;
+            dirty = true;
+        }
+
+        roster.adminAccount = adminObj;
         roster.teacherEmails = teacherEmails;
         roster.studentUsernames = studentUsernames;
+        roster.gateStaffAccounts = gateStaffAccounts;
         roster.authLoginAliases = aliases;
+
+        if (dirty) {
+            try {
+                localStorage.setItem('timetable_admin_account', JSON.stringify(roster.adminAccount));
+            } catch {
+                /* ignore */
+            }
+        }
 
         return dirty;
     }

@@ -32,3 +32,5 @@ export async function verifyStoredPassword(storedPasswordRaw, passwordRaw) {
   }
   return (await hashPassword(typedPassword)) === storedPassword;
 }
+
+export { hashPassword };

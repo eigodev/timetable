@@ -1,5 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
+import { migrateAndPersistRosterKv } from '../lib/roster-auth-migrate.js';
 import {
   coerceSupervisionLink,
   isSupervisorInviterAppRole,
@@ -15,8 +16,16 @@ const corsHeaders = (extra = {}) =>
     ...extra,
   });
 
+function resolveAuthLoginTypedFromRoster(roster, raw) {
+  const t = String(raw || '').trim();
+  if (!t || !roster?.authLoginAliases || typeof roster.authLoginAliases !== 'object') return t;
+  const hit = roster.authLoginAliases[t.toLowerCase()];
+  return hit ? String(hit).trim() : t;
+}
+
 function teacherProfileFromUsername(roster, usernameRaw) {
-  const want = String(usernameRaw || '').trim().toLowerCase();
+  const resolved = resolveAuthLoginTypedFromRoster(roster, usernameRaw);
+  const want = String(resolved || '').trim().toLowerCase();
   if (!want) return '';
   const emails = roster?.teacherEmails && typeof roster.teacherEmails === 'object' ? roster.teacherEmails : {};
   for (const name of Object.keys(emails)) {
@@ -104,13 +113,14 @@ export async function onRequest(context) {
     });
   }
 
-  const roster = (await KV.get('all_roster', 'json')) || {};
+  let roster = await KV.get('all_roster', 'json');
   if (!roster || typeof roster !== 'object') {
     return new Response(JSON.stringify({ success: false, error: 'Roster not found' }), {
       status: 404,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
     });
   }
+  roster = await migrateAndPersistRosterKv(KV, roster);
 
   let teacherProfile = teacherProfileRaw;
   if (!teacherProfile && teacherUsername) {

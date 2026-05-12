@@ -33,7 +33,7 @@ const LOGOUT_BROADCAST_STORAGE_KEY = 'timetable_logout_broadcast_ts';
 /** Session: auto popup for pending data-share invites was already shown for these link ids. */
 const SUPERVISION_NOTICE_SESSION_KEY = 'timetable_supervision_invite_notice_shown_ids';
 const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-const DEFAULT_ADMIN_USERNAME = '@Admin';
+const DEFAULT_ADMIN_USERNAME = '@admin';
 const DEFAULT_ADMIN_PASSWORD = 'admin';
 const PROFILE_AVATARS_STORAGE_KEY = 'timetable_profile_avatars';
 const SCHOOL_THEME_COLORS = [

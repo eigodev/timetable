@@ -1,5 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
+import { migrateAndPersistRosterKv, migrateRosterAuthInPlace } from '../lib/roster-auth-migrate.js';
 import { filterRosterForActor, mergeTeacherRosterPatch } from '../lib/roster-scope.js';
 
 const corsHeaders = (extra = {}) =>
@@ -43,7 +44,10 @@ export async function onRequest(context) {
 
     if (request.method === 'GET') {
       if (!auth.legacy) {
-        const rosterFull = await KV.get('all_roster', 'json');
+        let rosterFull = await KV.get('all_roster', 'json');
+        if (rosterFull && typeof rosterFull === 'object') {
+          rosterFull = await migrateAndPersistRosterKv(KV, rosterFull);
+        }
         const lastUpdated = await KV.get('roster_last_updated', 'text');
         const actor = { role: auth.payload.role, profile: auth.payload.profile };
         const roster = filterRosterForActor(rosterFull || {}, actor);
@@ -56,7 +60,10 @@ export async function onRequest(context) {
           { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
         );
       }
-      const roster = await KV.get('all_roster', 'json');
+      let roster = await KV.get('all_roster', 'json');
+      if (roster && typeof roster === 'object') {
+        roster = await migrateAndPersistRosterKv(KV, roster);
+      }
       const lastUpdated = await KV.get('roster_last_updated', 'text');
       return new Response(
         JSON.stringify({
@@ -85,6 +92,7 @@ export async function onRequest(context) {
         const profile = auth.payload.profile;
 
         if (role === 'admin') {
+          await migrateRosterAuthInPlace(incoming);
           await KV.put('all_roster', JSON.stringify(incoming));
           await KV.put('roster_last_updated', timestamp);
           return new Response(
@@ -105,6 +113,7 @@ export async function onRequest(context) {
           }
           const baseRaw = await KV.get('all_roster', 'json');
           const base = baseRaw && typeof baseRaw === 'object' ? baseRaw : {};
+          await migrateAndPersistRosterKv(KV, base);
           let merged;
           try {
             merged = mergeTeacherRosterPatch(base, incoming, profile);
@@ -128,6 +137,7 @@ export async function onRequest(context) {
         });
       }
 
+      await migrateRosterAuthInPlace(incoming);
       await KV.put('all_roster', JSON.stringify(incoming));
       await KV.put('roster_last_updated', timestamp);
       return new Response(

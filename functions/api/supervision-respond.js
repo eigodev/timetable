@@ -1,5 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
+import { migrateAndPersistRosterKv } from '../lib/roster-auth-migrate.js';
 import {
   coerceSupervisionLink,
   isValidSupervisionStatusTransition,
@@ -97,13 +98,14 @@ export async function onRequest(context) {
     });
   }
 
-  const roster = (await KV.get('all_roster', 'json')) || {};
+  let roster = await KV.get('all_roster', 'json');
   if (!roster || typeof roster !== 'object') {
     return new Response(JSON.stringify({ success: false, error: 'Roster not found' }), {
       status: 404,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
     });
   }
+  roster = await migrateAndPersistRosterKv(KV, roster);
 
   const rawList = Array.isArray(roster.supervisionLinks) ? roster.supervisionLinks : [];
   const idx = rawList.findIndex((r) => String(r?.id || '').trim() === linkId);

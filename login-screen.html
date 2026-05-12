@@ -694,7 +694,7 @@
 			const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 			const ROSTER_STORAGE_KEY = 'timetable_roster';
 			const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
-			const DEFAULT_ADMIN_USERNAME = '@Admin';
+			const DEFAULT_ADMIN_USERNAME = '@admin';
 			const DEFAULT_ADMIN_PASSWORD = 'admin';
 			const PASSWORD_HASH_PREFIX = 'sha256$';
 
@@ -972,7 +972,7 @@
 				const password = sanitizeLoginPasswordTyped(passwordRaw);
 				if (!usernameTyped || !password) return { ok: false };
 
-				if (usernameTyped === DEFAULT_ADMIN_USERNAME && password === DEFAULT_ADMIN_PASSWORD) {
+				if (usernameTyped.toLowerCase() === DEFAULT_ADMIN_USERNAME.toLowerCase() && password === DEFAULT_ADMIN_PASSWORD) {
 					await refreshTimetablePageApiBearerToken(usernameTyped, password);
 					let roster = await loadHostedRoster();
 					if (!roster) roster = loadCachedRoster();

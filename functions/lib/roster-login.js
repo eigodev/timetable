@@ -1,7 +1,7 @@
 import { verifyStoredPassword } from './password-verify.js';
 
 /** Hardcoded emergency / default admin only; must match client + script.js. Not stored in roster. */
-const BUILTIN_ADMIN_USERNAME = '@Admin';
+const BUILTIN_ADMIN_USERNAME = '@admin';
 const BUILTIN_ADMIN_PASSWORD = 'admin';
 
 function normalizeAdminAccount(account) {
@@ -110,7 +110,7 @@ export async function rosterLoginLookup(roster, usernameTyped, passwordTyped) {
     .trim();
   if (!usernameRaw || !password) return null;
 
-  if (usernameRaw === BUILTIN_ADMIN_USERNAME && password === BUILTIN_ADMIN_PASSWORD) {
+  if (usernameRaw.toLowerCase() === BUILTIN_ADMIN_USERNAME.toLowerCase() && password === BUILTIN_ADMIN_PASSWORD) {
     return {
       role: 'admin',
       profile: BUILTIN_ADMIN_USERNAME,

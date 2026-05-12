@@ -1,3 +1,5 @@
+import { migrateAndPersistRosterKv } from '../lib/roster-auth-migrate.js';
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -59,10 +61,17 @@ export async function onRequest(context) {
     }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ').trim();
-    const roster = (await KV.get('all_roster', 'json')) || {};
+    let roster = (await KV.get('all_roster', 'json')) || {};
+    roster = await migrateAndPersistRosterKv(KV, roster);
 
     const adminU = String(roster?.adminAccount?.username || '').trim().toLowerCase();
     const usernameLc = username.toLowerCase();
+    if (usernameLc === '@admin') {
+      return new Response(JSON.stringify({ success: false, error: 'Username reserved' }), {
+        status: 409,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
     if (adminU && usernameLc === adminU) {
       return new Response(JSON.stringify({ success: false, error: 'Username taken' }), {
         status: 409,

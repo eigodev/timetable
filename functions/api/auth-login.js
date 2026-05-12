@@ -1,4 +1,5 @@
 import { signAuthToken } from '../lib/auth-token.js';
+import { migrateAndPersistRosterKv } from '../lib/roster-auth-migrate.js';
 import { rosterLoginLookup } from '../lib/roster-login.js';
 
 const cors = {
@@ -49,13 +50,15 @@ export async function onRequest(context) {
       });
     }
 
-    const roster = await KV.get('all_roster', 'json');
+    let roster = await KV.get('all_roster', 'json');
     if (!roster || typeof roster !== 'object') {
       return new Response(JSON.stringify({ success: false, error: 'Roster not initialized' }), {
         status: 404,
         headers: { ...cors, 'Content-Type': 'application/json' },
       });
     }
+
+    roster = await migrateAndPersistRosterKv(KV, roster);
 
     const hit = await rosterLoginLookup(roster, username, password);
     if (!hit) {
