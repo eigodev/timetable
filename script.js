@@ -1470,6 +1470,11 @@ function initCrossTabLogoutBroadcastListener() {
     });
 }
 
+/**
+ * Re-issues a Bearer JWT from saved credentials. Does not throw.
+ * Clears token + legacy flag only on 503, on success, or on definitive client errors (4xx except 408/429).
+ * Keeps stored JWT on 5xx / 408 / 429 so a brief outage does not log everyone out.
+ */
 async function refreshTimetableApiBearerTokenIfPossible() {
     const loginUrl = absoluteHttpApiUrl('/api/auth-login');
     if (!loginUrl) return;
@@ -1490,6 +1495,7 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             })
         });
         const data = await res.json().catch(() => null);
+
         if (res.status === 503) {
             try {
                 sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
@@ -1499,20 +1505,36 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             clearTimetableApiBearerToken();
             return;
         }
+
+        const token = data && String(data.token || '').trim();
+        if (res.ok && token) {
+            try {
+                sessionStorage.removeItem('timetable_api_auth_unconfigured');
+            } catch {
+                /* ignore */
+            }
+            persistTimetableApiBearerToken(token);
+            const ru = String(data.resolvedUsername || username || '').trim();
+            if (ru && password) {
+                saveLoginCredentials(ru, password);
+            }
+            return;
+        }
+
+        /* Transient or inconclusive: keep JWT and legacy flag — server may recover. */
+        if ((res.status >= 500 && res.status <= 599) || res.status === 429 || res.status === 408) {
+            if (res.status >= 500) {
+                console.warn('API token refresh: server error', res.status);
+            }
+            return;
+        }
+
         try {
             sessionStorage.removeItem('timetable_api_auth_unconfigured');
         } catch {
             /* ignore */
         }
-        if (!res.ok || !data?.token) {
-            clearTimetableApiBearerToken();
-            return;
-        }
-        persistTimetableApiBearerToken(data.token);
-        const ru = String(data.resolvedUsername || username || '').trim();
-        if (ru && password) {
-            saveLoginCredentials(ru, password);
-        }
+        clearTimetableApiBearerToken();
     } catch (e) {
         console.warn('API token refresh:', e);
     }
@@ -7019,9 +7041,11 @@ function maybeAdvanceClassReportUploadsCloudTsFromPoll(remoteTs) {
 }
 
 async function saveRosterToCloud(rosterPayload) {
-    if (!rosterPayload || typeof rosterPayload !== 'object') return;
+    if (!rosterPayload || typeof rosterPayload !== 'object' || Array.isArray(rosterPayload)) return;
     const rosterUrl = absoluteHttpApiUrl('/api/roster');
     if (!rosterUrl) return;
+    const authHeaders = timetableCloudPollAuthHeadersOrNull();
+    if (!authHeaders) return;
     if (isSavingRoster) {
         pendingRosterPayload = rosterPayload;
         return;
@@ -7038,16 +7062,23 @@ async function saveRosterToCloud(rosterPayload) {
             rosterForRequest = { ...rosterPayload, teachers: [String(loggedInTeacherName || '').trim()] };
         }
         const payload = isScopedTeacher ? { roster: rosterForRequest, merge: true } : { roster: rosterPayload };
+        let body;
+        try {
+            body = JSON.stringify(payload);
+        } catch (e) {
+            console.error('Error serializing roster for cloud:', e);
+            return;
+        }
         const response = await fetch(rosterUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getTimetableApiAuthHeaders()
+                ...authHeaders
             },
-            body: JSON.stringify(payload),
+            body,
         });
         if (response.ok) {
-            const data = await response.json();
+            const data = await response.json().catch(() => null);
             if (data?.lastUpdated) {
                 rosterLastUpdateTimestamp = data.lastUpdated;
             }
@@ -7077,6 +7108,12 @@ function queueSaveRosterToCloud(rosterPayload) {
  * Headers for GET polls that need a Bearer when the worker enforces JWT.
  * Returns null when the request would only yield 401 (except legacy: auth-login returned 503).
  */
+/**
+ * Builds auth headers for `/api/*` polls and writes when the worker may require a JWT.
+ * @returns {Record<string, string>|null} A shallow header map (often `{}` or `{ Authorization: 'Bearer …' }`),
+ *   or `null` if the deployment expects a Bearer token (`TIMETABLE_AUTH_SECRET` set) and none is stored.
+ *   Legacy mode: `sessionStorage` key `timetable_api_auth_unconfigured === '1'` (e.g. auth-login 503) allows empty auth.
+ */
 function timetableCloudPollAuthHeadersOrNull() {
     let authUnconfigured = false;
     try {
@@ -7084,11 +7121,17 @@ function timetableCloudPollAuthHeadersOrNull() {
     } catch {
         authUnconfigured = false;
     }
-    const authHeaders = getTimetableApiAuthHeaders();
-    if (!authUnconfigured && !authHeaders.Authorization) {
+    let authHeaders;
+    try {
+        authHeaders = getTimetableApiAuthHeaders();
+    } catch {
+        authHeaders = {};
+    }
+    const bearer = String(authHeaders?.Authorization || '').trim();
+    if (!authUnconfigured && !bearer) {
         return null;
     }
-    return authHeaders;
+    return authHeaders && typeof authHeaders === 'object' ? authHeaders : {};
 }
 
 async function pollRosterUpdates() {
@@ -7572,16 +7615,15 @@ function getSchedulesPayloadForCloudPost() {
     if (!isGateStaffAccountSession() || getGateSessionAppRole() !== 'class-supervisor') {
         return teacherSchedules;
     }
-    const self = String(loggedInTeacherName || '').trim();
     const allowed = new Set();
-    if (self) allowed.add(self);
-    supervisionLinks.forEach((l) => {
-        if (!isSupervisionLinkActiveClient(l)) return;
-        if (String(l?.superiorProfile || '').trim().toLowerCase() !== self.toLowerCase()) return;
-        if (String(l?.superiorAppRole || '').trim() !== 'class-supervisor') return;
-        const tp = String(l?.teacherProfile || '').trim();
-        if (tp) allowed.add(tp);
-    });
+    const self = String(loggedInTeacherName || '').trim();
+    if (self) {
+        const selfKey = canonicalTeacherNameOnRoster(self);
+        if (selfKey) allowed.add(selfKey);
+    }
+    for (const name of getClassSupervisorActiveSuperviseeTeacherNames()) {
+        if (name) allowed.add(name);
+    }
     const out = {};
     for (const k of Object.keys(teacherSchedules)) {
         if (allowed.has(k)) out[k] = teacherSchedules[k];
