@@ -28,6 +28,8 @@ const API_BEARER_TOKEN_STORAGE_KEY = 'timetable_api_bearer_token';
 /** When set in sessionStorage, skip auto-login until the next successful manual login (same tab). */
 const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
+/** Bumped in localStorage on logout so other tabs/windows receive `storage` and sign out too. */
+const LOGOUT_BROADCAST_STORAGE_KEY = 'timetable_logout_broadcast_ts';
 const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
 const DEFAULT_ADMIN_USERNAME = 'admin_';
 const DEFAULT_ADMIN_PASSWORD = '@Admin';
@@ -1315,6 +1317,56 @@ function clearTimetableApiBearerToken() {
     } catch {
         /* ignore */
     }
+}
+
+function broadcastSessionLogoutToOtherTabs() {
+    try {
+        localStorage.setItem(LOGOUT_BROADCAST_STORAGE_KEY, String(Date.now()));
+    } catch {
+        /* ignore */
+    }
+}
+
+function shouldHandleCrossTabLogoutInThisWindow() {
+    try {
+        const path = (window.location.pathname || '').replace(/\\/g, '/').toLowerCase();
+        if (path.includes('login-screen')) return false;
+        return path.endsWith('index.html') || path.endsWith('/') || path === '';
+    } catch {
+        return true;
+    }
+}
+
+function handleLogoutBroadcastFromOtherTab() {
+    if (!shouldHandleCrossTabLogoutInThisWindow()) return;
+    try {
+        if (document.body?.dataset.remoteLogoutRedirectPending === '1') return;
+        if (document.body) document.body.dataset.remoteLogoutRedirectPending = '1';
+    } catch {
+        /* ignore */
+    }
+    try {
+        sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
+        sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
+    } catch {
+        /* ignore */
+    }
+    clearTimetableApiBearerToken();
+    window.location.href = 'login-screen.html';
+}
+
+function initCrossTabLogoutBroadcastListener() {
+    try {
+        if (document.body?.dataset.crossTabLogoutBound === '1') return;
+        if (document.body) document.body.dataset.crossTabLogoutBound = '1';
+    } catch {
+        /* ignore */
+    }
+    window.addEventListener('storage', (e) => {
+        if (e.storageArea !== localStorage) return;
+        if (e.key !== LOGOUT_BROADCAST_STORAGE_KEY || e.newValue == null) return;
+        handleLogoutBroadcastFromOtherTab();
+    });
 }
 
 async function refreshTimetableApiBearerTokenIfPossible() {
@@ -7460,6 +7512,8 @@ function performTeacherSessionLogout() {
     loggedInTeacherName = '';
     loggedInStudentFullName = '';
     currentTeacher = null;
+    clearSavedLoginCredentials();
+    broadcastSessionLogoutToOtherTabs();
     clearTimetableApiBearerToken();
     supervisorSlotBookingsByTeacher = {};
     resetClassStartNotificationCache();
@@ -15055,6 +15109,7 @@ function setupAdminControlPanel() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    initCrossTabLogoutBroadcastListener();
     const isAdminPage = document.body?.dataset.page === 'admin';
     if (isAdminPage) {
         try {

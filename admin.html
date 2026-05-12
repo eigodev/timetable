@@ -1428,6 +1428,18 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            window.addEventListener('storage', (e) => {
+                if (e.storageArea !== localStorage) return;
+                if (e.key !== 'timetable_logout_broadcast_ts' || e.newValue == null) return;
+                try {
+                    sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
+                    sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
+                } catch {
+                    /* ignore */
+                }
+                window.location.href = 'login-screen.html';
+            });
+
             if (!assertAdminSession()) return;
             setupAdminRosterDeleteModal();
             setupAdminDashboardDeletes();
@@ -1440,6 +1452,8 @@
 
             document.getElementById('adminLogoffBtn')?.addEventListener('click', () => {
                 try {
+                    localStorage.removeItem('timetable_saved_login_credentials');
+                    localStorage.setItem('timetable_logout_broadcast_ts', String(Date.now()));
                     sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
                     sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
                 } catch {
