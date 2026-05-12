@@ -1472,8 +1472,10 @@ function initCrossTabLogoutBroadcastListener() {
 
 /**
  * Re-issues a Bearer JWT from saved credentials. Does not throw.
- * Clears token + legacy flag only on 503, on success, or on definitive client errors (4xx except 408/429).
- * Keeps stored JWT on 5xx / 408 / 429 so a brief outage does not log everyone out.
+ * - 503: sets `timetable_api_auth_unconfigured`, clears stored JWT (Workers auth not configured).
+ * - 2xx with `token`: clears unconfigured flag, persists JWT (and may rewrite saved creds with resolved username).
+ * - 5xx (other than 503), 408, 429: no storage changes (avoid logout on transient failures).
+ * - Other responses: clears unconfigured flag and stored JWT (definitive auth failure or unusable body).
  */
 async function refreshTimetableApiBearerTokenIfPossible() {
     const loginUrl = absoluteHttpApiUrl('/api/auth-login');
