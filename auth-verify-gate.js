@@ -20,6 +20,36 @@
         return {};
     }
 
+    /** Decode role from JWT payload segment only (UI gating). APIs still verify signature server-side. */
+    function unsafeJwtRoleFromStoredBearer() {
+        try {
+            let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+            if (!t || !String(t).trim()) {
+                t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+            }
+            t = String(t || '').trim();
+            if (!t) return null;
+            const payloadB64 = t.split('.')[0];
+            if (!payloadB64) return null;
+            let b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4) b64 += '=';
+            const p = JSON.parse(atob(b64));
+            const role = p && p.role != null ? String(p.role).trim() : '';
+            return role || null;
+        } catch {
+            return null;
+        }
+    }
+
+    function adminSessionAllow(adminSessionKey) {
+        if (!adminSessionKey) return false;
+        try {
+            return sessionStorage.getItem(adminSessionKey) === 'true';
+        } catch {
+            return false;
+        }
+    }
+
     /**
      * @param {{ adminSessionKey?: string, loginPath?: string }} [opts]
      * @returns {Promise<boolean>} true if this browsing context may proceed (admin)
@@ -28,6 +58,11 @@
         const adminSessionKey = String(opts?.adminSessionKey || '').trim();
         const loginPath = String(opts?.loginPath || 'login-screen.html').trim() || 'login-screen.html';
         const headers = { 'Content-Type': 'application/json', ...timetableBearerAuthHeaders() };
+
+        const fail = () => {
+            global.location.href = loginPath;
+            return false;
+        };
 
         try {
             const res = await fetch('/api/auth-verify?t=' + Date.now(), {
@@ -38,32 +73,42 @@
             const data = await res.json().catch(() => null);
 
             if (data && data.legacy === true) {
-                try {
-                    if (adminSessionKey && sessionStorage.getItem(adminSessionKey) === 'true') {
-                        return true;
-                    }
-                } catch {
-                    /* ignore */
-                }
-                global.location.href = loginPath;
-                return false;
+                if (adminSessionAllow(adminSessionKey)) return true;
+                return fail();
             }
 
-            if (res.ok && data && data.success && data.role === 'admin') {
+            if (res.ok && data && data.success) {
+                if (data.role === 'admin') {
+                    return true;
+                }
+                return fail();
+            }
+
+            if (res.status === 401) {
+                return fail();
+            }
+
+            /** Missing route (deploy), 5xx, or HTML error body — do not lock out valid admin JWT. */
+            if (
+                adminSessionAllow(adminSessionKey) ||
+                unsafeJwtRoleFromStoredBearer() === 'admin'
+            ) {
                 return true;
             }
 
-            global.location.href = loginPath;
-            return false;
+            return fail();
         } catch {
-            global.location.href = loginPath;
-            return false;
+            if (adminSessionAllow(adminSessionKey) || unsafeJwtRoleFromStoredBearer() === 'admin') {
+                return true;
+            }
+            return fail();
         }
     }
 
     global.TimeTableAuthVerifyGate = {
         timetableBearerAuthHeaders,
         timetableEnsureAdminApiAccess,
+        unsafeJwtRoleFromStoredBearer,
         API_BEARER_TOKEN_STORAGE_KEY,
     };
 })(typeof window !== 'undefined' ? window : globalThis);

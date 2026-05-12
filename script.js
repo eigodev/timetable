@@ -1336,6 +1336,30 @@ function getTimetableApiAuthHeaders() {
     return {};
 }
 
+/** Same shape as auth-verify-gate: first JWT segment is JSON payload (UI only; APIs verify HMAC). */
+function readStoredBearerTokenRoleUnsafe() {
+    if (typeof TimeTableAuthVerifyGate?.unsafeJwtRoleFromStoredBearer === 'function') {
+        return TimeTableAuthVerifyGate.unsafeJwtRoleFromStoredBearer();
+    }
+    try {
+        let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+        if (!t || !String(t).trim()) {
+            t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+        }
+        t = String(t || '').trim();
+        if (!t) return null;
+        const payloadB64 = t.split('.')[0];
+        if (!payloadB64) return null;
+        let b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const p = JSON.parse(atob(b64));
+        const role = p && p.role != null ? String(p.role).trim() : '';
+        return role || null;
+    } catch {
+        return null;
+    }
+}
+
 function clearTimetableApiBearerToken() {
     try {
         sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
@@ -1462,32 +1486,48 @@ async function refreshTimetableApiBearerTokenIfPossible() {
     }
 }
 
-/** Prefer server-verified Bearer JWT for admin (stateless; not tied to sessionStorage). */
+/** Prefer server-verified Bearer JWT for admin; if `/api/auth-verify` is missing/broken, trust JWT role claim for UI (APIs still enforce). */
 async function tryRestoreAdminFromBearerIfPossible() {
-    const verifyUrl = absoluteHttpApiUrl('/api/auth-verify');
-    if (!verifyUrl) return false;
     const headers = getTimetableApiAuthHeaders();
     if (!headers.Authorization) return false;
-    try {
-        const res = await fetch(`${verifyUrl}?t=${Date.now()}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                ...headers
-            },
-            cache: 'no-cache'
-        });
-        const data = await res.json().catch(() => null);
-        if (data?.legacy === true) return false;
-        if (!res.ok || !data?.success || data.role !== 'admin') return false;
-        isAdminLoggedIn = true;
-        loggedInStudentFullName = '';
-        loggedInTeacherName = '';
-        isTeacherLoggedIn = true;
-        return true;
-    } catch {
-        return false;
+    if (readStoredBearerTokenRoleUnsafe() !== 'admin') return false;
+
+    const verifyUrl = absoluteHttpApiUrl('/api/auth-verify');
+    if (verifyUrl) {
+        try {
+            const res = await fetch(`${verifyUrl}?t=${Date.now()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers
+                },
+                cache: 'no-cache'
+            });
+            const data = await res.json().catch(() => null);
+            if (data?.legacy === true) {
+                return false;
+            }
+            if (res.ok && data?.success) {
+                if (data.role === 'admin') {
+                    /* confirmed */
+                } else {
+                    return false;
+                }
+            } else if (res.status === 401) {
+                return false;
+            } else {
+                /** 404 / 5xx / parse failure — continue using JWT claim */
+            }
+        } catch {
+            /* network — continue using claim */
+        }
     }
+
+    isAdminLoggedIn = true;
+    loggedInStudentFullName = '';
+    loggedInTeacherName = '';
+    isTeacherLoggedIn = true;
+    return true;
 }
 
 /** Drop other teachers' and unrelated students' schedule keys for isolated teacher sessions (keeps own grid + visible students). */
