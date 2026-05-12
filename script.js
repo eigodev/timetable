@@ -1471,26 +1471,54 @@ function initCrossTabLogoutBroadcastListener() {
 }
 
 /**
- * Re-issues a Bearer JWT from saved credentials. Does not throw.
+ * Best-effort read of `/api/auth-login` JSON. Never throws (bad bodies / accessors must not break refresh).
+ */
+function timetableAuthLoginResponseFields(data) {
+    let token = '';
+    let errorText = '';
+    let resolvedUsername = '';
+    try {
+        if (data == null || typeof data !== 'object' || Array.isArray(data)) {
+            return { token, errorText, resolvedUsername };
+        }
+        if (data.token != null) token = String(data.token).trim();
+        if (data.error != null) errorText = String(data.error);
+        if (data.resolvedUsername != null) resolvedUsername = String(data.resolvedUsername).trim();
+    } catch {
+        /* ignore */
+    }
+    return { token, errorText, resolvedUsername };
+}
+
+/**
+ * Re-issues a Bearer JWT from saved credentials. Does not throw and does not reject the returned Promise.
  * Matches `functions/api/auth-login.js`: only JSON 503 bodies that report missing secret/KV
  * flip legacy `timetable_api_auth_unconfigured`; other 5xx/503 behaves like transient (keep stored JWT).
  * Clears JWT on success (persist new token) or definitive auth failure; keeps JWT on 408/429 and other transients.
  */
 async function refreshTimetableApiBearerTokenIfPossible() {
-    const loginUrl = absoluteHttpApiUrl('/api/auth-login');
-    if (!loginUrl) return;
-    const creds = loadSavedLoginCredentials();
-    if (!creds) return;
-    const username = resolveAuthLoginTyped(String(creds.username || '').trim());
-    const password = sanitizeTypedLoginPassword(creds.password);
-    if (!username || !password) return;
-    let body;
     try {
-        body = JSON.stringify({ username, password });
-    } catch {
-        return;
-    }
-    try {
+        const loginUrl = absoluteHttpApiUrl('/api/auth-login');
+        if (!loginUrl) return;
+        const creds = loadSavedLoginCredentials();
+        if (!creds) return;
+        let username;
+        let password;
+        try {
+            username = resolveAuthLoginTyped(String(creds.username || '').trim());
+            password = sanitizeTypedLoginPassword(creds.password);
+        } catch (e) {
+            console.warn('API token refresh (credentials):', timetableCaughtErrorMessage(e) || e);
+            return;
+        }
+        if (!username || !password) return;
+        let body;
+        try {
+            body = JSON.stringify({ username, password });
+        } catch {
+            return;
+        }
+
         const res = await fetch(loginUrl, {
             method: 'POST',
             headers: {
@@ -1498,16 +1526,13 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             },
             body
         });
-        const data = await res.json().catch(() => null);
+        const rawJson = await res.json().catch(() => null);
+        const { token, errorText, resolvedUsername: ruFromBody } = timetableAuthLoginResponseFields(rawJson);
 
         if (res.status === 503) {
-            const errText =
-                data && typeof data === 'object' && data.error != null
-                    ? String(data.error)
-                    : '';
             const authStackUnconfigured =
-                errText.includes('TIMETABLE_AUTH_SECRET') ||
-                errText.includes('schedules_kv not configured');
+                errorText.includes('TIMETABLE_AUTH_SECRET') ||
+                errorText.includes('schedules_kv not configured');
             if (authStackUnconfigured) {
                 try {
                     sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
@@ -1520,7 +1545,6 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             /* Generic 503 (proxy/CDN): treat like other 5xx below. */
         }
 
-        const token = data && String(data.token || '').trim();
         if (res.ok && token) {
             try {
                 sessionStorage.removeItem('timetable_api_auth_unconfigured');
@@ -1528,7 +1552,7 @@ async function refreshTimetableApiBearerTokenIfPossible() {
                 /* ignore */
             }
             persistTimetableApiBearerToken(token);
-            const ru = String(data.resolvedUsername || username || '').trim();
+            const ru = String(ruFromBody || username || '').trim();
             if (ru && password) {
                 saveLoginCredentials(ru, password);
             }
@@ -1550,7 +1574,7 @@ async function refreshTimetableApiBearerTokenIfPossible() {
         }
         clearTimetableApiBearerToken();
     } catch (e) {
-        console.warn('API token refresh:', e);
+        console.warn('API token refresh:', timetableCaughtErrorMessage(e) || e);
     }
 }
 
