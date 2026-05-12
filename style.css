@@ -45,7 +45,7 @@ body {
     background: white;
 
     height: 100%;
-    width: 275px;
+    width: 25%;
 
     border-radius: 20px;
     box-shadow: 1px 1px 5px 0px rgba(0, 0, 0, 0.3);
@@ -5017,7 +5017,7 @@ tr td.add-teacher-availability-table-day {
 }
 
 .sidebar.is-logged-in .class-report-student-item {
-    padding: 10px;
+    padding: 10px 25px;
     min-height: var(--sidebar-row-height, 40px);
     height: var(--sidebar-row-height, 40px);
     box-sizing: border-box;

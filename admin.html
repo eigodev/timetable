@@ -573,11 +573,26 @@
                     const data = await res.json().catch(() => null);
                     if (res.status === 503) {
                         sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+                        try {
+                            sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
+                        } catch (eUn) {
+                            /* ignore */
+                        }
                         return;
                     }
                     if (!res.ok || !data?.token) {
                         sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+                        try {
+                            sessionStorage.removeItem('timetable_api_auth_unconfigured');
+                        } catch (eRm) {
+                            /* ignore */
+                        }
                         return;
+                    }
+                    try {
+                        sessionStorage.removeItem('timetable_api_auth_unconfigured');
+                    } catch (eOk) {
+                        /* ignore */
                     }
                     sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, String(data.token));
                 } catch (e) {

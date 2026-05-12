@@ -46,6 +46,19 @@ To require signed bearer tokens on `/api/roster`, `/api/schedules`, `/api/class-
 
 Teachers and students receive only their permitted rows; admins keep full read/write on roster and schedules. School-scoped settings (themes, external links, billing maps, Meet modes), org-wide toolbar/passport header links, login-alias maps, SpeakOn weeklies, and passport links are stripped or filtered server-side for non-admin actors.
 
+### Supervision invites (coordinator / class supervisor → teacher)
+
+Sending and accepting supervision invites uses `POST /api/supervision-invite` and `POST /api/supervision-respond`, which require a valid bearer token from `POST /api/auth-login`. **If `TIMETABLE_AUTH_SECRET` is not set**, auth-login returns **503**, no token is stored, and the app will not send invites.
+
+Checklist:
+
+1. **KV binding** `schedules_kv` is attached to the Pages project (see Step 2).
+2. **Secret** `TIMETABLE_AUTH_SECRET` is set (Production and Preview if you use both), then redeploy.
+3. **Serve the app over HTTP(S)** from the same origin as `/api/*` (open the deployed Pages URL or use `wrangler pages dev` with `.dev.vars`; opening `index.html` as a `file://` URL will not call the API correctly).
+4. **Coordinator or class supervisor** signs in on the **login page** so the app can store the token (and saved credentials for refresh). Inviters must use gate accounts with `appRole` `coordinator` or `class-supervisor` in `gateStaffAccounts`.
+5. **Invite field** must be the teacher’s **login username** exactly as in roster `teacherEmails` for that teacher (case-insensitive match on the server).
+6. **Teacher sees the invite** after they sign in on the hosted app: their scoped roster includes `supervisionLinks` with `status: pending` for their profile.
+
 ## Step 3: Deploy Your Project
 
 1. Make sure the `functions/api/*.js` files are in your project (e.g. `schedules.js`, `roster.js`, `auth-login.js`)
@@ -75,6 +88,7 @@ Example API base URL: `https://your-domain.pages.dev/api/schedules`
 
 - **"Offline mode" status**: Check that KV is bound with variable name **`schedules_kv`**
 - **401 on API after enabling auth**: Ensure the client logs in via `/api/auth-login` and sends `Authorization: Bearer …` on roster/schedules/class-report requests
+- **Supervision invites fail or the app says API login is disabled**: Confirm `TIMETABLE_AUTH_SECRET` is set for the environment you are using, redeploy, and sign in again from the hosted site (not `file://`). For local dev, copy `.dev.vars.example` to `.dev.vars` and run `wrangler pages dev`. See the supervision checklist above.
 - **API errors**: Verify the Functions files are under `functions/api/`
 - **No sync**: Check browser console for CORS or API errors
 - **Data not persisting**: Verify the KV binding name is **`schedules_kv`** exactly

@@ -6215,7 +6215,17 @@ async function postSupervisionInvite(teacherUsername) {
             ...getTimetableApiAuthHeaders()
         };
         if (!headers.Authorization) {
-            showAppMessage('Configure API login to send invitations.');
+            let msg =
+                'No API token yet. Sign out, open the login page on this same site (not as a file), sign in again, then try Send.';
+            try {
+                if (sessionStorage.getItem('timetable_api_auth_unconfigured') === '1') {
+                    msg =
+                        'API login is disabled on the server: add the TIMETABLE_AUTH_SECRET environment variable to your Cloudflare Pages project (and redeploy). See docs/CLOUDFLARE_SETUP.md.';
+                }
+            } catch {
+                /* ignore */
+            }
+            showAppMessage(msg);
             return;
         }
         const u = String(teacherUsername || '').trim();
@@ -6307,6 +6317,7 @@ function openSupervisionAcceptModal(link) {
 }
 
 async function postSupervisionRespond(linkId, action, schoolTitles) {
+    await refreshTimetableApiBearerTokenIfPossible();
     const url = absoluteHttpApiUrl('/api/supervision-respond');
     if (!url) {
         showAppMessage('Serve the app over HTTPS to respond to invites.');
@@ -6317,7 +6328,17 @@ async function postSupervisionRespond(linkId, action, schoolTitles) {
         ...getTimetableApiAuthHeaders()
     };
     if (!headers.Authorization) {
-        showAppMessage('Configure API login to respond.');
+        let msg =
+            'No API token yet. Sign out, open the login page on this same site (not as a file), sign in again, then try again.';
+        try {
+            if (sessionStorage.getItem('timetable_api_auth_unconfigured') === '1') {
+                msg =
+                    'API login is disabled on the server: add the TIMETABLE_AUTH_SECRET environment variable to your Cloudflare Pages project (and redeploy). See docs/CLOUDFLARE_SETUP.md.';
+            }
+        } catch {
+            /* ignore */
+        }
+        showAppMessage(msg);
         return;
     }
     const body = {
