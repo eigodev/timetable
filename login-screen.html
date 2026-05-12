@@ -743,9 +743,40 @@
 
 			const API_BEARER_TOKEN_STORAGE_KEY = 'timetable_api_bearer_token';
 
+			function clearTimetablePageApiBearerTokenStores() {
+				try {
+					sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+				} catch (e) {
+					/* ignore */
+				}
+				try {
+					localStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+				} catch (e) {
+					/* ignore */
+				}
+			}
+
+			function persistTimetablePageApiBearerToken(token) {
+				const t = String(token || '').trim();
+				if (!t) return;
+				try {
+					sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, t);
+				} catch (e) {
+					/* ignore */
+				}
+				try {
+					localStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, t);
+				} catch (e) {
+					/* ignore */
+				}
+			}
+
 			function timetablePageApiAuthHeaders() {
 				try {
-					const t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+					let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+					if (!t || !String(t).trim()) {
+						t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+					}
 					if (t && String(t).trim()) return { Authorization: `Bearer ${String(t).trim()}` };
 				} catch (e) {
 					/* ignore */
@@ -764,7 +795,7 @@
 					});
 					const data = await res.json().catch(() => null);
 					if (res.status === 503) {
-						sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+						clearTimetablePageApiBearerTokenStores();
 						try {
 							sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
 						} catch (eUn) {
@@ -773,7 +804,7 @@
 						return;
 					}
 					if (!res.ok || !data?.token) {
-						sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+						clearTimetablePageApiBearerTokenStores();
 						try {
 							sessionStorage.removeItem('timetable_api_auth_unconfigured');
 						} catch (eRm) {
@@ -786,7 +817,7 @@
 					} catch (eOk) {
 						/* ignore */
 					}
-					sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, String(data.token));
+					persistTimetablePageApiBearerToken(data.token);
 				} catch (e) {
 					console.warn('auth-login:', e);
 				}
@@ -1113,7 +1144,10 @@
 
 			function signupFlowApiAuthHeaders() {
 				try {
-					const t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+					let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+					if (!t || !String(t).trim()) {
+						t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+					}
 					if (t && String(t).trim()) return { Authorization: `Bearer ${String(t).trim()}` };
 				} catch (e) {
 					/* ignore */

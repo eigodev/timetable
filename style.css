@@ -670,7 +670,7 @@ body {
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 5px;
 }
 
 .google-meet-shared-school-panel[hidden],
@@ -682,7 +682,7 @@ body {
 .google-meet-shared-school-checkbox-label {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     cursor: pointer;
     width: fit-content;
 }
@@ -842,7 +842,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 
     padding: 8px 12px;
     box-sizing: border-box;
@@ -1879,7 +1879,7 @@ input.student-reposition-modal-day {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 }
 
 #addStudentPassword[readonly] {
@@ -2068,7 +2068,7 @@ input.student-reposition-modal-day {
 .school-settings-color-popup-options {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 5px;
     max-height: 220px;
     overflow-y: auto;
     padding-right: 2px;
@@ -2365,7 +2365,7 @@ input.student-reposition-modal-day {
 
 .edit-student-name-row {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     align-items: flex-start;
 }
 
@@ -2455,7 +2455,7 @@ input.student-reposition-modal-day {
     background: #faf5fc;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 .edit-student-speakon-schedule.is-hidden {
@@ -2756,7 +2756,7 @@ input[type="checkbox"] {
 .add-school-theme-wrap {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-school-heading {
@@ -2793,7 +2793,7 @@ input[type="checkbox"] {
 .add-school-primary-row {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: 10px;
 }
 
 .add-school-primary-row .add-school-name-wrap {
@@ -2824,7 +2824,7 @@ input[type="checkbox"] {
 .add-school-theme-control-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-school-color-checkbox {
@@ -2972,7 +2972,7 @@ input[type="checkbox"] {
     margin-top: 6px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
 }
 
 .add-school-billing-fields {
@@ -3001,7 +3001,7 @@ input[type="checkbox"] {
 .add-school-billing-fields--package {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
 }
 
 
@@ -3049,7 +3049,7 @@ input[type="checkbox"] {
 }
 
 .add-modal.add-modal--school #addSchoolFields {
-    gap: 14px;
+    gap: 15px;
 }
 
 .add-modal.add-modal--school .add-school-heading {
@@ -3106,7 +3106,7 @@ input[type="checkbox"] {
 }
 
 .add-modal.add-modal--school .add-school-label {
-    gap: 6px;
+    gap: 5px;
     color: #334155;
     font-size: 0.82rem;
 }
@@ -3166,14 +3166,14 @@ input[type="checkbox"] {
 
 .add-modal.add-modal--school .add-school-billing-layout {
     display: flex;
-    gap: 16px;
+    gap: 15px;
     align-items: flex-start;
 }
 
 .add-modal.add-modal--school .add-school-billing-layout.settings-visible {
     display: grid;
     grid-template-columns: minmax(50%, 1fr) minmax(0, 1fr);
-    gap: 16px;
+    gap: 15px;
     align-items: start;
 }
 
@@ -3235,7 +3235,7 @@ input[type="checkbox"] {
 .add-modal.add-modal--school .add-school-billing-layout.settings-visible .add-school-billing-settings {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
     margin-top: 8px;
     border: 1px solid #d8e0ee;
@@ -3276,7 +3276,7 @@ input[type="checkbox"] {
 .add-modal.add-modal--school .add-school-currency-input-wrap {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 84px;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-modal.add-modal--school .add-school-currency-input-wrap select {
@@ -3287,7 +3287,7 @@ input[type="checkbox"] {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     border: 1px solid #e5eaf2;
     border-radius: 12px;
     background: #f8fafc;
@@ -3796,7 +3796,7 @@ input[type="checkbox"] {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-header-actions .btn-add-student-cancel,
@@ -3870,7 +3870,7 @@ input[type="checkbox"] {
     color: #2a3e64;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 }
 
 .add-teacher-card-title svg {
@@ -3883,19 +3883,19 @@ input[type="checkbox"] {
 .add-teacher-two-col {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-three-col {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 135px) minmax(0, 150px);
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-contact-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-contact-row .add-student-contact-city-wrap {
@@ -3938,7 +3938,7 @@ input[type="checkbox"] {
 .add-teacher-contact-stack {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-email-password-row {
@@ -3961,7 +3961,7 @@ input[type="checkbox"] {
 .add-teacher-phone-row {
     display: grid;
     grid-template-columns: 40px auto minmax(0, 1fr);
-    gap: 6px;
+    gap: 5px;
     align-items: center;
 }
 
@@ -4029,7 +4029,7 @@ input[type="checkbox"] {
     padding: 0 8px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     text-align: left;
     cursor: pointer;
     color: #2f3f5f;
@@ -4050,7 +4050,7 @@ input[type="checkbox"] {
 .add-teacher-password-wrap {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-password-wrap.is-hidden {
@@ -4060,7 +4060,7 @@ input[type="checkbox"] {
 .add-teacher-password-options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-teacher-option-card {
@@ -4238,7 +4238,7 @@ tr td.add-teacher-availability-table-day {
 
 .add-teacher-availability-actions {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     flex-wrap: wrap;
 }
 
@@ -4268,7 +4268,7 @@ tr td.add-teacher-availability-table-day {
 .add-teacher-photo-block {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
 }
 
 .add-teacher-photo-title {
@@ -4326,7 +4326,7 @@ tr td.add-teacher-availability-table-day {
 .add-student-redesign-heading {
     flex-direction: row;
     align-items: flex-start;
-    gap: 12px;
+    gap: 10px;
     padding: 6px 2px 2px;
 }
 
@@ -4496,13 +4496,13 @@ tr td.add-teacher-availability-table-day {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-school-external-input-row {
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: 10px;
 }
 
 .add-school-external-url-label {
@@ -6203,7 +6203,7 @@ tr td.add-teacher-availability-table-day {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 15px;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 6px;
@@ -6264,7 +6264,7 @@ tr td.add-teacher-availability-table-day {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .student-class-report-file-delete-btn,
@@ -6347,7 +6347,7 @@ tr td.add-teacher-availability-table-day {
 .student-class-report-card-related-item {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
 }
 
 .student-class-report-card-related-name {
@@ -6374,7 +6374,7 @@ tr td.add-teacher-availability-table-day {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .student-class-report-question-row--student {
@@ -6565,7 +6565,7 @@ tr td.add-teacher-availability-table-day {
 .admin-accounts-grid {
     display: grid;
     grid-template-columns: 1.1fr 0.75fr 1fr 0.95fr 1.4fr;
-    gap: 6px;
+    gap: 5px;
     align-items: center;
 }
 
@@ -6598,7 +6598,7 @@ tr td.add-teacher-availability-table-day {
 
 .admin-grid-cell--actions {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     align-items: center;
 }
 
@@ -7695,7 +7695,7 @@ header h1 {
 .calendar-prompt-popover-header {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 15px;
     padding: 24px 28px;
     border-bottom: 1px solid #eceff7;
 }
@@ -7871,7 +7871,7 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
 }
 
 .calendar-prompt-class-count {
@@ -7915,7 +7915,7 @@ header h1 {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
@@ -8162,7 +8162,7 @@ header h1 {
     display: none;
     min-width: 170px;
     padding: 8px;
-    gap: 8px;
+    gap: 10px;
     align-items: flex-start;
     background: #fff;
     border: 1px solid #d8dbe7;
@@ -8282,7 +8282,7 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
     padding: 7px 9px;
     cursor: pointer;
     transition: background 0.18s ease;
@@ -8480,7 +8480,7 @@ header h1 {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
     height: 40px;
     padding: 0 16px;
     border: 1px solid #cfd5ec;
@@ -8655,7 +8655,7 @@ header h1 {
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
     padding: 14px 16px;
     border-bottom: 1px solid #eceff7;
     background: #fbfcff;
@@ -8709,7 +8709,7 @@ header h1 {
 .google-meet-popup .status-filter-bar {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 0 12px;
     height: 40px;
     border: 1px solid #cfd5ec;
@@ -8916,7 +8916,7 @@ header h1 {
 .google-meet-popup .meet-links-cell--link {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
 }
 
@@ -9042,7 +9042,7 @@ header h1 {
 .meet-links-add-dialog-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 10px;
 }
 
 .meet-links-add-dialog-btn {
@@ -9080,7 +9080,7 @@ header h1 {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 5px;
 }
 
 #calendarLinkSaveBtn svg,
@@ -9103,7 +9103,7 @@ header h1 {
 .google-meet-popup .meet-links-status {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     font-size: 0.82rem;
     font-weight: 600;
 }
@@ -9385,7 +9385,7 @@ header h1 {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     margin-bottom: 8px;
 }
 
@@ -9468,7 +9468,7 @@ header h1 {
 .supervision-school-label {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     margin-bottom: 6px;
     cursor: pointer;
 }
@@ -9482,12 +9482,12 @@ header h1 {
 .supervision-modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 10px;
 }
 
 .supervision-modal-btn {
-    padding: 8px 14px;
-    border-radius: 8px;
+    padding: 10px 15px;
+    border-radius: 10px;
     border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.15));
     background: var(--surface-elevated, #f4f4f5);
     font: inherit;

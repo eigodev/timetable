@@ -1301,12 +1301,15 @@ function clearSavedLoginCredentials() {
 
 function getTimetableApiAuthHeaders() {
     try {
-        const t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+        let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+        if (!t || !String(t).trim()) {
+            t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
+        }
         if (t && String(t).trim()) {
             return { Authorization: `Bearer ${String(t).trim()}` };
         }
     } catch {
-        /* sessionStorage unavailable */
+        /* sessionStorage / localStorage unavailable */
     }
     return {};
 }
@@ -1314,6 +1317,26 @@ function getTimetableApiAuthHeaders() {
 function clearTimetableApiBearerToken() {
     try {
         sessionStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+    } catch {
+        /* ignore */
+    }
+    try {
+        localStorage.removeItem(API_BEARER_TOKEN_STORAGE_KEY);
+    } catch {
+        /* ignore */
+    }
+}
+
+function persistTimetableApiBearerToken(token) {
+    const t = String(token || '').trim();
+    if (!t) return;
+    try {
+        sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, t);
+    } catch {
+        /* ignore */
+    }
+    try {
+        localStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, t);
     } catch {
         /* ignore */
     }
@@ -1404,11 +1427,7 @@ async function refreshTimetableApiBearerTokenIfPossible() {
             clearTimetableApiBearerToken();
             return;
         }
-        try {
-            sessionStorage.setItem(API_BEARER_TOKEN_STORAGE_KEY, String(data.token));
-        } catch {
-            /* ignore */
-        }
+        persistTimetableApiBearerToken(data.token);
     } catch (e) {
         console.warn('API token refresh:', e);
     }
@@ -9813,6 +9832,9 @@ async function initTeachers() {
     await initRoster();
     await ensureAdminAccountReady();
     const restoredTeacher = await tryRestoreSessionFromSavedCredentials();
+    if (isTeacherLoggedIn && loadSavedLoginCredentials()) {
+        await refreshTimetableApiBearerTokenIfPossible();
+    }
     applyTeacherDataIsolationInMemory();
     await loadAllSchedules();
     applyTeacherDataIsolationInMemory();
