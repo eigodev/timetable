@@ -1491,35 +1491,35 @@ function timetableAuthLoginResponseFields(data) {
 }
 
 /**
- * POST JSON to `/api/auth-login` without using `fetch` (some hosts / CSP / embedded WebViews mishandle fetch here).
- * Resolves `{ ok, status, parsed }` or `null` on transport failure. Does not throw.
+ * POST JSON to `/api/auth-login`. Resolves `{ ok, status, parsed }` or `null` on transport/parse failure.
+ * Uses `fetch` (promise chain, no `XMLHttpRequest` / `xhr.send`) for runtimes where `send` throws or XHR is restricted.
  */
 function timetablePostAuthLoginRequest(loginUrl, body) {
-    return new Promise((resolve) => {
-        try {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', loginUrl, true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.timeout = 60000;
-            xhr.onload = () => {
-                const status = xhr.status;
-                const ok = status >= 200 && status < 300;
-                let parsed = null;
-                try {
-                    const t = xhr.responseText || '';
-                    parsed = t ? JSON.parse(t) : null;
-                } catch {
-                    parsed = null;
-                }
-                resolve({ ok, status, parsed });
-            };
-            xhr.onerror = () => resolve(null);
-            xhr.ontimeout = () => resolve(null);
-            xhr.send(body);
-        } catch {
-            resolve(null);
-        }
-    });
+    const payload = typeof body === 'string' ? body : '';
+    if (typeof fetch !== 'function') {
+        return Promise.resolve(null);
+    }
+    return fetch(loginUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: payload,
+        credentials: 'same-origin',
+        cache: 'no-store'
+    })
+        .then(async (res) => {
+            const status = res.status;
+            const ok = res.ok;
+            let parsed = null;
+            try {
+                parsed = await res.json();
+            } catch {
+                parsed = null;
+            }
+            return { ok, status, parsed };
+        })
+        .catch(() => null);
 }
 
 /**
