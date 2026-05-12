@@ -1471,12 +1471,141 @@ function initCrossTabLogoutBroadcastListener() {
 }
 
 /**
- * No-op: renewing the JWT by POSTing saved passwords to `/api/auth-login` was removed — `fetch` / `XHR`
- * reliably fail in some of the environments this app is loaded from. Obtain a new token via `login-screen.html`.
- * Call sites may still `await` this hook for ordering.
+ * Set `window.__TIMETABLE_DISABLE_AUTH_LOGIN_REFRESH__ = true` before `script.js` loads to skip POST `/api/auth-login`
+ * from saved credentials (broken `fetch` in some embedded shells). Normal Pages/https usage should leave this unset.
+ */
+function timetableAuthLoginRefreshDisabled() {
+    try {
+        return typeof window !== 'undefined' && window.__TIMETABLE_DISABLE_AUTH_LOGIN_REFRESH__ === true;
+    } catch {
+        return false;
+    }
+}
+
+/** Best-effort read of `/api/auth-login` JSON; never throws. */
+function timetableAuthLoginResponseFields(data) {
+    let token = '';
+    let errorText = '';
+    let resolvedUsername = '';
+    try {
+        if (data == null || typeof data !== 'object' || Array.isArray(data)) {
+            return { token, errorText, resolvedUsername };
+        }
+        if (data.token != null) token = String(data.token).trim();
+        if (data.error != null) errorText = String(data.error);
+        if (data.resolvedUsername != null) resolvedUsername = String(data.resolvedUsername).trim();
+    } catch {
+        /* ignore */
+    }
+    return { token, errorText, resolvedUsername };
+}
+
+function timetablePostAuthLoginRequest(loginUrl, body) {
+    const payload = typeof body === 'string' ? body : '';
+    if (timetableAuthLoginRefreshDisabled() || typeof fetch !== 'function') {
+        return Promise.resolve(null);
+    }
+    return fetch(loginUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: payload,
+        credentials: 'same-origin',
+        cache: 'no-store'
+    })
+        .then(async (res) => {
+            const status = res.status;
+            const ok = res.ok;
+            let parsed = null;
+            try {
+                parsed = await res.json();
+            } catch {
+                parsed = null;
+            }
+            return { ok, status, parsed };
+        })
+        .catch(() => null);
+}
+
+/**
+ * Re-issues a Bearer JWT from saved credentials. Does not throw or reject.
  */
 async function refreshTimetableApiBearerTokenIfPossible() {
-    return;
+    if (timetableAuthLoginRefreshDisabled()) return;
+    try {
+        const loginUrl = absoluteHttpApiUrl('/api/auth-login');
+        if (!loginUrl) return;
+        const creds = loadSavedLoginCredentials();
+        if (!creds) return;
+        let username;
+        let password;
+        try {
+            username = resolveAuthLoginTyped(String(creds.username || '').trim());
+            password = sanitizeTypedLoginPassword(creds.password);
+        } catch (e) {
+            console.warn('API token refresh (credentials):', timetableCaughtErrorMessage(e) || e);
+            return;
+        }
+        if (!username || !password) return;
+        let body;
+        try {
+            body = JSON.stringify({ username, password });
+        } catch {
+            return;
+        }
+
+        const pack = await timetablePostAuthLoginRequest(loginUrl, body);
+        if (!pack) return;
+
+        const { ok: resOk, status: resStatus, parsed: rawJson } = pack;
+        const { token, errorText, resolvedUsername: ruFromBody } = timetableAuthLoginResponseFields(rawJson);
+
+        if (resStatus === 503) {
+            const authStackUnconfigured =
+                errorText.includes('TIMETABLE_AUTH_SECRET') ||
+                errorText.includes('schedules_kv not configured');
+            if (authStackUnconfigured) {
+                try {
+                    sessionStorage.setItem('timetable_api_auth_unconfigured', '1');
+                } catch {
+                    /* ignore */
+                }
+                clearTimetableApiBearerToken();
+                return;
+            }
+        }
+
+        if (resOk && token) {
+            try {
+                sessionStorage.removeItem('timetable_api_auth_unconfigured');
+            } catch {
+                /* ignore */
+            }
+            persistTimetableApiBearerToken(token);
+            const ru = String(ruFromBody || username || '').trim();
+            if (ru && password) {
+                saveLoginCredentials(ru, password);
+            }
+            return;
+        }
+
+        if ((resStatus >= 500 && resStatus <= 599) || resStatus === 429 || resStatus === 408) {
+            if (resStatus >= 500) {
+                console.warn('API token refresh: server error', resStatus);
+            }
+            return;
+        }
+
+        try {
+            sessionStorage.removeItem('timetable_api_auth_unconfigured');
+        } catch {
+            /* ignore */
+        }
+        clearTimetableApiBearerToken();
+    } catch (e) {
+        console.warn('API token refresh:', timetableCaughtErrorMessage(e) || e);
+    }
 }
 
 /** Prefer server-verified Bearer JWT for admin; if `/api/auth-verify` is missing/broken, trust JWT role claim for UI (APIs still enforce). */
@@ -5249,6 +5378,17 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
     if (!panel || !key || !file || !classReportUploadAcceptsMimeOrName(file)) return false;
     if (typeof ClassReportUploadsStore === 'undefined') return false;
 
+    const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+    if (apiUrl) {
+        const authForPost = await timetableAuthHeadersForProtectedPostOrNull();
+        if (!authForPost) {
+            alert(
+                'Cloud upload needs an API token. Your deployment uses signed-in access (Bearer JWT). Open this site over https, sign in on the Login page on the same origin, then try again (sign out and back in if it still fails).'
+            );
+            return false;
+        }
+    }
+
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const mime = String(file.type || '').toLowerCase();
     await ClassReportUploadsStore.putBlob(id, file);
@@ -5268,7 +5408,6 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
 
     classReportUploadPushInFlight++;
     try {
-        const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
         if (!apiUrl) {
             console.warn('Class report uploads need http(s) — file saved locally only.');
         } else {
@@ -5378,6 +5517,16 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
     if (typeof ClassReportUploadsStore === 'undefined') return;
     const key = String(studentName || '').trim();
     if (!file) return;
+    const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+    if (apiUrl) {
+        const authForPost = await timetableAuthHeadersForProtectedPostOrNull();
+        if (!authForPost) {
+            alert(
+                'Cloud upload needs an API token. Open this site over https and sign in on the Login page, then try again.'
+            );
+            return;
+        }
+    }
     const feed = getStudentClassReportUploadFeed(key);
     const upload = feed.find((item) => item && item.id === uploadId);
     if (!upload) return;
@@ -5401,7 +5550,6 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
     classReportUploadPushInFlight++;
     try {
         const b64 = await ClassReportUploadsStore.blobToPureBase64(file);
-        const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
         if (!apiUrl) {
             alert('Serve the app over http(s) to sync related files.');
             return;
@@ -7071,6 +7219,18 @@ function timetableCloudPollAuthHeadersOrNull() {
         return null;
     }
     return authHeaders && typeof authHeaders === 'object' ? authHeaders : {};
+}
+
+/**
+ * Refreshes JWT from saved login (if possible), then returns headers for protected POSTs or null if a Bearer is required but missing.
+ * @returns {Promise<Record<string, string>|null>}
+ */
+async function timetableAuthHeadersForProtectedPostOrNull() {
+    await refreshTimetableApiBearerTokenIfPossible();
+    if (!getTimetableApiAuthHeaders().Authorization) {
+        await refreshTimetableApiBearerTokenIfPossible();
+    }
+    return timetableCloudPollAuthHeadersOrNull();
 }
 
 async function pollRosterUpdates() {
