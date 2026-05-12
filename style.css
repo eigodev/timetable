@@ -9290,75 +9290,6 @@ header h1 {
     transform: scale(1);
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .google-meet-shared-school-checkbox-box::after,
-    #addSchoolExternalCheckbox::after,
-    .calendar-school-filter-option input[type="checkbox"]::before,
-    .calendar-prompt-day-option input[type="checkbox"]::before,
-    .context-menu-checkbox::before,
-    .add-teacher-availability-table input[type="checkbox"]::before,
-    .add-teacher-availability-table input[type="checkbox"]::after {
-        transition: none;
-    }
-}
-
-@media (max-width: 1920px) {
-    .student-modal-overlay .student-modal-card,
-    .edit-student-dialog,
-    .add-modal-dialog,
-    .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog,
-    .calendarPromptPopover {
-        position: fixed;
-        top: 2.15%;
-        left: 16.5%;
-
-        height: 900px;
-        width: 1580px;
-        padding: 50px;
-    }
-}
-
-@media (max-width: 1440px) {
-    .edit-student-dialog,
-    .add-modal-dialog,
-    .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog,
-    .calendarPromptPopover {
-        position: fixed;
-        top: 2.75%;
-        left: 22%;
-        
-        height: 620px;
-        width: 1000px;
-    }
-    
-    .student-modal-overlay .student-modal-card {
-        position: fixed;
-        top: 2.75%;
-        left: 22%;
-        height: 720px;
-        width: 1100px;
-    }
-}
-
-@media (max-width: 1366px) {
-    .student-modal-overlay .student-modal-card,
-    .edit-student-dialog,
-    .add-modal-dialog,
-    .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog,
-    .calendarPromptPopover {
-        position: fixed;
-        top: 3%;
-        left: 23%;
-
-        height: 590px;
-        width: 1030px;
-        padding: 30px;
-    }
-}
-
 /* --- School-scoped supervision (coordinator / class supervisor / teacher assistant) --- */
 .sidebar-pane-coordinator,
 .sidebar-pane-class-supervisor,
@@ -9513,4 +9444,74 @@ header h1 {
 
 .teacher-item--supervision-readonly .teacher-item-name {
     font-weight: 500;
+}
+
+/* Media Queries */
+@media (prefers-reduced-motion: reduce) {
+    .google-meet-shared-school-checkbox-box::after,
+    #addSchoolExternalCheckbox::after,
+    .calendar-school-filter-option input[type="checkbox"]::before,
+    .calendar-prompt-day-option input[type="checkbox"]::before,
+    .context-menu-checkbox::before,
+    .add-teacher-availability-table input[type="checkbox"]::before,
+    .add-teacher-availability-table input[type="checkbox"]::after {
+        transition: none;
+    }
+}
+
+@media (max-width: 1920px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog,
+    .google-meet-dialog,
+    .calendarPromptPopover {
+        position: fixed;
+        top: 2.15%;
+        left: 16.5%;
+
+        height: 900px;
+        width: 1580px;
+        padding: 50px;
+    }
+}
+
+@media (max-width: 1440px) {
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog,
+    .google-meet-dialog,
+    .calendarPromptPopover {
+        position: fixed;
+        top: 2.75%;
+        left: 22%;
+        
+        height: 620px;
+        width: 1000px;
+    }
+    
+    .student-modal-overlay .student-modal-card {
+        position: fixed;
+        top: 2.75%;
+        left: 22%;
+        height: 720px;
+        width: 1100px;
+    }
+}
+
+@media (max-width: 1366px) {
+    .student-modal-overlay .student-modal-card,
+    .edit-student-dialog,
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog,
+    .google-meet-dialog,
+    .calendarPromptPopover {
+        position: fixed;
+        top: 3%;
+        left: 22%;
+
+        height: 590px;
+        width: 1045px;
+        padding: 30px;
+    }
 }
