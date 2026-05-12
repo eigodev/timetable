@@ -1,0 +1,10 @@
+# Local Pages Functions: copy this file to `.dev.vars` (do not commit real secrets)
+# and run from the project root, for example:
+#   npx wrangler pages dev . --kv schedules_kv
+# Use your real KV namespace id in wrangler / dashboard bindings.
+#
+# Required for bearer tokens, roster scoping, and supervision invites:
+TIMETABLE_AUTH_SECRET=replace-with-a-long-random-string
+#
+# Optional — reject unauthenticated API access in production-like mode:
+# TIMETABLE_REQUIRE_AUTH=1
