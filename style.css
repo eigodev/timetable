@@ -6476,7 +6476,7 @@ tr td.add-teacher-availability-table-day {
 .admin-dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 18px;
+    gap: 20px;
     align-items: start;
 }
 
@@ -9426,13 +9426,11 @@ header h1 {
 }
 
 .supervision-modal-title {
-    margin: 0 0 8px;
     font-size: 1.125rem;
 }
 
 .supervision-modal-hint {
-    margin: 0 0 12px;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     opacity: 0.85;
 }
 

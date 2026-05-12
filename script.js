@@ -1462,6 +1462,34 @@ async function refreshTimetableApiBearerTokenIfPossible() {
     }
 }
 
+/** Prefer server-verified Bearer JWT for admin (stateless; not tied to sessionStorage). */
+async function tryRestoreAdminFromBearerIfPossible() {
+    const verifyUrl = absoluteHttpApiUrl('/api/auth-verify');
+    if (!verifyUrl) return false;
+    const headers = getTimetableApiAuthHeaders();
+    if (!headers.Authorization) return false;
+    try {
+        const res = await fetch(`${verifyUrl}?t=${Date.now()}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers
+            },
+            cache: 'no-cache'
+        });
+        const data = await res.json().catch(() => null);
+        if (data?.legacy === true) return false;
+        if (!res.ok || !data?.success || data.role !== 'admin') return false;
+        isAdminLoggedIn = true;
+        loggedInStudentFullName = '';
+        loggedInTeacherName = '';
+        isTeacherLoggedIn = true;
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 /** Drop other teachers' and unrelated students' schedule keys for isolated teacher sessions (keeps own grid + visible students). */
 function applyTeacherDataIsolationInMemory() {
     if (isAdminLoggedIn || loggedInStudentFullName) return;
@@ -9980,7 +10008,12 @@ async function initTeachers() {
     await refreshTimetableApiBearerTokenIfPossible();
     await initRoster();
     await ensureAdminAccountReady();
-    const restoredTeacher = await tryRestoreSessionFromSavedCredentials();
+    let restoredTeacher = null;
+    if (await tryRestoreAdminFromBearerIfPossible()) {
+        restoredTeacher = DEFAULT_ADMIN_USERNAME;
+    } else {
+        restoredTeacher = await tryRestoreSessionFromSavedCredentials();
+    }
     if (isTeacherLoggedIn && loadSavedLoginCredentials()) {
         await refreshTimetableApiBearerTokenIfPossible();
     }
@@ -15283,13 +15316,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     initCrossTabLogoutBroadcastListener();
     const isAdminPage = document.body?.dataset.page === 'admin';
     if (isAdminPage) {
-        try {
-            if (sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) !== 'true') {
-                window.location.href = 'login-screen.html';
-                return;
+        let allow = false;
+        if (window.TimeTableAuthVerifyGate) {
+            allow = await window.TimeTableAuthVerifyGate.timetableEnsureAdminApiAccess({
+                adminSessionKey: ADMIN_LOGIN_SESSION_KEY,
+                loginPath: 'login-screen.html'
+            });
+        } else {
+            try {
+                allow = sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) === 'true';
+            } catch {
+                allow = false;
             }
-        } catch {
-            window.location.href = 'login-screen.html';
+            if (!allow) {
+                window.location.href = 'login-screen.html';
+            }
+        }
+        if (!allow) {
             return;
         }
 

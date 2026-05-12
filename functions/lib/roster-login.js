@@ -1,5 +1,9 @@
 import { verifyStoredPassword } from './password-verify.js';
 
+/** Bootstrap-only; must match login-screen.html default admin fields. */
+const DEFAULT_BOOTSTRAP_ADMIN_USERNAME = 'admin_';
+const DEFAULT_BOOTSTRAP_ADMIN_PASSWORD = '@Admin';
+
 function normalizeAdminAccount(account) {
   if (!account || typeof account !== 'object' || Array.isArray(account)) return null;
   const username = String(account.username || '').trim();
@@ -130,6 +134,16 @@ export async function rosterLoginLookup(roster, usernameTyped, passwordTyped) {
     }
     if (match.kind === 'gate') {
       return { role: 'gate', profile: match.profileName, resolvedUsername: match.username };
+    }
+  }
+
+  if (!storedAccount && accounts.length === 0) {
+    if (usernameEff === DEFAULT_BOOTSTRAP_ADMIN_USERNAME && password === DEFAULT_BOOTSTRAP_ADMIN_PASSWORD) {
+      return {
+        role: 'admin',
+        profile: DEFAULT_BOOTSTRAP_ADMIN_USERNAME,
+        resolvedUsername: DEFAULT_BOOTSTRAP_ADMIN_USERNAME,
+      };
     }
   }
   return null;

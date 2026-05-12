@@ -495,6 +495,7 @@
     </div>
 
     <script src="auth-login-migrate.js"></script>
+    <script src="auth-verify-gate.js"></script>
     <script>
         /* Moved from login-screen.html (formerly test.html) lines 455-694; kept isolated so admin.html has no duplicate globals. */
         (function movedAdminLoginHelpers() {
@@ -1359,16 +1360,6 @@
             }
         }
 
-        function assertAdminSession() {
-            try {
-                if (sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) === 'true') return true;
-            } catch {
-                return false;
-            }
-            window.location.href = 'login-screen.html';
-            return false;
-        }
-
         let adminRosterDeletePending = null;
 
         function closeAdminRosterDeleteModal() {
@@ -1463,7 +1454,7 @@
             });
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             window.addEventListener('storage', (e) => {
                 if (e.storageArea !== localStorage) return;
                 if (e.key !== 'timetable_logout_broadcast_ts' || e.newValue == null) return;
@@ -1476,7 +1467,21 @@
                 window.location.href = 'login-screen.html';
             });
 
-            if (!assertAdminSession()) return;
+            let allow = false;
+            if (window.TimeTableAuthVerifyGate) {
+                allow = await window.TimeTableAuthVerifyGate.timetableEnsureAdminApiAccess({
+                    adminSessionKey: ADMIN_LOGIN_SESSION_KEY,
+                    loginPath: 'login-screen.html',
+                });
+            } else {
+                try {
+                    allow = sessionStorage.getItem(ADMIN_LOGIN_SESSION_KEY) === 'true';
+                } catch {
+                    allow = false;
+                }
+                if (!allow) window.location.href = 'login-screen.html';
+            }
+            if (!allow) return;
             setupAdminRosterDeleteModal();
             setupAdminDashboardDeletes();
             currentRoster = loadRoster();
@@ -1489,6 +1494,8 @@
             document.getElementById('adminLogoffBtn')?.addEventListener('click', () => {
                 try {
                     localStorage.removeItem('timetable_saved_login_credentials');
+                    localStorage.removeItem('timetable_api_bearer_token');
+                    sessionStorage.removeItem('timetable_api_bearer_token');
                     localStorage.setItem('timetable_logout_broadcast_ts', String(Date.now()));
                     sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
                     sessionStorage.setItem(LOGIN_SESSION_SUPPRESS_KEY, '1');
