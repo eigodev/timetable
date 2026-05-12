@@ -84,11 +84,7 @@
                 return fail();
             }
 
-            if (res.status === 401) {
-                return fail();
-            }
-
-            /** Missing route (deploy), 5xx, or HTML error body — do not lock out valid admin JWT. */
+            /* No valid server verify (401, 5xx, etc.): allow if admin login flag or stored admin JWT payload. */
             if (
                 adminSessionAllow(adminSessionKey) ||
                 unsafeJwtRoleFromStoredBearer() === 'admin'

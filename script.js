@@ -1344,6 +1344,19 @@ function getTimetableApiAuthHeaders() {
     return {};
 }
 
+/** Safe message for catch(err) — avoids crashing when err is a string or non-Error. */
+function timetableCaughtErrorMessage(reason) {
+    if (reason == null) return '';
+    if (typeof reason === 'string') return reason;
+    if (reason instanceof Error) return String(reason.message || reason || '');
+    if (typeof reason === 'object' && reason.message != null) return String(reason.message);
+    try {
+        return String(reason);
+    } catch {
+        return '';
+    }
+}
+
 /** Same shape as auth-verify-gate: first JWT segment is JSON payload (UI only; APIs verify HMAC). */
 function readStoredBearerTokenRoleUnsafe() {
     if (typeof TimeTableAuthVerifyGate?.unsafeJwtRoleFromStoredBearer === 'function') {
@@ -7189,13 +7202,22 @@ function updateSyncStatus(status, message) {
     if (!syncStatus) return;
     
     // Don't override "Saving to cloud..." status while saving
-    if (isSaving && status !== 'syncing' && syncText.textContent.includes('Saving')) {
+    if (
+        isSaving &&
+        status !== 'syncing' &&
+        syncText &&
+        String(syncText.textContent || '').includes('Saving')
+    ) {
         return;
     }
     
     syncStatus.className = 'sync-status ' + status;
-    syncIcon.className = status === 'syncing' ? 'syncing' : '';
-    syncText.textContent = message;
+    if (syncIcon) {
+        syncIcon.className = status === 'syncing' ? 'syncing' : '';
+    }
+    if (syncText) {
+        syncText.textContent = message;
+    }
 }
 
 // Load all schedules from Cloudflare KV or localStorage
@@ -7276,13 +7298,13 @@ async function loadAllSchedules() {
     } catch (error) {
         console.error('Error loading schedules from Cloudflare:', error);
         
-        // Check if it's a network error or API error
+        const errMsg = timetableCaughtErrorMessage(error);
         let statusMessage = '⚠ Offline mode (localStorage only)';
-        if (error.message.includes('schedules_kv not configured') || error.message.includes('KV_SCHEDULES not configured')) {
+        if (errMsg.includes('schedules_kv not configured') || errMsg.includes('KV_SCHEDULES not configured')) {
             statusMessage = '⚠ KV not configured - check Pages settings';
-        } else if (error.message.includes('HTTP 404')) {
+        } else if (errMsg.includes('HTTP 404')) {
             statusMessage = '⚠ API not found - check function path';
-        } else if (error.message.includes('HTTP 503')) {
+        } else if (errMsg.includes('HTTP 503')) {
             statusMessage = '⚠ KV not bound - check binding name is "schedules_kv"';
         }
         
@@ -7566,19 +7588,20 @@ async function performSave() {
         }
     } catch (error) {
         console.error('Error saving schedules to Cloudflare:', error);
-        console.error('Error details:', error.message);
+        const errMsg = timetableCaughtErrorMessage(error);
+        console.error('Error details:', errMsg || '(no message)');
 
         let errorMessage = 'Save failed';
         if (
-            error.message.includes('schedules_kv not configured') ||
-            error.message.includes('KV_SCHEDULES not configured') ||
-            error.message.includes('503')
+            errMsg.includes('schedules_kv not configured') ||
+            errMsg.includes('KV_SCHEDULES not configured') ||
+            errMsg.includes('503')
         ) {
             errorMessage = 'KV not configured - check binding name is "schedules_kv"';
-        } else if (error.message.includes('404')) {
+        } else if (errMsg.includes('404')) {
             errorMessage = 'API not found - check function deployment';
-        } else if (error.message) {
-            errorMessage = error.message;
+        } else if (errMsg) {
+            errorMessage = errMsg;
         }
 
         updateSyncStatus('local-only', `⚠ ${errorMessage} - using local storage`);
