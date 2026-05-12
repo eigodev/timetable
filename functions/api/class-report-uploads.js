@@ -2,6 +2,7 @@
 
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
+import { kvGetAllRoster } from '../lib/kv-all-roster.js';
 import { isStudentVisibleToActor } from '../lib/roster-scope.js';
 
 const CR_MANIFEST_KEY = 'cr_upl_manifest_v2';
@@ -184,7 +185,7 @@ export async function onRequest(context) {
     let fullRoster = null;
     let actor = null;
     if (!auth.legacy) {
-      fullRoster = (await KV.get('all_roster', 'json')) || {};
+      fullRoster = (await kvGetAllRoster(KV)) || {};
       actor = { role: auth.payload.role, profile: auth.payload.profile };
     }
 

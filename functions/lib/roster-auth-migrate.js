@@ -82,7 +82,9 @@ export async function migrateRosterAuthInPlace(roster) {
     ...(Array.isArray(roster.speakon) ? roster.speakon : []),
     ...(Array.isArray(roster.passport) ? roster.passport : []),
   ];
-  const gateStaffAccounts = Array.isArray(roster.gateStaffAccounts) ? roster.gateStaffAccounts.map((e) => ({ ...e })) : [];
+  const gateStaffAccounts = Array.isArray(roster.gateStaffAccounts)
+    ? roster.gateStaffAccounts.map((e) => (e && typeof e === 'object' ? { ...e } : {}))
+    : [];
 
   const taken = new Set();
 
@@ -276,11 +278,23 @@ export async function migrateRosterAuthInPlace(roster) {
  * @returns {Promise<Record<string, unknown>>}
  */
 export async function migrateAndPersistRosterKv(KV, roster) {
-  const dirty = await migrateRosterAuthInPlace(roster);
-  if (dirty && KV) {
-    const ts = new Date().toISOString();
-    await KV.put('all_roster', JSON.stringify(roster));
-    await KV.put('roster_last_updated', ts);
+  if (!roster || typeof roster !== 'object' || Array.isArray(roster)) {
+    return roster;
+  }
+  let dirty = false;
+  try {
+    dirty = await migrateRosterAuthInPlace(roster);
+  } catch (e) {
+    console.error('[migrateRosterAuthInPlace]', e?.message || String(e));
+    return roster;
+  }
+  if (dirty && KV && typeof KV.put === 'function') {
+    try {
+      await KV.put('all_roster', JSON.stringify(roster));
+      await KV.put('roster_last_updated', new Date().toISOString());
+    } catch (e) {
+      console.error('[migrateAndPersistRosterKv] KV.put', e?.message || String(e));
+    }
   }
   return roster;
 }

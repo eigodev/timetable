@@ -1,4 +1,5 @@
 import { signAuthToken } from '../lib/auth-token.js';
+import { kvGetAllRoster } from '../lib/kv-all-roster.js';
 import { migrateAndPersistRosterKv } from '../lib/roster-auth-migrate.js';
 import { rosterLoginLookup } from '../lib/roster-login.js';
 
@@ -50,7 +51,7 @@ export async function onRequest(context) {
       });
     }
 
-    let roster = await KV.get('all_roster', 'json');
+    let roster = await kvGetAllRoster(KV);
     if (!roster || typeof roster !== 'object') {
       return new Response(JSON.stringify({ success: false, error: 'Roster not initialized' }), {
         status: 404,
@@ -68,38 +69,57 @@ export async function onRequest(context) {
       });
     }
 
+    const profile = String(hit.profile || '').trim();
+    const resolvedUsername = String(hit.resolvedUsername || profile || '').trim();
+    if (!profile || !hit.role) {
+      return new Response(JSON.stringify({ success: false, error: 'Malformed roster account' }), {
+        status: 500,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
+
     const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
     const tokenRole = hit.role === 'gate' ? 'gate' : hit.role;
     let gateAppRole = '';
     if (hit.role === 'gate') {
       const gs = Array.isArray(roster.gateStaffAccounts) ? roster.gateStaffAccounts : [];
-      const ent = gs.find((e) => String(e?.profileName || '').trim() === String(hit.profile || '').trim());
+      const ent = gs.find((e) => String(e?.profileName || '').trim() === profile);
       gateAppRole = String(ent?.appRole || '').trim();
     }
     const tokenPayload = {
       v: 1,
       role: tokenRole,
-      profile: hit.profile,
-      u: hit.resolvedUsername,
+      profile,
+      u: resolvedUsername,
       exp,
       ...(gateAppRole ? { gateAppRole } : {}),
     };
-    const token = await signAuthToken(tokenPayload, secret);
+    let token;
+    try {
+      token = await signAuthToken(tokenPayload, secret);
+    } catch (signErr) {
+      console.error('[auth-login] signAuthToken', signErr?.message || String(signErr));
+      return new Response(JSON.stringify({ success: false, error: 'Token signing failed' }), {
+        status: 500,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         token,
         role: hit.role,
-        profile: hit.profile,
-        resolvedUsername: hit.resolvedUsername,
+        profile,
+        resolvedUsername,
         expiresAtEpochSec: exp,
         ...(gateAppRole ? { gateAppRole } : {}),
       }),
       { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, error: e.message || 'error' }), {
+    const msg = e instanceof Error ? e.message : String(e || 'error');
+    return new Response(JSON.stringify({ success: false, error: msg || 'error' }), {
       status: 500,
       headers: { ...cors, 'Content-Type': 'application/json' },
     });

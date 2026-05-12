@@ -781,23 +781,34 @@ async function loadRosterFromCloud() {
     try {
         const rosterUrl = absoluteHttpApiUrl('/api/roster');
         if (!rosterUrl) return null;
+        const authHeaders = timetableCloudPollAuthHeadersOrNull();
+        if (!authHeaders) return null;
         const response = await fetch(rosterUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-                ...getTimetableApiAuthHeaders()
+                ...authHeaders
             },
         });
         if (!response.ok) return null;
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
+        if (!data) return null;
         rosterLastUpdateTimestamp = data?.lastUpdated || rosterLastUpdateTimestamp;
-        if (!data?.success || !data?.roster || typeof data.roster !== 'object') return null;
+        const rosterObj = data?.roster;
+        if (
+            !data?.success ||
+            !rosterObj ||
+            typeof rosterObj !== 'object' ||
+            Array.isArray(rosterObj)
+        ) {
+            return null;
+        }
         try {
-            localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(data.roster));
+            localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(rosterObj));
         } catch (error) {
             console.error('Error caching cloud roster to localStorage:', error);
         }
-        return data.roster;
+        return rosterObj;
     } catch (error) {
         console.error('Error loading roster from cloud:', error);
         return null;
@@ -3154,7 +3165,9 @@ async function fetchClassReportUploadAssetsByIds(ids) {
 }
 
 async function applyRemoteManifestPayload(manifest, lastUpdated) {
-    const studentsBucket = manifest && manifest.students && typeof manifest.students === 'object' ? manifest.students : {};
+    const rawStudents = manifest?.students;
+    const studentsBucket =
+        rawStudents && typeof rawStudents === 'object' && !Array.isArray(rawStudents) ? rawStudents : {};
     const fpNew = stableStringifyManifestStudents(studentsBucket);
 
     revokeAllUrlsInStudentMap(studentClassReportUploadsByName);
@@ -7060,10 +7073,30 @@ function queueSaveRosterToCloud(rosterPayload) {
     }, 350);
 }
 
+/**
+ * Headers for GET polls that need a Bearer when the worker enforces JWT.
+ * Returns null when the request would only yield 401 (except legacy: auth-login returned 503).
+ */
+function timetableCloudPollAuthHeadersOrNull() {
+    let authUnconfigured = false;
+    try {
+        authUnconfigured = sessionStorage.getItem('timetable_api_auth_unconfigured') === '1';
+    } catch {
+        authUnconfigured = false;
+    }
+    const authHeaders = getTimetableApiAuthHeaders();
+    if (!authUnconfigured && !authHeaders.Authorization) {
+        return null;
+    }
+    return authHeaders;
+}
+
 async function pollRosterUpdates() {
     if (isSavingRoster) return;
     const rosterPollBase = absoluteHttpApiUrl('/api/roster');
     if (!rosterPollBase) return;
+    const authHeaders = timetableCloudPollAuthHeadersOrNull();
+    if (!authHeaders) return;
     let rosterPollUrl;
     try {
         const u = new URL(rosterPollBase);
@@ -7077,7 +7110,7 @@ async function pollRosterUpdates() {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-                ...getTimetableApiAuthHeaders()
+                ...authHeaders
             },
             cache: 'no-cache',
         });
@@ -7088,7 +7121,8 @@ async function pollRosterUpdates() {
         const remoteTimestamp = data?.lastUpdated || null;
         if (!remoteTimestamp || remoteTimestamp === rosterLastUpdateTimestamp) return;
 
-        if (!data.roster || typeof data.roster !== 'object') {
+        const rosterObj = data.roster;
+        if (!rosterObj || typeof rosterObj !== 'object' || Array.isArray(rosterObj)) {
             console.warn('Roster poll: missing or invalid roster payload, skipping.');
             return;
         }
@@ -7099,7 +7133,21 @@ async function pollRosterUpdates() {
         } catch (error) {
             console.error('Error reading local roster cache:', error);
         }
-        const remoteRosterRaw = JSON.stringify(data.roster);
+        let remoteRosterRaw;
+        try {
+            remoteRosterRaw = JSON.stringify(rosterObj);
+        } catch (e) {
+            console.warn('Roster poll: could not stringify remote roster, re-applying.', e);
+            await initRoster(rosterObj);
+            rosterLastUpdateTimestamp = remoteTimestamp;
+            syncSpeakOnWeeklyToAllTeacherSchedules();
+            renderSidebar();
+            resyncSelectionAfterSidebarRender();
+            if (String(loggedInStudentFullName || '').trim()) {
+                void pollClassReportUploadsFromCloud();
+            }
+            return;
+        }
 
         /** Student feed can change when roster metadata changes without localStorage divergence. */
         const studentLoggedIn = String(loggedInStudentFullName || '').trim();
@@ -7110,7 +7158,7 @@ async function pollRosterUpdates() {
             return;
         }
 
-        await initRoster(data.roster);
+        await initRoster(rosterObj);
         rosterLastUpdateTimestamp = remoteTimestamp;
         syncSpeakOnWeeklyToAllTeacherSchedules();
         renderSidebar();
@@ -7132,6 +7180,9 @@ async function pollClassReportUploadsFromCloud() {
     const baseApi = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
     if (!baseApi) return;
 
+    const authHeaders = timetableCloudPollAuthHeadersOrNull();
+    if (!authHeaders) return;
+
     let pollUrl;
     try {
         const u = new URL(baseApi);
@@ -7148,7 +7199,7 @@ async function pollClassReportUploadsFromCloud() {
     try {
         const response = await fetch(pollUrl, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
             cache: 'no-cache',
         });
         if (!response.ok) return;
@@ -7165,14 +7216,19 @@ async function pollClassReportUploadsFromCloud() {
             typeof manifest === 'object' &&
             !Array.isArray(manifest)
         ) {
-            const looksLikeBareBuckets = Object.values(manifest).every(
-                (v) => v == null || Array.isArray(v)
-            );
+            let looksLikeBareBuckets = false;
+            try {
+                looksLikeBareBuckets = Object.values(manifest).every((v) => v == null || Array.isArray(v));
+            } catch {
+                looksLikeBareBuckets = false;
+            }
             if (looksLikeBareBuckets && Object.keys(manifest).length > 0) {
                 manifest = { students: { ...manifest } };
             }
         }
-        const buckets = manifest.students && typeof manifest.students === 'object' ? manifest.students : {};
+        const rawStudents = manifest.students;
+        const buckets =
+            rawStudents && typeof rawStudents === 'object' && !Array.isArray(rawStudents) ? rawStudents : {};
         const fpRemote = stableStringifyManifestStudents(buckets);
 
         const storedTs = classReportUploadsCloudTimestamp;
@@ -7362,6 +7418,10 @@ function startPolling() {
                 if (!schedBase) {
                     return;
                 }
+                const authHeaders = timetableCloudPollAuthHeadersOrNull();
+                if (!authHeaders) {
+                    return;
+                }
                 let schedPollUrl;
                 try {
                     const u = new URL(schedBase);
@@ -7374,7 +7434,7 @@ function startPolling() {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
-                        ...getTimetableApiAuthHeaders()
+                        ...authHeaders
                     },
                     cache: 'no-cache',
                 });
@@ -7392,9 +7452,18 @@ function startPolling() {
                         if (hasScheduleMap) {
                             const timestampChanged = data.lastUpdated && data.lastUpdated !== lastUpdateTimestamp;
 
-                            const localSchedulesStr = JSON.stringify(teacherSchedules);
-                            const remoteSchedulesStr = JSON.stringify(schedules);
-                            const dataChanged = localSchedulesStr !== remoteSchedulesStr;
+                            let comparable = true;
+                            let localSchedulesStr = '';
+                            let remoteSchedulesStr = '';
+                            try {
+                                localSchedulesStr = JSON.stringify(teacherSchedules);
+                                remoteSchedulesStr = JSON.stringify(schedules);
+                            } catch (e) {
+                                comparable = false;
+                                console.warn('Schedule poll: could not compare payloads, skipping merge this tick.', e);
+                            }
+                            const dataChanged =
+                                comparable && localSchedulesStr !== remoteSchedulesStr;
 
                             if (timestampChanged) {
                                 console.log('Timestamp changed - checking for updates');
@@ -7423,8 +7492,8 @@ function startPolling() {
                             lastUpdateTimestamp = data.lastUpdated;
                         }
                     }
-                } else {
-                    console.error('Polling failed with status:', response.status);
+                } else if (response.status !== 401 && response.status !== 403) {
+                    console.warn('Schedule polling failed:', response.status);
                 }
             } catch (error) {
                 // Silent error - don't show error for polling failures

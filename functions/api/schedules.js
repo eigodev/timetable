@@ -1,5 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
+import { kvGetAllRoster } from '../lib/kv-all-roster.js';
 import { filterSchedulesForActor, mergeSchedulesForTeacher, mergeSchedulesForClassSupervisor } from '../lib/roster-scope.js';
 
 const corsHeaders = (extra = {}) => ({
@@ -47,7 +48,7 @@ export async function onRequest(context) {
       if (!auth.legacy) {
         const actor = { role: auth.payload.role, profile: auth.payload.profile };
         if (actor.role === 'student' && actor.profile) {
-          const fullRoster = (await KV_SCHEDULES.get('all_roster', 'json')) || {};
+          const fullRoster = (await kvGetAllRoster(KV_SCHEDULES)) || {};
           const tutor = String(fullRoster?.studentTeachers?.[actor.profile] || '').trim();
           if (tutor && schedules[tutor] != null) {
             out = { [tutor]: schedules[tutor] };
@@ -55,7 +56,7 @@ export async function onRequest(context) {
             out = {};
           }
         } else {
-          const fullRoster = (await KV_SCHEDULES.get('all_roster', 'json')) || {};
+          const fullRoster = (await kvGetAllRoster(KV_SCHEDULES)) || {};
           out = filterSchedulesForActor(schedules, actor, fullRoster);
         }
       }
@@ -97,13 +98,14 @@ export async function onRequest(context) {
           let merged;
           try {
             if (role === 'gate' && String(auth.payload.gateAppRole || '').trim() === 'class-supervisor') {
-              const rosterFull = (await KV_SCHEDULES.get('all_roster', 'json')) || {};
+              const rosterFull = (await kvGetAllRoster(KV_SCHEDULES)) || {};
               merged = mergeSchedulesForClassSupervisor(base, schedules, profile, rosterFull);
             } else {
               merged = mergeSchedulesForTeacher(base, schedules, profile);
             }
           } catch (e) {
-            return new Response(JSON.stringify({ success: false, error: e.message || 'Forbidden' }), {
+            const msg = e instanceof Error ? e.message : String(e || 'Forbidden');
+            return new Response(JSON.stringify({ success: false, error: msg || 'Forbidden' }), {
               status: 403,
               headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
             });

@@ -1,3 +1,4 @@
+import { kvGetAllRoster } from '../lib/kv-all-roster.js';
 import { migrateAndPersistRosterKv } from '../lib/roster-auth-migrate.js';
 
 const cors = {
@@ -61,7 +62,7 @@ export async function onRequest(context) {
     }
 
     const fullName = `${first} ${last}`.replace(/\s+/g, ' ').trim();
-    let roster = (await KV.get('all_roster', 'json')) || {};
+    let roster = (await kvGetAllRoster(KV)) || {};
     roster = await migrateAndPersistRosterKv(KV, roster);
 
     const adminU = String(roster?.adminAccount?.username || '').trim().toLowerCase();

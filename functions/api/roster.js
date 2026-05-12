@@ -1,5 +1,6 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
+import { kvGetAllRoster, kvGetRosterLastUpdated } from '../lib/kv-all-roster.js';
 import { migrateAndPersistRosterKv, migrateRosterAuthInPlace } from '../lib/roster-auth-migrate.js';
 import { filterRosterForActor, mergeTeacherRosterPatch } from '../lib/roster-scope.js';
 
@@ -44,11 +45,11 @@ export async function onRequest(context) {
 
     if (request.method === 'GET') {
       if (!auth.legacy) {
-        let rosterFull = await KV.get('all_roster', 'json');
+        let rosterFull = await kvGetAllRoster(KV);
         if (rosterFull && typeof rosterFull === 'object') {
           rosterFull = await migrateAndPersistRosterKv(KV, rosterFull);
         }
-        const lastUpdated = await KV.get('roster_last_updated', 'text');
+        const lastUpdated = await kvGetRosterLastUpdated(KV);
         const actor = { role: auth.payload.role, profile: auth.payload.profile };
         const roster = filterRosterForActor(rosterFull || {}, actor);
         return new Response(
@@ -60,11 +61,11 @@ export async function onRequest(context) {
           { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
         );
       }
-      let roster = await KV.get('all_roster', 'json');
+      let roster = await kvGetAllRoster(KV);
       if (roster && typeof roster === 'object') {
         roster = await migrateAndPersistRosterKv(KV, roster);
       }
-      const lastUpdated = await KV.get('roster_last_updated', 'text');
+      const lastUpdated = await kvGetRosterLastUpdated(KV);
       return new Response(
         JSON.stringify({
           success: true,
@@ -111,7 +112,7 @@ export async function onRequest(context) {
               { status: 400, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
             );
           }
-          const baseRaw = await KV.get('all_roster', 'json');
+          const baseRaw = await kvGetAllRoster(KV);
           const base = baseRaw && typeof baseRaw === 'object' ? baseRaw : {};
           await migrateAndPersistRosterKv(KV, base);
           let merged;
@@ -148,7 +149,8 @@ export async function onRequest(context) {
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders() });
   } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: error.message || 'Internal server error' }), {
+    const msg = error instanceof Error ? error.message : String(error || 'Internal server error');
+    return new Response(JSON.stringify({ success: false, error: msg || 'Internal server error' }), {
       status: 500,
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
     });
