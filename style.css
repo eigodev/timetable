@@ -45,7 +45,7 @@ body {
     background: white;
 
     height: 100%;
-    width: 25%;
+    width: 27.5%;
 
     border-radius: 20px;
     box-shadow: 1px 1px 5px 0px rgba(0, 0, 0, 0.3);
@@ -6520,6 +6520,30 @@ tr td.add-teacher-availability-table-day {
 .admin-dashboard-item-meta {
     color: #555;
     line-height: 1.35;
+}
+
+.admin-dashboard-username-value {
+    display: inline-block;
+    min-width: 2ch;
+    cursor: text;
+    border-bottom: 1px dashed transparent;
+    border-radius: 2px;
+}
+
+.admin-dashboard-username-value:hover {
+    border-bottom-color: rgba(0, 0, 0, 0.22);
+}
+
+.admin-dashboard-username-value:focus,
+.admin-dashboard-username-value.admin-dashboard-username-value--editing {
+    outline: 2px solid #303f9f;
+    outline-offset: 1px;
+    background: #fff;
+}
+
+.admin-username-unset {
+    color: #757575;
+    font-style: italic;
 }
 
 .admin-dashboard-item-remove {

@@ -9145,6 +9145,237 @@ function refreshAdminPanelIfShowingOverview() {
     }
 }
 
+/**
+ * HTML for one roster login username: double-click to edit inline (admin dashboard).
+ * @param {'Teacher'|'Student'|'GateStaff'} role
+ * @param {string} profileName teacher/student full name or gate profile name
+ * @param {string} gateAppRole coordinator | class-supervisor | assistant when role is GateStaff
+ * @param {string} currentUsername stored login string (may be empty)
+ */
+function adminDashboardUsernameFieldHtml(role, profileName, gateAppRole, currentUsername) {
+    const u = String(currentUsername || '').trim();
+    const gateAttr =
+        role === 'GateStaff' && String(gateAppRole || '').trim()
+            ? ` data-admin-gate-app-role="${escapeHtmlAttr(String(gateAppRole || '').trim())}"`
+            : '';
+    const display = u ? escapeHtmlAttr(u) : '<em class="admin-username-unset">Not set</em>';
+    return `<span class="admin-dashboard-item-meta">Username: <span class="admin-dashboard-username-value" tabindex="0" title="Double-click to edit; press Enter to save" data-admin-username-value="1" data-admin-username-role="${escapeHtmlAttr(
+        role
+    )}" data-admin-username-profile="${escapeHtmlAttr(profileName)}"${gateAttr} data-admin-username-stored="${escapeHtmlAttr(u)}">${display}</span></span>`;
+}
+
+function getCurrentLoginUsernameForAdminEditing(role, profileName, gateAppRole) {
+    if (role === 'Teacher') return String(teacherEmailsByName[profileName] || '').trim();
+    if (role === 'Student') return String(studentUsernamesByName[profileName] || '').trim();
+    if (role === 'GateStaff') {
+        const ar = String(gateAppRole || '').trim();
+        const ent = gateStaffAccounts.find(
+            (e) =>
+                String(e?.profileName || '').trim() === String(profileName || '').trim() &&
+                String(e?.appRole || '').trim() === ar
+        );
+        return ent ? String(ent.username || '').trim() : '';
+    }
+    return '';
+}
+
+/**
+ * @param {string} newLc
+ * @param {{ role: string, profileName: string, gateAppRole?: string }} exclude
+ */
+function isAdminLoginUsernameTakenByOther(newLc, exclude) {
+    const exRole = String(exclude.role || '').trim();
+    const exProf = String(exclude.profileName || '').trim();
+    const exGate = String(exclude.gateAppRole || '').trim();
+
+    const adminLc = String(adminAccount?.username || DEFAULT_ADMIN_USERNAME).trim().toLowerCase();
+    if (newLc && adminLc && newLc === adminLc) return true;
+
+    for (const t of teachersList) {
+        const u = String(teacherEmailsByName[t] || '').trim().toLowerCase();
+        if (!u || u !== newLc) continue;
+        if (exRole === 'Teacher' && t === exProf) continue;
+        return true;
+    }
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    for (const sn of allStudents) {
+        const u = String(studentUsernamesByName[sn] || '').trim().toLowerCase();
+        if (!u || u !== newLc) continue;
+        if (exRole === 'Student' && sn === exProf) continue;
+        return true;
+    }
+    for (const e of gateStaffAccounts) {
+        const u = String(e?.username || '').trim().toLowerCase();
+        if (!u || u !== newLc) continue;
+        const pn = String(e?.profileName || '').trim();
+        const ar = String(e?.appRole || '').trim();
+        if (exRole === 'GateStaff' && pn === exProf && ar === exGate) continue;
+        return true;
+    }
+    return false;
+}
+
+function bumpAuthAliasesAfterLoginUsernameRename(oldCanonical, newCanonical) {
+    const oldLc = String(oldCanonical || '').trim().toLowerCase();
+    const neu = String(newCanonical || '').trim();
+    if (!oldLc || !neu || oldLc === neu.toLowerCase()) return;
+    if (!authLoginAliasesByKey || typeof authLoginAliasesByKey !== 'object') {
+        authLoginAliasesByKey = {};
+    }
+    const keys = Object.keys(authLoginAliasesByKey);
+    keys.forEach((k) => {
+        const v = String(authLoginAliasesByKey[k] || '').trim();
+        if (v.toLowerCase() === oldLc) {
+            authLoginAliasesByKey[k] = neu;
+        }
+    });
+    authLoginAliasesByKey[oldLc] = neu;
+}
+
+function normalizeAdminDashboardUsernameInput(raw) {
+    return String(raw || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\u200b|\uFEFF|\u2060/g, '');
+}
+
+/**
+ * @returns {boolean} success
+ */
+function applyAdminUsernameChange(role, profileName, gateAppRole, newUsernameRaw) {
+    if (!hasEffectiveAdminSession()) {
+        denyStudentAction('Permission denied.');
+        return false;
+    }
+    const newU = normalizeAdminDashboardUsernameInput(newUsernameRaw);
+    if (!newU) {
+        showAppMessage('Username cannot be empty.');
+        return false;
+    }
+    if (!/^[\w.@+-]+$/.test(newU)) {
+        showAppMessage('Username may only contain letters, numbers, underscore, dot, @, +, or -.');
+        return false;
+    }
+    const r = String(role || '').trim();
+    const prof = String(profileName || '').trim();
+    const gateAr = String(gateAppRole || '').trim();
+    if (!r || !prof) return false;
+
+    const oldU = getCurrentLoginUsernameForAdminEditing(r, prof, gateAr);
+    if (newU === String(oldU || '').trim().toLowerCase()) {
+        return true;
+    }
+
+    if (isAdminLoginUsernameTakenByOther(newU, { role: r, profileName: prof, gateAppRole: gateAr })) {
+        showAppMessage('That username is already in use. Choose another.');
+        return false;
+    }
+
+    bumpAuthAliasesAfterLoginUsernameRename(oldU, newU);
+
+    if (r === 'Teacher') {
+        teacherEmailsByName[prof] = newU;
+    } else if (r === 'Student') {
+        studentUsernamesByName[prof] = newU;
+    } else if (r === 'GateStaff') {
+        const idx = gateStaffAccounts.findIndex(
+            (e) =>
+                String(e?.profileName || '').trim() === prof && String(e?.appRole || '').trim() === gateAr
+        );
+        if (idx === -1) {
+            showAppMessage('Gate profile not found.');
+            return false;
+        }
+        gateStaffAccounts[idx] = { ...gateStaffAccounts[idx], username: newU };
+    } else {
+        return false;
+    }
+
+    saveRoster();
+    showAppMessage('Username updated.');
+    return true;
+}
+
+function restoreAdminDashboardUsernameDisplay(span) {
+    const stored = String(span.getAttribute('data-admin-username-stored') || '');
+    if (!stored) {
+        span.innerHTML = '<em class="admin-username-unset">Not set</em>';
+    } else {
+        span.textContent = stored;
+    }
+}
+
+function cleanupAdminUsernameInlineListeners(span) {
+    if (span._adminUsernameKeydown) {
+        span.removeEventListener('keydown', span._adminUsernameKeydown);
+        delete span._adminUsernameKeydown;
+    }
+    if (span._adminUsernameBlur) {
+        span.removeEventListener('blur', span._adminUsernameBlur);
+        delete span._adminUsernameBlur;
+    }
+}
+
+function finishAdminUsernameEdit(span, shouldSave) {
+    if (span.dataset.editing !== '1') return;
+    span.dataset.editing = '0';
+    span.contentEditable = 'false';
+    span.classList.remove('admin-dashboard-username-value--editing');
+    cleanupAdminUsernameInlineListeners(span);
+
+    const role = String(span.getAttribute('data-admin-username-role') || '').trim();
+    const profile = String(span.getAttribute('data-admin-username-profile') || '').trim();
+    const gateRole = String(span.getAttribute('data-admin-gate-app-role') || '').trim();
+
+    if (!shouldSave) {
+        restoreAdminDashboardUsernameDisplay(span);
+        return;
+    }
+
+    const typed = span.textContent.replace(/\u200b|\uFEFF|\u2060/g, '').trim();
+    const ok = applyAdminUsernameChange(role, profile, gateRole, typed);
+    if (!ok) {
+        restoreAdminDashboardUsernameDisplay(span);
+        return;
+    }
+    renderAdminOverviewPanel();
+    renderSidebar();
+}
+
+function beginAdminUsernameEdit(span) {
+    if (!hasEffectiveAdminSession()) return;
+    if (span.dataset.editing === '1') return;
+    span.dataset.editing = '1';
+    const em = span.querySelector('em.admin-username-unset');
+    if (em) {
+        span.textContent = '';
+    }
+    span.contentEditable = 'true';
+    span.classList.add('admin-dashboard-username-value--editing');
+    span.focus();
+
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    span._adminUsernameKeydown = (ev) => {
+        if (ev.key === 'Enter' && !ev.shiftKey) {
+            ev.preventDefault();
+            finishAdminUsernameEdit(span, true);
+        } else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            finishAdminUsernameEdit(span, false);
+        }
+    };
+    span._adminUsernameBlur = () => {
+        finishAdminUsernameEdit(span, true);
+    };
+    span.addEventListener('keydown', span._adminUsernameKeydown);
+    span.addEventListener('blur', span._adminUsernameBlur);
+}
+
 function renderAdminOverviewPanel() {
     const panel = document.getElementById('adminControlPanel');
     if (!panel) return;
@@ -9166,7 +9397,7 @@ function renderAdminOverviewPanel() {
                       const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
-                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtmlAttr(loginUser) : '<em>Not set</em>'}</span>
+                        ${adminDashboardUsernameFieldHtml('Teacher', name, '', loginUser)}
                         <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Teacher" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove teacher account">
                             <div class="admin-dashboard-button-remove">
@@ -9214,7 +9445,7 @@ function renderAdminOverviewPanel() {
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         <span class="admin-dashboard-item-meta">${escapeHtmlAttr(roleLabel)}</span>
-                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtmlAttr(loginUser) : '<em>Not set</em>'}</span>
+                        ${adminDashboardUsernameFieldHtml('GateStaff', name, appRole, loginUser)}
                         <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="${escapeHtmlAttr(dashRole)}" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove gate staff account">
                             <div class="admin-dashboard-button-remove">
@@ -9273,7 +9504,7 @@ function renderAdminOverviewPanel() {
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         <span class="admin-dashboard-item-meta">School: ${escapeHtmlAttr(school)}</span>
                         <span class="admin-dashboard-item-meta">Profile / roster: ${escapeHtmlAttr(rk)}</span>
-                        <span class="admin-dashboard-item-meta">Username: ${loginUsername ? escapeHtmlAttr(loginUsername) : '<em>Not set</em>'}</span>
+                        ${adminDashboardUsernameFieldHtml('Student', name, '', loginUsername)}
                         <span class="admin-dashboard-item-meta">Contact email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
                         <span class="admin-dashboard-item-meta">Password: ${studentPwHtml}</span>
                         <span class="admin-dashboard-item-meta">Assigned teacher: ${tutor ? escapeHtmlAttr(tutor) : '<em>None</em>'}</span>
@@ -15641,6 +15872,9 @@ function setupAdminControlPanel() {
             panel.innerHTML = '';
             return;
         }
+        if (e.target.closest('[data-admin-username-value][contenteditable="true"]')) {
+            return;
+        }
         const saveBtn = e.target.closest('[data-admin-save]');
         if (saveBtn) {
             if (!hasEffectiveAdminSession()) {
@@ -15685,6 +15919,13 @@ function setupAdminControlPanel() {
             openAdminDashboardDeleteConfirm(role, name);
             return;
         }
+    });
+    panel.addEventListener('dblclick', (e) => {
+        const span = e.target.closest('[data-admin-username-value]');
+        if (!span || !panel.contains(span) || !hasEffectiveAdminSession()) return;
+        if (e.target.closest('button')) return;
+        e.preventDefault();
+        beginAdminUsernameEdit(span);
     });
 }
 
