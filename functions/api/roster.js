@@ -2,6 +2,7 @@ import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
 import { kvGetAllRoster, kvGetRosterLastUpdated } from '../lib/kv-all-roster.js';
 import { migrateAndPersistRosterKv, migrateRosterAuthInPlace } from '../lib/roster-auth-migrate.js';
+import { pruneAndPersistSchedulesForRosterKv, sanitizeRosterForAdminPersist } from '../lib/roster-admin-sanitize.js';
 import { filterRosterForActor, mergeTeacherRosterPatch } from '../lib/roster-scope.js';
 
 const corsHeaders = (extra = {}) =>
@@ -94,8 +95,10 @@ export async function onRequest(context) {
 
         if (role === 'admin') {
           await migrateRosterAuthInPlace(incoming);
+          sanitizeRosterForAdminPersist(incoming);
           await KV.put('all_roster', JSON.stringify(incoming));
           await KV.put('roster_last_updated', timestamp);
+          await pruneAndPersistSchedulesForRosterKv(KV, incoming);
           return new Response(
             JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Roster saved successfully' }),
             { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
@@ -124,8 +127,10 @@ export async function onRequest(context) {
               headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
             });
           }
+          sanitizeRosterForAdminPersist(merged);
           await KV.put('all_roster', JSON.stringify(merged));
           await KV.put('roster_last_updated', timestamp);
+          await pruneAndPersistSchedulesForRosterKv(KV, merged);
           return new Response(
             JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Roster merged successfully' }),
             { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
@@ -139,8 +144,10 @@ export async function onRequest(context) {
       }
 
       await migrateRosterAuthInPlace(incoming);
+      sanitizeRosterForAdminPersist(incoming);
       await KV.put('all_roster', JSON.stringify(incoming));
       await KV.put('roster_last_updated', timestamp);
+      await pruneAndPersistSchedulesForRosterKv(KV, incoming);
       return new Response(
         JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Roster saved successfully' }),
         { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }

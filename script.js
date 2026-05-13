@@ -1964,7 +1964,10 @@ function buildCanonicalUsernameBaseFromFullName(fullNameRaw) {
     const cleaned = String(fullNameRaw || '').trim().replace(/\s+/g, ' ');
     if (!cleaned) return '';
     const parts = cleaned.split(' ').filter(Boolean);
-    const slug = parts.map((p) => normalizeUsername(p)).join('');
+    if (parts.length === 0) return '';
+    const first = normalizeUsername(parts[0]);
+    const last = parts.length === 1 ? '' : normalizeUsername(parts[parts.length - 1]);
+    const slug = `${first}${last}`;
     if (!slug) return '';
     return `${slug}_`;
 }
@@ -2117,7 +2120,7 @@ async function ensureAdminAccountReady() {
         if (nu !== String(fromStorage.username || '').trim()) saveAdminAccountToStorage(adminAccount);
         return;
     }
-    const defaultHash = await hashStudentPassword(DEFAULT_ADMIN_PASSWORD);
+    const defaultHash = DEFAULT_ADMIN_PASSWORD;
     adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: defaultHash };
     saveAdminAccountToStorage(adminAccount);
 }
@@ -8097,9 +8100,9 @@ function renderSidebar() {
         '<path d="M6 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6ZM15.75 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3h-2.25ZM6 12.75a3 3 0 0 0-3 3V18a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3v-2.25a3 3 0 0 0-3-3H6ZM17.625 13.5a.75.75 0 0 0-1.5 0v2.625H13.5a.75.75 0 0 0 0 1.5h2.625v2.625a.75.75 0 0 0 1.5 0v-2.625h2.625a.75.75 0 0 0 0-1.5h-2.625V13.5Z" />' +
         '</svg><span class="teacher-list-dashboard-btn-label">Dashboard</span>';
     dashboardBtn.hidden = !hasEffectiveAdminSession();
-    dashboardBtn.addEventListener('click', () => {
+    dashboardBtn.addEventListener('click', async () => {
         if (!hasEffectiveAdminSession()) return;
-        setAdminDashboard();
+        await setAdminDashboard();
     });
     sidebarTop.appendChild(dashboardBtn);
     const managementSection = document.createElement('section');
@@ -9070,7 +9073,8 @@ function getAdminAccountRows() {
             name: String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim(),
             accountKey: '__admin__',
             email: String(adminAccount.username || DEFAULT_ADMIN_USERNAME).trim(),
-            passwordLabel: 'Configured',
+            passwordLabel:
+                String(adminAccount.passwordHash || '').trim() || String(DEFAULT_ADMIN_PASSWORD || '').trim(),
             info: 'Full platform access'
         }
     ];
@@ -9080,7 +9084,7 @@ function getAdminAccountRows() {
             name,
             accountKey: `teacher::${name}`,
             email: String(teacherEmailsByName[name] || '').trim(),
-            passwordLabel: String(teacherPasswordsByName[name] || '').trim() ? 'Configured' : 'Not set',
+            passwordLabel: String(teacherPasswordsByName[name] || '').trim() || 'Not set',
             info: 'Teacher profile'
         });
     });
@@ -9092,7 +9096,7 @@ function getAdminAccountRows() {
             name,
             accountKey: `student::${name}`,
             email: String(studentEmailsByName[name] || '').trim(),
-            passwordLabel: String(studentPasswordsByName[name] || '').trim() ? 'Configured' : 'Not set',
+            passwordLabel: String(studentPasswordsByName[name] || '').trim() || 'Not set',
             info: school,
             rosterKind
         });
@@ -9177,8 +9181,14 @@ function renderAdminOverviewPanel() {
 
     const gateRows =
         gateStaffAccounts.length === 0
-            ? '<p class="admin-dashboard-empty">No coordinator or class supervisor profiles yet.</p>'
+            ? '<p class="admin-dashboard-empty">No gate staff profiles yet.</p>'
             : gateStaffAccounts
+                  .slice()
+                  .sort((a, b) =>
+                      String(a?.profileName || '').localeCompare(String(b?.profileName || ''), undefined, {
+                          sensitivity: 'base'
+                      })
+                  )
                   .map((e) => {
                       const name = String(e?.profileName || '').trim();
                       if (!name) return '';
@@ -9192,8 +9202,12 @@ function renderAdminOverviewPanel() {
                       } else if (appRole === 'class-supervisor') {
                           dashRole = 'GateClassSupervisor';
                           roleLabel = 'Class Supervisor';
+                      } else if (appRole === 'assistant') {
+                          dashRole = 'GateTeacherAssistant';
+                          roleLabel = 'Teacher Assistant';
                       } else {
-                          return '';
+                          dashRole = 'GateTeacherAssistant';
+                          roleLabel = appRole || 'Gate staff';
                       }
                       const rawPw = String(e?.password || '').trim();
                       const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
@@ -9284,7 +9298,7 @@ function renderAdminOverviewPanel() {
                     <div class="admin-dashboard-category-body">${teacherRows}</div>
                 </section>
                 <section class="admin-dashboard-category" aria-labelledby="admin-dash-gate">
-                    <h3 id="admin-dash-gate" class="admin-dashboard-category-title">Coordinators &amp; class supervisors</h3>
+                    <h3 id="admin-dash-gate" class="admin-dashboard-category-title">Coordinators, supervisors &amp; assistants</h3>
                     <div class="admin-dashboard-category-body">${gateRows}</div>
                 </section>
                 <section class="admin-dashboard-category" aria-labelledby="admin-dash-schools">
@@ -9316,7 +9330,7 @@ async function saveAccountCredentialsFromAdmin(role, name, emailRaw, passwordRaw
             showAppMessage('Admin password must have at least 5 characters.');
             return false;
         }
-        const passwordHash = await hashStudentPassword(password);
+        const passwordHash = String(password || '').trim();
         adminAccount = { username: email, passwordHash };
         saveAdminAccountToStorage(adminAccount);
         if (isAdminLoggedIn) {
@@ -9441,7 +9455,9 @@ function removeGateStaffAccountByProfile(profileNameRaw, expectedAppRole) {
     showAppMessage(
         expectedAppRole === 'coordinator'
             ? 'Coordinator profile removed. Supervision links and other roster data are unchanged.'
-            : 'Class Supervisor removed; their class-supervisor supervision links and gate-only schedule data were cleared where applicable.'
+            : expectedAppRole === 'class-supervisor'
+              ? 'Class Supervisor removed; their class-supervisor supervision links and gate-only schedule data were cleared where applicable.'
+              : 'Teacher assistant profile removed.'
     );
 }
 
@@ -9467,11 +9483,20 @@ function removeAccountFromAdmin(role, name) {
         removeGateStaffAccountByProfile(name, 'class-supervisor');
         return;
     }
+    if (role === 'GateTeacherAssistant') {
+        removeGateStaffAccountByProfile(name, 'assistant');
+        return;
+    }
     if (role === 'Teacher') {
         const idx = teachersList.findIndex((t) => String(t || '').trim().toLowerCase() === String(name || '').trim().toLowerCase());
         if (idx === -1) return;
         const teacherName = teachersList[idx];
         const teacherLc = teacherName.trim().toLowerCase();
+
+        supervisionLinks = supervisionLinks.filter((row) => {
+            const tp = String(row?.teacherProfile || '').trim().toLowerCase();
+            return tp !== teacherLc;
+        });
 
         const studentsOfTeacher = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter(
             (n) => String(studentTeacherByName[n] || '').trim().toLowerCase() === teacherLc
@@ -9544,11 +9569,23 @@ function removeAccountFromAdmin(role, name) {
     showAppMessage(`${role} account removed.`);
 }
 
-function setAdminDashboard() {
+async function setAdminDashboard() {
     if (!hasEffectiveAdminSession()) {
         setLoggedOutDashboard();
         return;
     }
+
+    try {
+        const fresh = await loadRosterFromCloud();
+        if (fresh && typeof fresh === 'object' && !Array.isArray(fresh)) {
+            await initRoster(fresh);
+            applyTeacherDataIsolationInMemory();
+            syncSpeakOnWeeklyToAllTeacherSchedules();
+        }
+    } catch {
+        /* keep in-memory roster if cloud refresh fails */
+    }
+
     hideMaterialsMainView();
     const calendarWrapper = document.getElementById('calendarWrapper');
     const reportPanel = document.getElementById('studentClassReportPanel');
@@ -9828,8 +9865,10 @@ function buildAdminDashboardDeleteMessage(role, name) {
         confirmMsg = `Delete this student account?\n\n${name}\n\nSchools and teachers are kept.`;
     } else if (role === 'GateCoordinator') {
         confirmMsg = `Delete coordinator "${name}"?\n\nThis removes only their gate login profile. Teachers, students, schedules, and supervision links stay as they are.`;
-    } else if (role === 'GateClassSupervisor') {
+    } else     if (role === 'GateClassSupervisor') {
         confirmMsg = `Delete class supervisor "${name}"?\n\nThis removes their gate profile, class-supervisor supervision links, and their schedule row if they are not also a roster teacher. Teacher-managed data otherwise stays intact.`;
+    } else if (role === 'GateTeacherAssistant') {
+        confirmMsg = `Delete teacher assistant "${name}"?\n\nThis removes only their gate login profile.`;
     }
     return confirmMsg;
 }
@@ -9840,6 +9879,7 @@ function adminDashboardDeleteTitleForRole(role) {
     if (role === 'Student') return 'Delete student?';
     if (role === 'GateCoordinator') return 'Delete coordinator?';
     if (role === 'GateClassSupervisor') return 'Delete class supervisor?';
+    if (role === 'GateTeacherAssistant') return 'Delete teacher assistant?';
     return 'Delete?';
 }
 
@@ -10368,7 +10408,7 @@ async function initTeachers() {
     }
 
     if (isAdminLoggedIn) {
-        setAdminDashboard();
+        await setAdminDashboard();
         return;
     }
 

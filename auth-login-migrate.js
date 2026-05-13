@@ -1,13 +1,8 @@
 /**
- * Canonical login usernames: all name tokens (lowercase, diacritics stripped),
- * concatenated, plus "_" — e.g. "Maria   Clara Souza" → "mariaclarasouza_".
- * Collisions: "johnsmith_", "johnsmith_1", "johnsmith_2", …
- *
- * Migrates email-shaped stored logins to canonical usernames and records
- * authLoginAliases so legacy values still resolve at sign-in.
+ * Client-side username migration (mirror of worker `roster-auth-migrate.js`): first + last name slug + "_",
+ * collisions get numeric suffix. Email logins map via authLoginAliases. Seeds missing admin password as plaintext `admin`.
  */
-(function authLoginMigrateFactory(global) {
-    'use strict';
+(function authLoginMigrateFactory(global) {    'use strict';
 
     function normalizeUsername(value) {
         const raw = String(value || '');
@@ -27,7 +22,10 @@
         const cleaned = String(fullNameRaw || '').trim().replace(/\s+/g, ' ');
         if (!cleaned) return '';
         const parts = cleaned.split(' ').filter(Boolean);
-        const slug = parts.map((p) => normalizeUsername(p)).join('');
+        if (parts.length === 0) return '';
+        const first = normalizeUsername(parts[0]);
+        const last = parts.length === 1 ? '' : normalizeUsername(parts[parts.length - 1]);
+        const slug = `${first}${last}`;
         if (!slug) return '';
         return `${slug}_`;
     }
@@ -58,6 +56,7 @@
     }
 
     const STORED_DEFAULT_ADMIN_USERNAME = '@Admin';
+    const STORED_DEFAULT_ADMIN_PASSWORD = 'admin';
 
     function migrateRosterAuthFields(roster) {
         if (!roster || typeof roster !== 'object' || Array.isArray(roster)) return false;
@@ -111,15 +110,6 @@
         }
         reserve(STORED_DEFAULT_ADMIN_USERNAME);
 
-        const applyLowercaseAlias = (cur, neu, setField) => {
-            const curLc = lowerKey(cur);
-            const neuLc = String(neu || '').trim().toLowerCase();
-            if (!curLc || !neuLc || curLc === neuLc) return false;
-            aliases[curLc] = neu;
-            setField(neu);
-            return true;
-        };
-
         teachers
             .slice()
             .sort((a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' }))
@@ -128,104 +118,76 @@
                 if (!n) return;
                 const pw = String(teacherPasswords[n] || '').trim();
                 if (!pw) return;
-                let cur = String(teacherEmails[n] || '').trim();
-                if (cur && !cur.includes('@')) {
-                    const low = cur.toLowerCase();
-                    if (cur !== low) {
-                        if (
-                            applyLowercaseAlias(cur, low, (v) => {
-                                teacherEmails[n] = v;
-                            })
-                        ) {
-                            dirty = true;
-                        }
-                    } else {
-                        reserve(cur);
-                    }
-                    return;
-                }
-                const base = buildCanonicalUsernameBaseFromFullName(n);
-                if (!base) return;
-                const neu = pickNextAvailableUsername(base, taken);
-                const curLc = lowerKey(cur);
-                const neuLc = lowerKey(neu);
-                if (cur && curLc !== neuLc) {
-                    aliases[curLc] = neu;
-                }
-                if (cur !== neu) {
+                const curWas = String(teacherEmails[n] || '').trim();
+                const base = buildCanonicalUsernameBaseFromFullName(n) || `${normalizeUsername(n)}_`;
+                const scratch = new Set(taken);
+                const curLcPre = lowerKey(curWas);
+                if (curLcPre && !curWas.includes('@')) scratch.delete(curLcPre);
+                const neu = pickNextAvailableUsername(base || 'profile_', scratch);
+                if (!neu) return;
+                if (teacherEmails[n] !== neu) {
                     teacherEmails[n] = neu;
                     dirty = true;
                 }
+                if (lowerKey(curWas) && lowerKey(curWas) !== lowerKey(neu)) {
+                    aliases[lowerKey(curWas)] = neu;
+                }
+                reserve(neu);
             });
 
-        studentNames.forEach((name) => {
-            const n = String(name || '').trim();
-            if (!n) return;
-            const pw = String(studentPasswords[n] || '').trim();
-            if (!pw) return;
-            let cur = String(studentUsernames[n] || '').trim();
-            if (cur && !cur.includes('@')) {
-                const low = cur.toLowerCase();
-                if (cur !== low) {
-                    if (
-                        applyLowercaseAlias(cur, low, (v) => {
-                            studentUsernames[n] = v;
-                        })
-                    ) {
-                        dirty = true;
-                    }
-                } else {
-                    reserve(cur);
+        studentNames
+            .slice()
+            .sort((a, b) => String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' }))
+            .forEach((name) => {
+                const n = String(name || '').trim();
+                if (!n) return;
+                const pw = String(studentPasswords[n] || '').trim();
+                if (!pw) return;
+                const curWas = String(studentUsernames[n] || '').trim();
+                const base = buildCanonicalUsernameBaseFromFullName(n) || `${normalizeUsername(n)}_`;
+                const scratch = new Set(taken);
+                const curLcPre = lowerKey(curWas);
+                if (curLcPre && !curWas.includes('@')) scratch.delete(curLcPre);
+                const neu = pickNextAvailableUsername(base || 'profile_', scratch);
+                if (!neu) return;
+                if (studentUsernames[n] !== neu) {
+                    studentUsernames[n] = neu;
+                    dirty = true;
                 }
-                return;
-            }
-            const base = buildCanonicalUsernameBaseFromFullName(n);
-            if (!base) return;
-            const neu = pickNextAvailableUsername(base, taken);
-            const curLc = lowerKey(cur);
-            const neuLc = lowerKey(neu);
-            if (cur && curLc !== neuLc) {
-                aliases[curLc] = neu;
-            }
-            if (cur !== neu) {
-                studentUsernames[n] = neu;
-                dirty = true;
-            }
-        });
+                if (lowerKey(curWas) && lowerKey(curWas) !== lowerKey(neu)) {
+                    aliases[lowerKey(curWas)] = neu;
+                }
+                reserve(neu);
+            });
 
-        gateStaffAccounts.forEach((entry, idx) => {
-            const profileName = String(entry.profileName || '').trim();
-            const pw = String(entry.password || '').trim();
-            if (!profileName || !pw) return;
-            let cur = String(entry.username || '').trim();
-            if (cur && !cur.includes('@')) {
-                const low = cur.toLowerCase();
-                if (cur !== low) {
-                    if (
-                        applyLowercaseAlias(cur, low, (v) => {
-                            gateStaffAccounts[idx].username = v;
-                        })
-                    ) {
-                        dirty = true;
-                    }
-                } else {
-                    reserve(cur);
+        gateStaffAccounts
+            .map((_, idx) => idx)
+            .sort((ai, bi) => {
+                const a = gateStaffAccounts[ai]?.profileName;
+                const b = gateStaffAccounts[bi]?.profileName;
+                return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
+            })
+            .forEach((idx) => {
+                const entry = gateStaffAccounts[idx];
+                const profileName = String(entry.profileName || '').trim();
+                const pw = String(entry.password || '').trim();
+                if (!profileName || !pw) return;
+                const curWas = String(entry.username || '').trim();
+                const base = buildCanonicalUsernameBaseFromFullName(profileName) || `${normalizeUsername(profileName)}_`;
+                const scratch = new Set(taken);
+                const curLcPre = lowerKey(curWas);
+                if (curLcPre && !curWas.includes('@')) scratch.delete(curLcPre);
+                const neu = pickNextAvailableUsername(base || 'profile_', scratch);
+                if (!neu) return;
+                if (gateStaffAccounts[idx].username !== neu) {
+                    gateStaffAccounts[idx].username = neu;
+                    dirty = true;
                 }
-                return;
-            }
-            const base = buildCanonicalUsernameBaseFromFullName(profileName);
-            if (!base) return;
-            const neu = pickNextAvailableUsername(base, taken);
-            const curLc = lowerKey(cur);
-            const neuLc = lowerKey(neu);
-            if (cur && curLc !== neuLc) {
-                aliases[curLc] = neu;
-            }
-            if (cur !== neu) {
-                gateStaffAccounts[idx].username = neu;
-                dirty = true;
-            }
-        });
+                if (lowerKey(curWas) && lowerKey(curWas) !== lowerKey(neu)) {
+                    aliases[lowerKey(curWas)] = neu;
+                }
+                reserve(neu);
+            });
 
         if (roster.adminAccount && typeof roster.adminAccount === 'object' && roster.adminAccount.username) {
             const au = String(roster.adminAccount.username || '').trim();
@@ -251,7 +213,13 @@
 
         let adminObj = roster.adminAccount && typeof roster.adminAccount === 'object' ? { ...roster.adminAccount } : {};
         let adminU = String(adminObj.username || '').trim();
+        let adminH = String(adminObj.passwordHash || '').trim();
 
+        if (!adminH) {
+            adminObj.passwordHash = STORED_DEFAULT_ADMIN_PASSWORD;
+            adminH = adminObj.passwordHash;
+            dirty = true;
+        }
         if (!adminU) {
             adminObj.username = STORED_DEFAULT_ADMIN_USERNAME;
             adminU = STORED_DEFAULT_ADMIN_USERNAME;
