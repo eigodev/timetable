@@ -9514,4 +9514,17 @@ header h1 {
         width: 1045px;
         padding: 30px;
     }
+
+    .add-modal-dialog,
+    .add-modal.add-modal--school .add-modal-dialog {
+        height: 530px;
+        width: 980px;
+    }
+
+    .google-meet-popup {
+        left: 22.25%;
+
+        height: 94%;
+        width: 76%;
+    }
 }
