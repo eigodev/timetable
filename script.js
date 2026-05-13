@@ -1798,6 +1798,32 @@ function formatNationalPhoneDisplay(countryIso, rawDigitsOrFormatted) {
 }
 
 /**
+ * National part only, formatted for the admin dashboard (e.g. BR: (xx) xxxxx-xxxx; IE: (xx) xxx xxxx).
+ */
+function formatNationalPhoneForAdminPanel(countryIso, rawLocalInput) {
+    const iso = String(countryIso || '').trim().toUpperCase();
+    const d = sanitizeNationalPhoneDigits(iso, digitsOnly(rawLocalInput));
+    if (!d) return '';
+    if (iso === 'BR') return formatBrazilNationalPhoneDisplay(d);
+    if (iso === 'US' || iso === 'CA') return formatNanpNationalPhoneDisplay(d);
+    if (iso === 'IE') {
+        if (d.length <= 2) return `(${d}`;
+        if (d.length <= 5) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+        return `(${d.slice(0, 2)}) ${d.slice(2, 5)} ${d.slice(5)}`;
+    }
+    if (iso === 'GB') {
+        if (d.length <= 2) return `(${d}`;
+        if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+        if (d.length === 9) return `(${d.slice(0, 2)}) ${d.slice(2, 5)} ${d.slice(5)}`;
+        const cap = Math.min(d.length, 10);
+        const dd = d.slice(0, cap);
+        if (dd.length >= 10) return `(${dd.slice(0, 2)}) ${dd.slice(2, 6)} ${dd.slice(6, 10)}`;
+        return `(${dd.slice(0, 2)}) ${dd.slice(2)}`;
+    }
+    return formatNationalPhoneDisplay(iso, d);
+}
+
+/**
  * Removes a duplicate country calling code from the start of `raw` when it matches `countryIso`.
  * Roster `number` is stored as the national/local part only; the flag selector holds the dial code.
  */
@@ -2028,6 +2054,20 @@ function bindAddStudentUsernameAutoSync(firstInput, lastInput, usernameInput) {
 
 function isStudentPasswordHashed(storedPasswordRaw) {
     return String(storedPasswordRaw || '').startsWith(STUDENT_PASSWORD_HASH_PREFIX);
+}
+
+/** HTML snippet for password line in admin roster dashboard (plaintext or hash notice). */
+function adminDashboardPasswordInnerHtml(storedRaw) {
+    const s = String(storedRaw || '').trim();
+    if (!s) return '<em>Not set</em>';
+    if (isStudentPasswordHashed(s)) return '<em>Stored as hash — set a new password to replace it</em>';
+    return escapeHtmlAttr(s);
+}
+
+function adminDashboardMetaLineHtml(label, innerHtml, missing) {
+    const cls = missing ? ' admin-dashboard-item-meta--missing' : '';
+    const lbl = missing ? `${escapeHtmlAttr(label)}:*` : `${escapeHtmlAttr(label)}:`;
+    return `<span class="admin-dashboard-item-meta${cls}">${lbl} ${innerHtml}</span>`;
 }
 
 async function hashStudentPassword(rawPassword) {
@@ -9159,7 +9199,9 @@ function adminDashboardUsernameFieldHtml(role, profileName, gateAppRole, current
             ? ` data-admin-gate-app-role="${escapeHtmlAttr(String(gateAppRole || '').trim())}"`
             : '';
     const display = u ? escapeHtmlAttr(u) : '<em class="admin-username-unset">Not set</em>';
-    return `<span class="admin-dashboard-item-meta">Username: <span class="admin-dashboard-username-value" tabindex="0" title="Double-click to edit; press Enter to save" data-admin-username-value="1" data-admin-username-role="${escapeHtmlAttr(
+    const missingCls = u ? '' : ' admin-dashboard-item-meta--missing';
+    const lbl = u ? 'Username:' : 'Username:*';
+    return `<span class="admin-dashboard-item-meta${missingCls}">${lbl} <span class="admin-dashboard-username-value" tabindex="0" title="Double-click to edit; press Enter to save" data-admin-username-value="1" data-admin-username-role="${escapeHtmlAttr(
         role
     )}" data-admin-username-profile="${escapeHtmlAttr(profileName)}"${gateAttr} data-admin-username-stored="${escapeHtmlAttr(u)}">${display}</span></span>`;
 }
@@ -9394,11 +9436,11 @@ function renderAdminOverviewPanel() {
                       if (!name) return '';
                       const loginUser = String(teacherEmailsByName[name] || '').trim();
                       const rawPw = String(teacherPasswordsByName[name] || '').trim();
-                      const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
+                      const pwLabel = adminDashboardPasswordInnerHtml(rawPw);
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         ${adminDashboardUsernameFieldHtml('Teacher', name, '', loginUser)}
-                        <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
+                        ${adminDashboardMetaLineHtml('Password', pwLabel, !rawPw)}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Teacher" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove teacher account">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
@@ -9439,11 +9481,11 @@ function renderAdminOverviewPanel() {
                 const appRole = String(e?.appRole || '').trim();
                 const loginUser = String(e?.username || '').trim();
                 const rawPw = String(e?.password || '').trim();
-                const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
+                const pwLabel = adminDashboardPasswordInnerHtml(rawPw);
                 return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         ${adminDashboardUsernameFieldHtml('GateStaff', name, appRole, loginUser)}
-                        <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
+                        ${adminDashboardMetaLineHtml('Password', pwLabel, !rawPw)}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="${escapeHtmlAttr(dashRole)}" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove gate staff account">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
@@ -9474,7 +9516,7 @@ function renderAdminOverviewPanel() {
                               : students.map((n) => `<li>${escapeHtmlAttr(n)}</li>`).join('');
                       const listBlock = listItems
                           ? `<ul class="admin-school-student-list">${listItems}</ul>`
-                          : '<p class="admin-dashboard-empty" style="margin:8px 0 0">No students linked.</p>';
+                          : '<p class="admin-dashboard-item-meta admin-dashboard-item-meta--missing" style="margin:8px 0 0">Students:* <em>Not set</em></p>';
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(title)}</span>
                         <span class="admin-dashboard-item-meta">Number of students: ${count}</span>
@@ -9506,7 +9548,7 @@ function renderAdminOverviewPanel() {
                       const loginUsername = String(studentUsernamesByName[name] || '').trim();
                       const tutor = String(studentTeacherByName[name] || '').trim();
                       const rawStudentPw = String(studentPasswordsByName[name] || '').trim();
-                      const studentPwHtml = rawStudentPw ? escapeHtmlAttr(rawStudentPw) : '<em>Not set</em>';
+                      const studentPwHtml = adminDashboardPasswordInnerHtml(rawStudentPw);
                       const city = String(studentCityByName[name] || '').trim();
                       const country = String(studentCountryByName[name] || '').trim();
                       const local = [city, country].filter(Boolean).join(', ');
@@ -9514,19 +9556,18 @@ function renderAdminOverviewPanel() {
                       const birth = String(studentBirthDatesByName[name] || '').trim();
                       const age = String(studentAgesByName[name] || '').trim();
                       const level = String(studentLevelsByName[name] || '').trim();
-                      const line = (label, inner) =>
-                          `<span class="admin-dashboard-item-meta">${label}: ${inner}</span>`;
+                      const schoolMissing = !school || school === '—';
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
                         ${adminDashboardUsernameFieldHtml('Student', name, '', loginUsername)}
-                        ${line('Password', studentPwHtml)}
-                        ${line('Phone number', phoneDisp ? escapeHtmlAttr(phoneDisp) : '<em>Not set</em>')}
-                        ${line('Local', local ? escapeHtmlAttr(local) : '<em>Not set</em>')}
-                        ${line('Assigned teacher', tutor ? escapeHtmlAttr(tutor) : '<em>None</em>')}
-                        ${line('Assigned school', escapeHtmlAttr(school))}
-                        ${line('Birthday', birth ? escapeHtmlAttr(birth) : '<em>Not set</em>')}
-                        ${line('Age', age ? escapeHtmlAttr(age) : '<em>Not set</em>')}
-                        ${line('Level', level ? escapeHtmlAttr(level) : '<em>Not set</em>')}
+                        ${adminDashboardMetaLineHtml('Password', studentPwHtml, !rawStudentPw)}
+                        ${adminDashboardMetaLineHtml('Phone number', phoneDisp ? escapeHtmlAttr(phoneDisp) : '<em>Not set</em>', !phoneDisp)}
+                        ${adminDashboardMetaLineHtml('Local', local ? escapeHtmlAttr(local) : '<em>Not set</em>', !local)}
+                        ${adminDashboardMetaLineHtml('Assigned teacher', tutor ? escapeHtmlAttr(tutor) : '<em>Not set</em>', !tutor)}
+                        ${adminDashboardMetaLineHtml('Assigned school', schoolMissing ? '<em>Not set</em>' : escapeHtmlAttr(school), schoolMissing)}
+                        ${adminDashboardMetaLineHtml('Birthday', birth ? escapeHtmlAttr(birth) : '<em>Not set</em>', !birth)}
+                        ${adminDashboardMetaLineHtml('Age', age ? escapeHtmlAttr(age) : '<em>Not set</em>', !age)}
+                        ${adminDashboardMetaLineHtml('Level', level ? escapeHtmlAttr(level) : '<em>Not set</em>', !level)}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove student account">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
@@ -11007,10 +11048,12 @@ function getStudentPhoneInfo(studentName) {
 
 function formatStudentPhoneDisplayForAdmin(studentName) {
     const { countryIso, number } = getStudentPhoneInfo(studentName);
-    if (!number) return '';
+    if (!digitsOnly(number)) return '';
     const c = getPhoneCountryByIso(countryIso);
-    const dial = c && c.dialCode ? String(c.dialCode) : '';
-    return dial ? `${dial} ${number}` : number;
+    const dial = c && c.dialCode ? String(c.dialCode).trim() : '';
+    const national = formatNationalPhoneForAdminPanel(countryIso, number);
+    if (!national) return dial || '';
+    return dial ? `${dial} ${national}` : national;
 }
 
 function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {

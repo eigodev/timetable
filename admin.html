@@ -247,6 +247,10 @@
             align-items: start;
         }
 
+        .admin-dashboard-subcol {
+            width: stretch;
+        }
+
         .admin-dashboard-subcol-title {
             margin: 0 0 8px;
             font-size: 0.82rem;
@@ -315,6 +319,24 @@
         .admin-dashboard-item-meta {
             color: #555555;
             line-height: 1.35;
+        }
+
+        .admin-dashboard-item-meta--missing,
+        .admin-dashboard-item-meta--missing .admin-dashboard-username-value {
+            color: #c62828;
+            font-weight: 500;
+        }
+
+        .admin-dashboard-item-meta--missing .admin-username-unset {
+            color: #c62828;
+            font-style: italic;
+            font-weight: 500;
+        }
+
+        .admin-dashboard-item-meta--missing em {
+            color: inherit;
+            font-style: italic;
+            font-weight: 500;
         }
 
         .admin-dashboard-empty {
@@ -1294,7 +1316,66 @@
 
         function dashboardPasswordHtml(value) {
             const v = String(value || '').trim();
-            return v ? escapeHtml(v) : '<em>Not set</em>';
+            if (!v) return '<em>Not set</em>';
+            if (v.startsWith('sha256$')) return '<em>Stored as hash — set a new password to replace it</em>';
+            return escapeHtml(v);
+        }
+
+        function adminDashboardMetaLine(label, innerHtml, missing) {
+            const cls = missing ? ' admin-dashboard-item-meta--missing' : '';
+            const lbl = missing ? `${escapeHtml(label)}:*` : `${escapeHtml(label)}:`;
+            return `<span class="admin-dashboard-item-meta${cls}">${lbl} ${innerHtml}</span>`;
+        }
+            return String(s || '').replace(/\D/g, '');
+        }
+
+        function adminSanitizeNationalDigits(countryIso, digitString) {
+            let d = adminDigitsOnly(digitString);
+            const iso = String(countryIso || '').trim().toUpperCase();
+            if (iso === 'IE' && d.length === 10 && d.startsWith('0')) d = d.slice(1);
+            return d;
+        }
+
+        function adminFormatBrazilNational(d) {
+            const digits = String(d || '').replace(/\D/g, '').slice(0, 11);
+            if (!digits) return '';
+            if (digits.length <= 2) return `(${digits}`;
+            if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+            if (digits.length <= 10) {
+                return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+            }
+            return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+        }
+
+        function adminFormatNanpNational(d) {
+            const digits = String(d || '').replace(/\D/g, '').slice(0, 10);
+            if (!digits) return '';
+            if (digits.length <= 3) return `(${digits}`;
+            if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+            return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+        }
+
+        function adminFormatNationalForPanel(countryIso, rawLocalInput) {
+            const iso = String(countryIso || '').trim().toUpperCase();
+            const d = adminSanitizeNationalDigits(iso, rawLocalInput);
+            if (!d) return '';
+            if (iso === 'BR') return adminFormatBrazilNational(d);
+            if (iso === 'US' || iso === 'CA') return adminFormatNanpNational(d);
+            if (iso === 'IE') {
+                if (d.length <= 2) return `(${d}`;
+                if (d.length <= 5) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+                return `(${d.slice(0, 2)}) ${d.slice(2, 5)} ${d.slice(5)}`;
+            }
+            if (iso === 'GB') {
+                if (d.length <= 2) return `(${d}`;
+                if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+                if (d.length === 9) return `(${d.slice(0, 2)}) ${d.slice(2, 5)} ${d.slice(5)}`;
+                const cap = Math.min(d.length, 10);
+                const dd = d.slice(0, cap);
+                if (dd.length >= 10) return `(${dd.slice(0, 2)}) ${dd.slice(2, 6)} ${dd.slice(6, 10)}`;
+                return `(${dd.slice(0, 2)}) ${dd.slice(2)}`;
+            }
+            return d.replace(/(.{4})/g, '$1 ').trim();
         }
 
         /** @type {Record<string, string>} */
@@ -1306,9 +1387,11 @@
             if (!raw || typeof raw !== 'object') return '';
             const iso = String(raw.countryIso || 'BR').trim().toUpperCase();
             const num = String(raw.number || '').trim();
-            if (!num) return '';
+            if (!adminDigitsOnly(num)) return '';
             const dial = ADMIN_PHONE_DIAL_BY_ISO[iso] || '';
-            return dial ? `${dial} ${num}` : `${iso} ${num}`;
+            const national = adminFormatNationalForPanel(iso, num);
+            if (!national) return dial || '';
+            return dial ? `${dial} ${national}` : national;
         }
 
         function renderStats() {
@@ -1332,10 +1415,11 @@
                 .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
                 .map((name) => {
                     const loginUser = String(currentRoster.teacherEmails[name] || '').trim();
+                    const rawPw = String(currentRoster.teacherPasswords[name] || '').trim();
                     return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
-                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtml(loginUser) : '<em>Not set</em>'}</span>
-                        <span class="admin-dashboard-item-meta">Password: ${dashboardPasswordHtml(currentRoster.teacherPasswords[name])}</span>
+                        ${adminDashboardMetaLine('Username', loginUser ? escapeHtml(loginUser) : '<em>Not set</em>', !loginUser)}
+                        ${adminDashboardMetaLine('Password', dashboardPasswordHtml(currentRoster.teacherPasswords[name]), !rawPw)}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Teacher" data-admin-name="${escapeHtml(name)}" aria-label="Remove teacher profile">
                             <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
                         </button>
@@ -1371,10 +1455,11 @@
                 .map((e) => {
                     const name = String(e.profileName || '').trim();
                     const loginUser = String(e.username || '').trim();
+                    const rawPw = String(e.password || '').trim();
                     return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
-                        <span class="admin-dashboard-item-meta">Username: ${loginUser ? escapeHtml(loginUser) : '<em>Not set</em>'}</span>
-                        <span class="admin-dashboard-item-meta">Password: ${dashboardPasswordHtml(e.password)}</span>
+                        ${adminDashboardMetaLine('Username', loginUser ? escapeHtml(loginUser) : '<em>Not set</em>', !loginUser)}
+                        ${adminDashboardMetaLine('Password', dashboardPasswordHtml(e.password), !rawPw)}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="${dashRole}" data-admin-name="${escapeHtml(name)}" aria-label="Remove gate staff profile">
                             <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
                         </button>
@@ -1394,7 +1479,7 @@
                         : '';
                     const listBlock = listItems
                         ? `<ul class="admin-school-student-list">${listItems}</ul>`
-                        : '<p class="admin-dashboard-empty" style="margin:8px 0 0">No students linked.</p>';
+                        : '<p class="admin-dashboard-item-meta admin-dashboard-item-meta--missing" style="margin:8px 0 0">Students:* <em>Not set</em></p>';
                     return `<div class="admin-dashboard-item">
                     <span class="admin-dashboard-item-title">${escapeHtml(title)}</span>
                     <span class="admin-dashboard-item-meta">Number of students: ${count}</span>
@@ -1424,19 +1509,18 @@
                     const birth = String((currentRoster.studentBirthDates && currentRoster.studentBirthDates[name]) || '').trim();
                     const age = String((currentRoster.studentAges && currentRoster.studentAges[name]) || '').trim();
                     const level = String((currentRoster.studentLevels && currentRoster.studentLevels[name]) || '').trim();
-                    const meta = (label, valHtml) =>
-                        `<span class="admin-dashboard-item-meta">${label}: ${valHtml}</span>`;
+                    const schoolMissing = !schoolName || schoolName === '—';
                     return `<div class="admin-dashboard-item">
                     <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
-                    ${meta('Username', username ? escapeHtml(username) : '<em>Not set</em>')}
-                    ${meta('Password', dashboardPasswordHtml(currentRoster.studentPasswords[name]))}
-                    ${meta('Phone number', phoneDisp ? escapeHtml(phoneDisp) : '<em>Not set</em>')}
-                    ${meta('Local', local ? escapeHtml(local) : '<em>Not set</em>')}
-                    ${meta('Assigned teacher', teacher ? escapeHtml(teacher) : '<em>None</em>')}
-                    ${meta('Assigned school', escapeHtml(schoolName))}
-                    ${meta('Birthday', birth ? escapeHtml(birth) : '<em>Not set</em>')}
-                    ${meta('Age', age ? escapeHtml(age) : '<em>Not set</em>')}
-                    ${meta('Level', level ? escapeHtml(level) : '<em>Not set</em>')}
+                    ${adminDashboardMetaLine('Username', username ? escapeHtml(username) : '<em>Not set</em>', !username)}
+                    ${adminDashboardMetaLine('Password', dashboardPasswordHtml(currentRoster.studentPasswords[name]), !String(currentRoster.studentPasswords[name] || '').trim())}
+                    ${adminDashboardMetaLine('Phone number', phoneDisp ? escapeHtml(phoneDisp) : '<em>Not set</em>', !phoneDisp)}
+                    ${adminDashboardMetaLine('Local', local ? escapeHtml(local) : '<em>Not set</em>', !local)}
+                    ${adminDashboardMetaLine('Assigned teacher', teacher ? escapeHtml(teacher) : '<em>Not set</em>', !teacher)}
+                    ${adminDashboardMetaLine('Assigned school', schoolMissing ? '<em>Not set</em>' : escapeHtml(schoolName), schoolMissing)}
+                    ${adminDashboardMetaLine('Birthday', birth ? escapeHtml(birth) : '<em>Not set</em>', !birth)}
+                    ${adminDashboardMetaLine('Age', age ? escapeHtml(age) : '<em>Not set</em>', !age)}
+                    ${adminDashboardMetaLine('Level', level ? escapeHtml(level) : '<em>Not set</em>', !level)}
                     <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtml(name)}" aria-label="Remove student profile">
                         <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
                     </button>

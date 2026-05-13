@@ -6555,6 +6555,24 @@ tr td.add-teacher-availability-table-day {
     line-height: 1.35;
 }
 
+.admin-dashboard-item-meta--missing,
+.admin-dashboard-item-meta--missing .admin-dashboard-username-value {
+    color: #c62828;
+    font-weight: 500;
+}
+
+.admin-dashboard-item-meta--missing .admin-username-unset {
+    color: #c62828;
+    font-style: italic;
+    font-weight: 500;
+}
+
+.admin-dashboard-item-meta--missing em {
+    color: inherit;
+    font-style: italic;
+    font-weight: 500;
+}
+
 .admin-dashboard-username-value {
     display: inline-block;
     min-width: 2ch;
