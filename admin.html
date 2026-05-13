@@ -230,10 +230,44 @@
         }
 
         .admin-dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            display: flex;
+            flex-direction: column;
             gap: 18px;
+            align-items: stretch;
+        }
+
+        .admin-dashboard-divider.is-hidden {
+            display: none;
+        }
+
+        .admin-dashboard-category-body--two-col {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
             align-items: start;
+        }
+
+        .admin-dashboard-subcol-title {
+            margin: 0 0 8px;
+            font-size: 0.82rem;
+            font-weight: 800;
+            color: var(--navy);
+        }
+
+        .admin-dashboard-subcol.is-hidden {
+            display: none;
+        }
+
+        .admin-school-student-list {
+            margin: 6px 0 0;
+            padding-left: 1.15rem;
+            color: #555555;
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
+
+        .admin-school-student-list li {
+            margin: 2px 0;
         }
 
         .admin-dashboard-category {
@@ -900,6 +934,10 @@
                 studentPasswords: {},
                 studentCities: {},
                 studentCountries: {},
+                studentPhones: {},
+                studentBirthDates: {},
+                studentAges: {},
+                studentLevels: {},
                 gateStaffAccounts: [],
                 supervisionLinks: [],
                 authLoginAliases: {},
@@ -1012,6 +1050,13 @@
                 merged.studentPasswords = asObject(parsed.studentPasswords ?? merged.studentPasswords);
                 merged.studentCities = asObject(parsed.studentCities ?? merged.studentCities);
                 merged.studentCountries = asObject(parsed.studentCountries ?? merged.studentCountries);
+                merged.studentPhones =
+                    parsed.studentPhones && typeof parsed.studentPhones === 'object' && !Array.isArray(parsed.studentPhones)
+                        ? { ...parsed.studentPhones }
+                        : merged.studentPhones || {};
+                merged.studentBirthDates = asObject(parsed.studentBirthDates ?? merged.studentBirthDates);
+                merged.studentAges = asObject(parsed.studentAges ?? merged.studentAges);
+                merged.studentLevels = asObject(parsed.studentLevels ?? merged.studentLevels);
                 merged.supervisionLinks = Array.isArray(parsed.supervisionLinks) ? parsed.supervisionLinks : merged.supervisionLinks || [];
                 merged.authLoginAliases =
                     parsed.authLoginAliases && typeof parsed.authLoginAliases === 'object' && !Array.isArray(parsed.authLoginAliases)
@@ -1252,6 +1297,20 @@
             return v ? escapeHtml(v) : '<em>Not set</em>';
         }
 
+        /** @type {Record<string, string>} */
+        const ADMIN_PHONE_DIAL_BY_ISO = { BR: '+55', US: '+1', GB: '+44', IE: '+353', CA: '+1' };
+
+        function formatAdminStudentPhoneDisplay(studentName) {
+            const phones = currentRoster.studentPhones || {};
+            const raw = phones[studentName];
+            if (!raw || typeof raw !== 'object') return '';
+            const iso = String(raw.countryIso || 'BR').trim().toUpperCase();
+            const num = String(raw.number || '').trim();
+            if (!num) return '';
+            const dial = ADMIN_PHONE_DIAL_BY_ISO[iso] || '';
+            return dial ? `${dial} ${num}` : `${iso} ${num}`;
+        }
+
         function renderStats() {
             const stats = [
                 ['Teachers', currentRoster.teachers.length],
@@ -1327,46 +1386,83 @@
         function renderSchoolRows() {
             const schools = getSchoolSummaries();
             if (!schools.length) return '<p class="admin-dashboard-empty">No schools yet.</p>';
-            return schools.map(({ title, students }) => {
-                const studentList = students.length ? students.map(escapeHtml).join(', ') : '<em>No students linked</em>';
-                return `<div class="admin-dashboard-item">
+            return schools
+                .map(({ title, students }) => {
+                    const count = students.length;
+                    const listItems = students.length
+                        ? `${students.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}`
+                        : '';
+                    const listBlock = listItems
+                        ? `<ul class="admin-school-student-list">${listItems}</ul>`
+                        : '<p class="admin-dashboard-empty" style="margin:8px 0 0">No students linked.</p>';
+                    return `<div class="admin-dashboard-item">
                     <span class="admin-dashboard-item-title">${escapeHtml(title)}</span>
-                    <span class="admin-dashboard-item-meta">Students (${students.length}): ${studentList}</span>
+                    <span class="admin-dashboard-item-meta">Number of students: ${count}</span>
+                    <span class="admin-dashboard-item-meta">Students</span>
+                    ${listBlock}
                     <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="School" data-admin-name="${escapeHtml(title)}" aria-label="Remove school profile">
                         <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
                     </button>
                 </div>`;
-            }).join('');
+                })
+                .join('');
         }
 
         function renderStudentRows() {
             const students = getAllStudents();
             if (!students.length) return '<p class="admin-dashboard-empty">No students yet.</p>';
-            return students.map((student) => {
-                const name = student.name;
-                const email = String(currentRoster.studentEmails[name] || '').trim();
-                const username = String(currentRoster.studentUsernames[name] || '').trim();
-                const teacher = String(currentRoster.studentTeachers[name] || '').trim();
-                const city = String(currentRoster.studentCities[name] || '').trim();
-                const country = String(currentRoster.studentCountries[name] || '').trim();
-                const location = [city, country].filter(Boolean).join(', ');
-                return `<div class="admin-dashboard-item">
+            return students
+                .map((student) => {
+                    const name = student.name;
+                    const username = String(currentRoster.studentUsernames[name] || '').trim();
+                    const teacher = String(currentRoster.studentTeachers[name] || '').trim();
+                    const schoolName = getStudentSchoolName(student);
+                    const city = String(currentRoster.studentCities[name] || '').trim();
+                    const country = String(currentRoster.studentCountries[name] || '').trim();
+                    const local = [city, country].filter(Boolean).join(', ');
+                    const phoneDisp = formatAdminStudentPhoneDisplay(name);
+                    const birth = String((currentRoster.studentBirthDates && currentRoster.studentBirthDates[name]) || '').trim();
+                    const age = String((currentRoster.studentAges && currentRoster.studentAges[name]) || '').trim();
+                    const level = String((currentRoster.studentLevels && currentRoster.studentLevels[name]) || '').trim();
+                    const meta = (label, valHtml) =>
+                        `<span class="admin-dashboard-item-meta">${label}: ${valHtml}</span>`;
+                    return `<div class="admin-dashboard-item">
                     <span class="admin-dashboard-item-title">${escapeHtml(name)}</span>
-                    <span class="admin-dashboard-item-meta">School: ${escapeHtml(getStudentSchoolName(student))}</span>
-                    <span class="admin-dashboard-item-meta">Roster: ${escapeHtml(student.kind)}</span>
-                    <span class="admin-dashboard-item-meta">Username: ${username ? escapeHtml(username) : '<em>Not set</em>'}</span>
-                    <span class="admin-dashboard-item-meta">Password: ${dashboardPasswordHtml(currentRoster.studentPasswords[name])}</span>
-                    <span class="admin-dashboard-item-meta">Assigned teacher: ${teacher ? escapeHtml(teacher) : '<em>None</em>'}</span>
-                    ${location ? `<span class="admin-dashboard-item-meta">Location: ${escapeHtml(location)}</span>` : ''}
+                    ${meta('Username', username ? escapeHtml(username) : '<em>Not set</em>')}
+                    ${meta('Password', dashboardPasswordHtml(currentRoster.studentPasswords[name]))}
+                    ${meta('Phone number', phoneDisp ? escapeHtml(phoneDisp) : '<em>Not set</em>')}
+                    ${meta('Local', local ? escapeHtml(local) : '<em>Not set</em>')}
+                    ${meta('Assigned teacher', teacher ? escapeHtml(teacher) : '<em>None</em>')}
+                    ${meta('Assigned school', escapeHtml(schoolName))}
+                    ${meta('Birthday', birth ? escapeHtml(birth) : '<em>Not set</em>')}
+                    ${meta('Age', age ? escapeHtml(age) : '<em>Not set</em>')}
+                    ${meta('Level', level ? escapeHtml(level) : '<em>Not set</em>')}
                     <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtml(name)}" aria-label="Remove student profile">
                         <div class="admin-dashboard-button-remove">${ADMIN_REMOVE_SVG}</div>
                     </button>
                 </div>`;
-            }).join('');
+                })
+                .join('');
         }
 
         function sectionClass(sectionView) {
             return currentView === 'dashboard' || currentView === sectionView ? '' : ' is-hidden';
+        }
+
+        function sectionClassTeachersAssistantsRow() {
+            return currentView === 'dashboard' ||
+                currentView === 'teachers' ||
+                currentView === 'teacher-assistant'
+                ? ''
+                : ' is-hidden';
+        }
+
+        function teachersSubcolClass() {
+            return currentView === 'dashboard' || currentView === 'teachers' ? '' : ' is-hidden';
+        }
+
+        function assistantsSubcolClass() {
+            return currentView === 'dashboard' || currentView === 'teacher-assistant' ? '' : ' is-hidden';
         }
 
         function titleForView(view) {
@@ -1401,21 +1497,27 @@
                 ${renderStats()}
                 <div class="admin-dashboard-grid">
                     <section class="admin-dashboard-category${sectionClass('coordinator')}">
-                        <h3 class="admin-dashboard-category-title">Coordinators</h3>
+                        <h3 class="admin-dashboard-category-title">Coordinator</h3>
                         <div class="admin-dashboard-category-body">${renderGateStaffRows('coordinator')}</div>
                     </section>
                     <section class="admin-dashboard-category${sectionClass('class-supervisor')}">
-                        <h3 class="admin-dashboard-category-title">Class Supervisors</h3>
+                        <h3 class="admin-dashboard-category-title">Class Supervisor</h3>
                         <div class="admin-dashboard-category-body">${renderGateStaffRows('class-supervisor')}</div>
                     </section>
-                    <section class="admin-dashboard-category${sectionClass('teachers')}">
-                        <h3 class="admin-dashboard-category-title">Teachers</h3>
-                        <div class="admin-dashboard-category-body">${renderTeacherRows()}</div>
+                    <section class="admin-dashboard-category${sectionClassTeachersAssistantsRow()}">
+                        <h3 class="admin-dashboard-category-title">Teachers &amp; teacher assistants</h3>
+                        <div class="admin-dashboard-category-body admin-dashboard-category-body--two-col">
+                            <div class="admin-dashboard-subcol${teachersSubcolClass()}">
+                                <h4 class="admin-dashboard-subcol-title">Teachers</h4>
+                                ${renderTeacherRows()}
+                            </div>
+                            <div class="admin-dashboard-subcol${assistantsSubcolClass()}">
+                                <h4 class="admin-dashboard-subcol-title">Teacher assistants</h4>
+                                ${renderGateStaffRows('assistant')}
+                            </div>
+                        </div>
                     </section>
-                    <section class="admin-dashboard-category${sectionClass('teacher-assistant')}">
-                        <h3 class="admin-dashboard-category-title">Teacher Assistants</h3>
-                        <div class="admin-dashboard-category-body">${renderGateStaffRows('assistant')}</div>
-                    </section>
+                    <hr class="admin-dashboard-divider${currentView === 'dashboard' ? '' : ' is-hidden'}" aria-hidden="true" />
                     <section class="admin-dashboard-category${sectionClass('schools')}">
                         <h3 class="admin-dashboard-category-title">Schools</h3>
                         <div class="admin-dashboard-category-body">${renderSchoolRows()}</div>

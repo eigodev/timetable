@@ -6470,10 +6470,43 @@ tr td.add-teacher-availability-table-day {
 }
 
 .admin-dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: stretch;
+}
+
+.admin-dashboard-divider {
+    width: 100%;
+    margin: 4px 0;
+    border: none;
+    border-top: 1px solid #d9def5;
+}
+
+.admin-dashboard-category-body--two-col {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 20px;
+    gap: 14px;
     align-items: start;
+}
+
+.admin-dashboard-subcol-title {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334461;
+}
+
+.admin-school-student-list {
+    margin: 6px 0 0;
+    padding-left: 1.15rem;
+    color: #555;
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.admin-school-student-list li {
+    margin: 2px 0;
 }
 
 .admin-dashboard-category {

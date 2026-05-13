@@ -9410,41 +9410,38 @@ function renderAdminOverviewPanel() {
                   })
                   .join('');
 
-    const gateRows =
-        gateStaffAccounts.length === 0
-            ? '<p class="admin-dashboard-empty">No gate staff profiles yet.</p>'
-            : gateStaffAccounts
-                  .slice()
-                  .sort((a, b) =>
-                      String(a?.profileName || '').localeCompare(String(b?.profileName || ''), undefined, {
-                          sensitivity: 'base'
-                      })
-                  )
-                  .map((e) => {
-                      const name = String(e?.profileName || '').trim();
-                      if (!name) return '';
-                      const appRole = String(e?.appRole || '').trim();
-                      const loginUser = String(e?.username || '').trim();
-                      let dashRole = '';
-                      let roleLabel = appRole;
-                      if (appRole === 'coordinator') {
-                          dashRole = 'GateCoordinator';
-                          roleLabel = 'Coordinator';
-                      } else if (appRole === 'class-supervisor') {
-                          dashRole = 'GateClassSupervisor';
-                          roleLabel = 'Class Supervisor';
-                      } else if (appRole === 'assistant') {
-                          dashRole = 'GateTeacherAssistant';
-                          roleLabel = 'Teacher Assistant';
-                      } else {
-                          dashRole = 'GateTeacherAssistant';
-                          roleLabel = appRole || 'Gate staff';
-                      }
-                      const rawPw = String(e?.password || '').trim();
-                      const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
-                      return `<div class="admin-dashboard-item">
+    function renderGateStaffRowsForRole(appRoleFilter) {
+        const list = gateStaffAccounts.filter((e) => String(e?.appRole || '').trim() === appRoleFilter);
+        if (!list.length) {
+            const emptyByRole = {
+                coordinator: '<p class="admin-dashboard-empty">No coordinator profiles yet.</p>',
+                'class-supervisor': '<p class="admin-dashboard-empty">No class supervisor profiles yet.</p>',
+                assistant: '<p class="admin-dashboard-empty">No teacher assistant profiles yet.</p>'
+            };
+            return emptyByRole[appRoleFilter] || '<p class="admin-dashboard-empty">No profiles yet.</p>';
+        }
+        const dashRoleByFilter = {
+            coordinator: 'GateCoordinator',
+            'class-supervisor': 'GateClassSupervisor',
+            assistant: 'GateTeacherAssistant'
+        };
+        const dashRole = dashRoleByFilter[appRoleFilter] || 'GateStaff';
+        return list
+            .slice()
+            .sort((a, b) =>
+                String(a?.profileName || '').localeCompare(String(b?.profileName || ''), undefined, {
+                    sensitivity: 'base'
+                })
+            )
+            .map((e) => {
+                const name = String(e?.profileName || '').trim();
+                if (!name) return '';
+                const appRole = String(e?.appRole || '').trim();
+                const loginUser = String(e?.username || '').trim();
+                const rawPw = String(e?.password || '').trim();
+                const pwLabel = rawPw ? escapeHtmlAttr(rawPw) : '<em>Not set</em>';
+                return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
-                        <span class="admin-dashboard-item-meta">${escapeHtmlAttr(roleLabel)}</span>
                         ${adminDashboardUsernameFieldHtml('GateStaff', name, appRole, loginUser)}
                         <span class="admin-dashboard-item-meta">Password: ${pwLabel}</span>
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="${escapeHtmlAttr(dashRole)}" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove gate staff account">
@@ -9455,9 +9452,14 @@ function renderAdminOverviewPanel() {
                             </div>
                         </button>
                       </div>`;
-                  })
-                  .filter(Boolean)
-                  .join('');
+            })
+            .filter(Boolean)
+            .join('');
+    }
+
+    const coordinatorRows = renderGateStaffRowsForRole('coordinator');
+    const classSupervisorRows = renderGateStaffRowsForRole('class-supervisor');
+    const teacherAssistantRows = renderGateStaffRowsForRole('assistant');
 
     const schoolSummaries = getAdminSchoolSummaries();
     const schoolRows =
@@ -9465,15 +9467,19 @@ function renderAdminOverviewPanel() {
             ? '<p class="admin-dashboard-empty">No schools yet.</p>'
             : schoolSummaries
                   .map(({ title, students }) => {
-                      const kind = rosterKindFromSchoolName(title) || 'private';
-                      const list =
+                      const count = students.length;
+                      const listItems =
                           students.length === 0
-                              ? '<em>No students linked</em>'
-                              : students.map((n) => escapeHtmlAttr(n)).join(', ');
+                              ? ''
+                              : students.map((n) => `<li>${escapeHtmlAttr(n)}</li>`).join('');
+                      const listBlock = listItems
+                          ? `<ul class="admin-school-student-list">${listItems}</ul>`
+                          : '<p class="admin-dashboard-empty" style="margin:8px 0 0">No students linked.</p>';
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(title)}</span>
-                        <span class="admin-dashboard-item-meta">Roster: ${escapeHtmlAttr(kind)}</span>
-                        <span class="admin-dashboard-item-meta">Students (${students.length}): ${list}</span>
+                        <span class="admin-dashboard-item-meta">Number of students: ${count}</span>
+                        <span class="admin-dashboard-item-meta">Students</span>
+                        ${listBlock}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="School" data-admin-name="${escapeHtmlAttr(title)}" aria-label="Remove school profile">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
@@ -9485,7 +9491,10 @@ function renderAdminOverviewPanel() {
                   })
                   .join('');
 
-    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
+        .map((n) => String(n || '').trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     const studentRows =
         allStudents.length === 0
             ? '<p class="admin-dashboard-empty">No students yet.</p>'
@@ -9494,20 +9503,30 @@ function renderAdminOverviewPanel() {
                       const name = String(raw || '').trim();
                       if (!name) return '';
                       const school = String(getStudentSchoolName(name) || '').trim() || '—';
-                      const email = String(studentEmailsByName[name] || '').trim();
                       const loginUsername = String(studentUsernamesByName[name] || '').trim();
                       const tutor = String(studentTeacherByName[name] || '').trim();
-                      const rk = getStudentRosterKind(name) || 'private';
                       const rawStudentPw = String(studentPasswordsByName[name] || '').trim();
                       const studentPwHtml = rawStudentPw ? escapeHtmlAttr(rawStudentPw) : '<em>Not set</em>';
+                      const city = String(studentCityByName[name] || '').trim();
+                      const country = String(studentCountryByName[name] || '').trim();
+                      const local = [city, country].filter(Boolean).join(', ');
+                      const phoneDisp = formatStudentPhoneDisplayForAdmin(name);
+                      const birth = String(studentBirthDatesByName[name] || '').trim();
+                      const age = String(studentAgesByName[name] || '').trim();
+                      const level = String(studentLevelsByName[name] || '').trim();
+                      const line = (label, inner) =>
+                          `<span class="admin-dashboard-item-meta">${label}: ${inner}</span>`;
                       return `<div class="admin-dashboard-item">
                         <span class="admin-dashboard-item-title">${escapeHtmlAttr(name)}</span>
-                        <span class="admin-dashboard-item-meta">School: ${escapeHtmlAttr(school)}</span>
-                        <span class="admin-dashboard-item-meta">Profile / roster: ${escapeHtmlAttr(rk)}</span>
                         ${adminDashboardUsernameFieldHtml('Student', name, '', loginUsername)}
-                        <span class="admin-dashboard-item-meta">Contact email: ${email ? escapeHtmlAttr(email) : '<em>Not set</em>'}</span>
-                        <span class="admin-dashboard-item-meta">Password: ${studentPwHtml}</span>
-                        <span class="admin-dashboard-item-meta">Assigned teacher: ${tutor ? escapeHtmlAttr(tutor) : '<em>None</em>'}</span>
+                        ${line('Password', studentPwHtml)}
+                        ${line('Phone number', phoneDisp ? escapeHtmlAttr(phoneDisp) : '<em>Not set</em>')}
+                        ${line('Local', local ? escapeHtmlAttr(local) : '<em>Not set</em>')}
+                        ${line('Assigned teacher', tutor ? escapeHtmlAttr(tutor) : '<em>None</em>')}
+                        ${line('Assigned school', escapeHtmlAttr(school))}
+                        ${line('Birthday', birth ? escapeHtmlAttr(birth) : '<em>Not set</em>')}
+                        ${line('Age', age ? escapeHtmlAttr(age) : '<em>Not set</em>')}
+                        ${line('Level', level ? escapeHtmlAttr(level) : '<em>Not set</em>')}
                         <button type="button" class="admin-dashboard-item-remove" data-admin-delete="1" data-admin-role="Student" data-admin-name="${escapeHtmlAttr(name)}" aria-label="Remove student account">
                             <div class="admin-dashboard-button-remove">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
@@ -9524,14 +9543,28 @@ function renderAdminOverviewPanel() {
             <h2 class="admin-panel-title">Dashboard</h2>
             <p class="admin-panel-subtitle">Overview of teachers, schools, and students in your roster.</p>
             <div class="admin-dashboard-grid">
-                <section class="admin-dashboard-category" aria-labelledby="admin-dash-teachers">
-                    <h3 id="admin-dash-teachers" class="admin-dashboard-category-title">Teachers</h3>
-                    <div class="admin-dashboard-category-body">${teacherRows}</div>
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-coordinator">
+                    <h3 id="admin-dash-coordinator" class="admin-dashboard-category-title">Coordinator</h3>
+                    <div class="admin-dashboard-category-body">${coordinatorRows}</div>
                 </section>
-                <section class="admin-dashboard-category" aria-labelledby="admin-dash-gate">
-                    <h3 id="admin-dash-gate" class="admin-dashboard-category-title">Coordinators, supervisors &amp; assistants</h3>
-                    <div class="admin-dashboard-category-body">${gateRows}</div>
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-supervisor">
+                    <h3 id="admin-dash-supervisor" class="admin-dashboard-category-title">Class Supervisor</h3>
+                    <div class="admin-dashboard-category-body">${classSupervisorRows}</div>
                 </section>
+                <section class="admin-dashboard-category" aria-labelledby="admin-dash-teachers-combo">
+                    <h3 id="admin-dash-teachers-combo" class="admin-dashboard-category-title">Teachers &amp; teacher assistants</h3>
+                    <div class="admin-dashboard-category-body admin-dashboard-category-body--two-col">
+                        <div class="admin-dashboard-subcol">
+                            <h4 class="admin-dashboard-subcol-title">Teachers</h4>
+                            ${teacherRows}
+                        </div>
+                        <div class="admin-dashboard-subcol">
+                            <h4 class="admin-dashboard-subcol-title">Teacher assistants</h4>
+                            ${teacherAssistantRows}
+                        </div>
+                    </div>
+                </section>
+                <hr class="admin-dashboard-divider" aria-hidden="true" />
                 <section class="admin-dashboard-category" aria-labelledby="admin-dash-schools">
                     <h3 id="admin-dash-schools" class="admin-dashboard-category-title">Schools</h3>
                     <div class="admin-dashboard-category-body">${schoolRows}</div>
@@ -10970,6 +11003,14 @@ function getStudentPhoneInfo(studentName) {
     const numberRaw = String(raw.number || '').trim();
     const number = numberRaw ? normalizeStudentPhoneLocalInput(numberRaw, countryIso) : '';
     return { countryIso, number };
+}
+
+function formatStudentPhoneDisplayForAdmin(studentName) {
+    const { countryIso, number } = getStudentPhoneInfo(studentName);
+    if (!number) return '';
+    const c = getPhoneCountryByIso(countryIso);
+    const dial = c && c.dialCode ? String(c.dialCode) : '';
+    return dial ? `${dial} ${number}` : number;
 }
 
 function saveStudentPhoneInfo(studentName, countryIsoRaw, numberRaw) {
