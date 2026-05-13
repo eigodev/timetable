@@ -5,11 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel | TimeTable</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
     <style>
-        * {
-            box-sizing: border-box;
-        }
-
         :root {
             --navy: #334461;
             --deep: #071630;
@@ -22,11 +19,17 @@
             --blue: #303f9f;
         }
 
-        body {
-            margin: 0;
+        body.admin-page {
+            display: block;
+            justify-content: flex-start;
+            align-items: stretch;
+            height: auto;
             min-height: 100vh;
-            width: 100vw;
+            width: 100%;
+            max-width: 100%;
+            margin: 0;
             padding: 20px;
+            box-sizing: border-box;
             background: var(--page);
             color: var(--text);
             font-family: "Nunito", "Segoe UI", Arial, sans-serif;
@@ -39,115 +42,16 @@
         .admin-app {
             display: flex;
             gap: 20px;
+            align-items: stretch;
+            width: 100%;
             min-height: calc(100vh - 40px);
-            width: 100%;
         }
 
-        .admin-sidebar {
-            display: flex;
-            flex-direction: column;
-            width: 175px;
-            flex: 0 0 175px;
-            border-radius: 20px;
-            background: var(--navy);
-            color: #ffffff;
-            box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-
-        .admin-sidebar-scroll {
-            flex: 1;
-            min-height: 0;
-            padding: 20px 14px;
-            overflow-y: auto;
-            scrollbar-width: none;
-        }
-
-        .admin-sidebar-scroll::-webkit-scrollbar {
-            display: none;
-        }
-
-        .admin-sidebar-title {
-            margin: 0;
-            font-size: 1rem;
-            line-height: 1.1;
-        }
-
-        .admin-sidebar-role {
-            margin: 4px 0 16px;
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.75rem;
-        }
-
-        .admin-sidebar-section {
-            margin-top: 15px;
-            padding-top: 14px;
-            border-top: 1px solid rgba(255, 255, 255, 0.22);
-        }
-
-        .admin-sidebar-section:first-of-type {
-            margin-top: 0;
-            padding-top: 0;
-            border-top: none;
-        }
-
-        .admin-sidebar-heading {
-            margin: 0 0 10px;
-            color: rgba(255, 255, 255, 0.72);
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-
-        .admin-nav {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .admin-nav-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 8px;
-            width: 100%;
-            min-height: 38px;
-            padding: 9px 10px;
-            border: none;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.08);
-            color: #ffffff;
-            cursor: pointer;
-            text-align: left;
-        }
-
-        .admin-nav-btn:hover,
-        .admin-nav-btn.is-active {
-            background: rgba(255, 255, 255, 0.18);
-        }
-
-        .admin-nav-icon {
-            width: 15px;
-            height: 15px;
-            flex: 0 0 15px;
-        }
-
-        .admin-nav-label {
-            font-size: 0.85rem;
-            font-weight: 700;
-            line-height: 1;
-        }
-
-        .admin-logoff-wrap {
-            position: fixed;
-            bottom: 10px;
-            left: 50px;
-            padding: 14px;
-            border-top: 1px solid rgba(255, 255, 255, 0.22);
-        }
-
-        .admin-logoff-btn {
-            justify-content: center;
-            background: transparent;
+        .admin-app > .sidebar {
+            flex-shrink: 0;
+            align-self: stretch;
+            height: auto;
+            min-height: calc(100vh - 40px);
         }
 
         .admin-main {
@@ -465,7 +369,7 @@
         }
 
         @media (max-width: 760px) {
-            body {
+            body.admin-page {
                 padding: 12px;
             }
 
@@ -474,9 +378,9 @@
                 min-height: calc(100vh - 24px);
             }
 
-            .admin-sidebar {
-                width: 100%;
-                flex-basis: auto;
+            .admin-app > .sidebar {
+                width: 100% !important;
+                min-height: 0;
             }
 
             .admin-main {
@@ -485,53 +389,85 @@
         }
     </style>
 </head>
-<body>
+<body class="admin-page">
     <div class="admin-app">
-        <aside class="admin-sidebar" aria-label="Admin navigation">
-            <div class="admin-sidebar-scroll">
-                <div>
-                    <h1 class="admin-sidebar-title">Admin</h1>
-                    <p class="admin-sidebar-role">Full platform access</p>
-                </div>
-
-                <section class="admin-sidebar-section">
-                    <div class="admin-nav">
-                        <button type="button" class="admin-nav-btn is-active" data-view="dashboard">
-                            <svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6ZM15.75 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3h-2.25ZM6 12.75a3 3 0 0 0-3 3V18a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3v-2.25a3 3 0 0 0-3-3H6ZM17.625 13.5a.75.75 0 0 0-1.5 0v2.625H13.5a.75.75 0 0 0 0 1.5h2.625v2.625a.75.75 0 0 0 1.5 0v-2.625h2.625a.75.75 0 0 0 0-1.5h-2.625V13.5Z" /></svg>
-                            <span class="admin-nav-label">Dashboard</span>
+        <aside class="sidebar is-logged-in is-admin-session" aria-label="Admin navigation">
+            <div class="sidebar-header">
+                <div class="sidebar-header-row"></div>
+            </div>
+            <div class="teacher-list">
+                <div class="sidebar-main">
+                    <div class="sidebar-top">
+                        <button type="button" class="teacher-list-dashboard-btn is-active" data-view="dashboard" aria-label="Open dashboard" title="Dashboard">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="teacher-list-dashboard-btn-icon" aria-hidden="true"><path d="M6 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3H6ZM15.75 3a3 3 0 0 0-3 3v2.25a3 3 0 0 0 3 3H18a3 3 0 0 0 3-3V6a3 3 0 0 0-3-3h-2.25ZM6 12.75a3 3 0 0 0-3 3V18a3 3 0 0 0 3 3h2.25a3 3 0 0 0 3-3v-2.25a3 3 0 0 0-3-3H6ZM17.625 13.5a.75.75 0 0 0-1.5 0v2.625H13.5a.75.75 0 0 0 0 1.5h2.625v2.625a.75.75 0 0 0 1.5 0v-2.625h2.625a.75.75 0 0 0 0-1.5h-2.625V13.5Z" /></svg>
+                            <span class="teacher-list-dashboard-btn-label">Dashboard</span>
+                        </button>
+                        <section class="teacher-list-management">
+                            <div class="management-section">
+                                <h3 class="management-section-title">— Management</h3>
+                                <div class="management-actions">
+                                    <button type="button" class="teacher-btn" data-view="coordinator" aria-label="Coordinator">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M4.5 2.25A.75.75 0 0 1 5.25 3v18a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h1.5ZM9 4.5a.75.75 0 0 1 .75-.75H15a.75.75 0 0 1 .75.75v15a.75.75 0 0 1-.75.75H9.75A.75.75 0 0 1 9 19.5v-15ZM18.75 6a.75.75 0 0 1 .75.75V19.5a.75.75 0 0 1-.75.75H18a.75.75 0 0 1-.75-.75V6.75a.75.75 0 0 1 .75-.75h.75Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Coordinator</span>
+                                    </button>
+                                    <button type="button" class="teacher-btn" data-view="class-supervisor" aria-label="Class Supervisor">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path d="M11.7 2.25a.75.75 0 0 1 .6-.3h6.75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.22.53l-2.25 2.25a.75.75 0 1 1-1.06-1.06l1.97-1.97H12.75V15h3a.75.75 0 0 1 0 1.5h-3.75a.75.75 0 0 1-.75-.75V3.81L9.53 6.78a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 .53-.22Z" /><path fill-rule="evenodd" d="M9 13.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM5.625 21.75a5.625 5.625 0 1 1 11.25 0 .75.75 0 0 1-.75.75h-9.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Class Supervisor</span>
+                                    </button>
+                                    <button type="button" class="teacher-btn" data-view="teachers" aria-label="Teachers">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Teachers</span>
+                                    </button>
+                                    <button type="button" class="teacher-btn" data-view="teacher-assistant" aria-label="Teacher Assistant">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122Z" /></svg>
+                                        <span class="management-nav-btn-label">Teacher Assistant</span>
+                                    </button>
+                                    <button type="button" class="school-btn" data-view="schools" aria-label="Schools">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M3 2.25a.75.75 0 0 0 0 1.5v16.5h-.75a.75.75 0 0 0 0 1.5H15v-18a.75.75 0 0 0 0-1.5H3ZM16.5 6.75v15h5.25a.75.75 0 0 0 0-1.5H21v-12a.75.75 0 0 0 0-1.5h-4.5Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Schools</span>
+                                    </button>
+                                    <button type="button" class="student-btn" data-view="students" aria-label="Students">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Students</span>
+                                    </button>
+                                    <button type="button" class="class-btn" data-view="classes" aria-label="Classes">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Classes</span>
+                                    </button>
+                                    <button type="button" class="payment-btn" data-view="payments" aria-label="Payments">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path d="M12 7.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z" /><path fill-rule="evenodd" d="M1.5 4.875C1.5 3.839 2.34 3 3.375 3h17.25c1.035 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 0 1 1.5 14.625v-9.75Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Payments</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="teacher-list-other">
+                            <div class="other-section">
+                                <h3 class="other-section-title">— Other</h3>
+                                <div class="other-actions">
+                                    <button type="button" class="report-btn" data-view="report" aria-label="Report">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M2.25 2.25a.75.75 0 0 0 0 1.5H3v10.5a3 3 0 0 0 3 3h1.21l-1.172 3.513a.75.75 0 0 0 1.424.474l.329-.987h8.418l.33.987a.75.75 0 0 0 1.422-.474l-1.17-3.513H18a3 3 0 0 0 3-3V3.75h.75a.75.75 0 0 0 0-1.5H2.25Zm6.04 16.5.5-1.5h6.42l.5 1.5H8.29Zm7.46-12a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0v-6Zm-3 2.25a.75.75 0 0 0-1.5 0v3.75a.75.75 0 0 0 1.5 0V9Zm-3 2.25a.75.75 0 0 0-1.5 0v1.5a.75.75 0 0 0 1.5 0v-1.5Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Report</span>
+                                    </button>
+                                    <button type="button" class="settings-btn" data-view="settings" aria-label="Settings">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M12 6.75a5.25 5.25 0 0 1 6.775-5.025.75.75 0 0 1 .313 1.248l-3.32 3.319c.063.475.276.934.641 1.299.365.365.824.578 1.3.64l3.318-3.319a.75.75 0 0 1 1.248.313 5.25 5.25 0 0 1-5.472 6.756c-1.018-.086-1.87.1-2.309.634L7.344 21.3A3.298 3.298 0 1 1 2.7 16.657l8.684-7.151c.533-.44.72-1.291.634-2.309A5.342 5.342 0 0 1 12 6.75ZM4.117 19.125a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Z" clip-rule="evenodd" /></svg>
+                                        <span class="management-nav-btn-label">Settings</span>
+                                    </button>
+                                    <button type="button" class="audit-logs-btn" data-view="audit-logs" aria-label="Audit logs">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="management-nav-btn-icon" aria-hidden="true"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z" clip-rule="evenodd" /><path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" /></svg>
+                                        <span class="management-nav-btn-label">Audit Logs</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                    <div class="sidebar-bottom">
+                        <button type="button" class="sidebar-admin-logoff-btn" id="adminLogoffBtn" aria-label="Log off" title="Log off">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" /></svg>
+                            <span class="sidebar-admin-logoff-btn-label">Log off</span>
                         </button>
                     </div>
-                </section>
-
-                <section class="admin-sidebar-section">
-                    <h2 class="admin-sidebar-heading">- Management</h2>
-                    <div class="admin-nav">
-                        <button type="button" class="admin-nav-btn" data-view="coordinator"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.5 2.25A.75.75 0 0 1 5.25 3v18a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h1.5ZM9 4.5a.75.75 0 0 1 .75-.75H15a.75.75 0 0 1 .75.75v15a.75.75 0 0 1-.75.75H9.75A.75.75 0 0 1 9 19.5v-15ZM18.75 6a.75.75 0 0 1 .75.75V19.5a.75.75 0 0 1-.75.75H18a.75.75 0 0 1-.75-.75V6.75a.75.75 0 0 1 .75-.75h.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Coordinator</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="class-supervisor"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.7 2.25a.75.75 0 0 1 .6-.3h6.75a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.22.53l-2.25 2.25a.75.75 0 1 1-1.06-1.06l1.97-1.97H12.75V15h3a.75.75 0 0 1 0 1.5h-3.75a.75.75 0 0 1-.75-.75V3.81L9.53 6.78a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 .53-.22Z" /><path fill-rule="evenodd" d="M9 13.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM5.625 21.75a5.625 5.625 0 1 1 11.25 0 .75.75 0 0 1-.75.75h-9.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Class Supervisor</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="teachers"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Teachers</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="teacher-assistant"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122Z" /></svg><span class="admin-nav-label">Teacher Assistant</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="schools"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 2.25a.75.75 0 0 0 0 1.5v16.5h-.75a.75.75 0 0 0 0 1.5H15v-18a.75.75 0 0 0 0-1.5H3ZM16.5 6.75v15h5.25a.75.75 0 0 0 0-1.5H21v-12a.75.75 0 0 0 0-1.5h-4.5Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Schools</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="students"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Students</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="classes"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Classes</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="payments"><svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 7.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z" /><path fill-rule="evenodd" d="M1.5 4.875C1.5 3.839 2.34 3 3.375 3h17.25c1.035 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 0 1 1.5 14.625v-9.75Z" clip-rule="evenodd" /></svg><span class="admin-nav-label">Payments</span></button>
-                    </div>
-                </section>
-
-                <section class="admin-sidebar-section">
-                    <h2 class="admin-sidebar-heading">- Other</h2>
-                    <div class="admin-nav">
-                        <button type="button" class="admin-nav-btn" data-view="report"><span class="admin-nav-label">Report</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="settings"><span class="admin-nav-label">Settings</span></button>
-                        <button type="button" class="admin-nav-btn" data-view="audit-logs"><span class="admin-nav-label">Audit Logs</span></button>
-                    </div>
-                </section>
-            </div>
-
-            <div class="admin-logoff-wrap">
-                <button type="button" class="admin-nav-btn admin-logoff-btn" id="adminLogoffBtn">
-                    <svg class="admin-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.5 3.75A1.5 1.5 0 0 0 6 5.25v13.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5v-2.25a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3V5.25a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3V7.5a.75.75 0 0 1-1.5 0V5.25a1.5 1.5 0 0 0-1.5-1.5h-6Zm10.72 4.72a.75.75 0 0 1 1.06 0l3 3a.75.75 0 0 1 0 1.06l-3 3a.75.75 0 1 1-1.06-1.06l1.72-1.72H9.75a.75.75 0 0 1 0-1.5h10.19l-1.72-1.72a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
-                    <span class="admin-nav-label">Log off</span>
-                </button>
+                </div>
             </div>
         </aside>
 
@@ -1327,7 +1263,6 @@
             return `<span class="admin-dashboard-item-meta${cls}">${lbl} ${innerHtml}</span>`;
         }
             return String(s || '').replace(/\D/g, '');
-        }
 
         function adminSanitizeNationalDigits(countryIso, digitString) {
             let d = adminDigitsOnly(digitString);

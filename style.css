@@ -358,7 +358,7 @@ body {
 }
 
 .sidebar.is-admin-session {
-    width: 175px;
+    width: 200px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4732,7 +4732,6 @@ tr td.add-teacher-availability-table-day {
 .other-section {
     display: flex;
     flex-direction: column;
-    align-items: center;
 
     width: 100%;
     padding: 0;
