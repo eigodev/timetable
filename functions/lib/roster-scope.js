@@ -416,18 +416,55 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
     out.gateStaffAccounts = [...withoutMine, ...mine];
   }
 
+  /** Schools the teacher controls = schools holding any allowed student after the patch. */
+  const permittedSchoolTitles = new Set();
+  for (const n of allowedAfter) {
+    const sch = String(out.studentSchools?.[n] || '').trim();
+    if (sch) permittedSchoolTitles.add(sch);
+  }
+  const permittedSchoolKeys = new Set([...permittedSchoolTitles].map((t) => normSchoolTitleKey(t)));
+
   const csPatch = Array.isArray(patch.customSchools) ? patch.customSchools : null;
   if (csPatch) {
-    const permittedSchools = new Set();
-    for (const n of allowedAfter) {
-      const sch = String(out.studentSchools?.[n] || '').trim();
-      if (sch) permittedSchools.add(sch);
-    }
-    const safeAdds = csPatch.map(String).filter((s) => s && permittedSchools.has(String(s).trim()));
+    const safeAdds = csPatch.map(String).filter((s) => s && permittedSchoolTitles.has(String(s).trim()));
     const merged = new Set(
       [...(Array.isArray(out.customSchools) ? out.customSchools : []), ...safeAdds].map(String)
     );
     out.customSchools = [...merged].filter(Boolean).sort(sortNames);
+  }
+
+  /**
+   * Teachers' saved roster includes their permitted schools' metadata (external URL, theme,
+   * billing model / config, shared-Meet mode). Without merging those keys here the server
+   * silently dropped the change, so the sidebar offsite button kept opening the old link
+   * after the next cloud poll or refresh.
+   */
+  const schoolScopedPaths = [
+    'schoolExternalLinks',
+    'schoolThemeColors',
+    'schoolBillingModels',
+    'schoolBillingConfigs',
+    'googleMeetSharedLinkModeBySchool',
+  ];
+  for (const p of schoolScopedPaths) {
+    const patchMap = patch[p] && typeof patch[p] === 'object' && !Array.isArray(patch[p]) ? patch[p] : null;
+    const outMap = out[p] && typeof out[p] === 'object' && !Array.isArray(out[p]) ? out[p] : null;
+    if (outMap) {
+      for (const k of Object.keys(outMap)) {
+        if (!permittedSchoolKeys.has(normSchoolTitleKey(k))) continue;
+        if (!patchMap || !Object.prototype.hasOwnProperty.call(patchMap, k)) {
+          delete outMap[k];
+        }
+      }
+    }
+    if (patchMap) {
+      if (!out[p]) out[p] = {};
+      for (const [k, v] of Object.entries(patchMap)) {
+        if (permittedSchoolKeys.has(normSchoolTitleKey(k))) {
+          out[p][k] = v;
+        }
+      }
+    }
   }
 
   const namesInRoster = new Set(allRosterStudentNames(out));
