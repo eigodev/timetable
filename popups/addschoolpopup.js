@@ -32,7 +32,7 @@
                 <div class="add-school-primary-row">
                     <label class="add-school-label add-school-name-wrap" id="addSchoolNameWrap" aria-hidden="true" for="addSchoolNameInput">
                         <span>School's Name *</span>
-                        <input type="text" id="addSchoolNameInput" name="school" autocomplete="organization" maxlength="120" placeholder="e.g. HomeTeachers">
+                        <input type="text" id="addSchoolNameInput" name="school" autocomplete="organization" maxlength="120" placeholder="e.g. Language Academy">
                     </label>
 
                     <div id="addSchoolThemeWrap" class="add-school-theme-wrap">

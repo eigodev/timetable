@@ -716,16 +716,40 @@
 
             function normalizeStudentLoginUsernameKey(value) {
                 const raw = String(value || '');
-                let normalized = raw;
+                let s = raw;
                 try {
-                    normalized = raw.normalize('NFD');
+                    s = raw.normalize('NFKD');
                 } catch (e1) {
-                    normalized = raw;
+                    s = raw;
                 }
-                return normalized
-                    .replace(/[\u0300-\u036f]/g, '')
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]/g, '');
+                try {
+                    s = s.replace(/\p{M}+/gu, '');
+                } catch (e2) {
+                    s = s.replace(/[\u0300-\u036f]/g, '');
+                }
+                s = s.toLowerCase();
+                let out = '';
+                for (const ch of s) {
+                    if (/^[0-9a-z]$/.test(ch)) {
+                        out += ch;
+                        continue;
+                    }
+                    let t = ch;
+                    try {
+                        t = ch.normalize('NFKD').replace(/\p{M}+/gu, '');
+                    } catch (e3) {
+                        try {
+                            t = ch.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+                        } catch (e4) {
+                            t = '';
+                        }
+                    }
+                    t = String(t).toLowerCase();
+                    for (const c of t) {
+                        if (/^[0-9a-z]$/.test(c)) out += c;
+                    }
+                }
+                return out;
             }
 
             function studentGateLoginAccountMatches(typedRaw, accountUsernameRaw) {
@@ -1227,12 +1251,46 @@
             ].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
         }
 
+        function normalizeScheduleMode(raw) {
+            const m = String(raw || '').trim().toLowerCase();
+            if (m === 'weekly' || m === 'speakon') return 'weekly';
+            if (m === 'classonly' || m === 'class-only' || m === 'passport') return 'classOnly';
+            return 'standard';
+        }
+
+        function rosterKindFromSchoolProfile(schoolTitle) {
+            const key = String(schoolTitle || '').trim().toLowerCase();
+            const profiles = currentRoster.schoolScheduleProfiles || {};
+            const mode = normalizeScheduleMode(profiles[key]?.mode);
+            if (mode === 'weekly') return 'speakon';
+            if (mode === 'classOnly') return 'passport';
+            return 'private';
+        }
+
+        function getRegisteredSchoolTitles() {
+            const schools = new Set();
+            Object.values(currentRoster.studentSchools || {}).forEach((s) => {
+                const t = String(s || '').trim();
+                if (t) schools.add(t);
+            });
+            (currentRoster.customSchools || []).forEach((s) => {
+                const t = String(s || '').trim();
+                if (t) schools.add(t);
+            });
+            return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        }
+
         function getStudentSchoolName(student) {
             const saved = String(currentRoster.studentSchools[student.name] || '').trim();
             if (saved) return saved;
-            if (student.kind === 'speakon') return 'SpeakOn';
-            if (student.kind === 'passport') return 'Passport';
-            return 'HomeTeachers';
+            const wantMode =
+                student.kind === 'speakon' ? 'weekly' : student.kind === 'passport' ? 'classOnly' : 'standard';
+            const profiles = currentRoster.schoolScheduleProfiles || {};
+            for (const title of getRegisteredSchoolTitles()) {
+                const key = title.toLowerCase();
+                if (normalizeScheduleMode(profiles[key]?.mode) === wantMode) return title;
+            }
+            return getRegisteredSchoolTitles()[0] || '';
         }
 
         function getSchoolSummaries() {

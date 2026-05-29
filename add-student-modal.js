@@ -86,7 +86,6 @@
                 if (name) schools.add(name);
             });
         }
-        ['HomeTeachers', 'SpeakOn', 'Passport'].forEach((fallback) => schools.add(fallback));
         return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     }
 
@@ -303,6 +302,13 @@
     }
 
     function buildUsername(firstName, lastName) {
+        if (typeof buildDefaultStudentUsername === 'function') {
+            return buildDefaultStudentUsername(firstName, lastName);
+        }
+        if (typeof TimeTableAuthMigrate !== 'undefined' && TimeTableAuthMigrate.buildCanonicalUsernameBaseFromFullName) {
+            const parts = [firstName, lastName].map((s) => String(s || '').trim()).filter(Boolean);
+            return TimeTableAuthMigrate.buildCanonicalUsernameBaseFromFullName(parts.join(' '));
+        }
         const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const first = normalize(firstName);
         const last = normalize(lastName);

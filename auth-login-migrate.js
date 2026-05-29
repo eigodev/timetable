@@ -6,16 +6,40 @@
 
     function normalizeUsername(value) {
         const raw = String(value || '');
-        let normalized = raw;
+        let s = raw;
         try {
-            normalized = raw.normalize('NFD');
+            s = raw.normalize('NFKD');
         } catch {
-            normalized = raw;
+            s = raw;
         }
-        return normalized
-            .replace(/[\u0300-\u036f]/g, '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '');
+        try {
+            s = s.replace(/\p{M}+/gu, '');
+        } catch {
+            s = s.replace(/[\u0300-\u036f]/g, '');
+        }
+        s = s.toLowerCase();
+        let out = '';
+        for (const ch of s) {
+            if (/^[0-9a-z]$/.test(ch)) {
+                out += ch;
+                continue;
+            }
+            let t = ch;
+            try {
+                t = ch.normalize('NFKD').replace(/\p{M}+/gu, '');
+            } catch {
+                try {
+                    t = ch.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+                } catch {
+                    t = '';
+                }
+            }
+            t = String(t).toLowerCase();
+            for (const c of t) {
+                if (/^[0-9a-z]$/.test(c)) out += c;
+            }
+        }
+        return out;
     }
 
     function buildCanonicalUsernameBaseFromFullName(fullNameRaw) {

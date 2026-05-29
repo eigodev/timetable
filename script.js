@@ -174,6 +174,15 @@ let schoolThemeColors = {};
 let schoolBillingModels = {};
 /** Per-school billing configuration values, keyed by normalized school title. */
 let schoolBillingConfigs = {};
+/** Per-school schedule rules (standard / weekly template / class-only), keyed by normalized school title. */
+let schoolScheduleProfiles = {};
+
+/** Internal schedule modes — not school display names. */
+const SCHOOL_SCHEDULE_MODE = {
+    STANDARD: 'standard',
+    WEEKLY: 'weekly',
+    CLASS_ONLY: 'classOnly'
+};
 let addModalMode = 'school';
 let addStudentTargetSchool = '';
 const ADD_MODAL_MODE_ALIASES = {
@@ -199,8 +208,13 @@ let speakonStudentWeeklyClass = {};
 let isTeacherLoggedIn = false;
 let loggedInTeacherName = '';
 let isAdminLoggedIn = false;
-/** When set, the signed-in user is this student (username + password login); may only view their own schedule. */
+/** When set, the signed-in user is this student (username + password login); calendar is merged with their tutor; Class Report may include same-tutor classmates. */
 let loggedInStudentFullName = '';
+/** While Class Report is open, roster student whose report is shown (peers allowed for same-tutor cohort). */
+let classReportFocusStudentName = '';
+/** Tutor aggregate colors while a teacher views a student calendar (display only; `slotStates` stays the student's). */
+let calendarTeacherAggregateOverlay = null;
+let calendarTeacherAggregateOverlayTutorKey = '';
 let adminAccount = { username: DEFAULT_ADMIN_USERNAME, passwordHash: '' };
 let classReportCollapsedBySchool = {};
 let studentClassReportUploadsByName = {};
@@ -1965,17 +1979,40 @@ const STUDENT_PASSWORD_HASH_PREFIX = 'sha256$';
 
 function normalizeUsername(value) {
     const raw = String(value || '');
-    let normalized = raw;
+    let s = raw;
     try {
-        normalized = raw.normalize('NFD');
+        s = raw.normalize('NFKD');
     } catch {
-        // Keep original value in environments without Unicode normalization support.
-        normalized = raw;
+        s = raw;
     }
-    return normalized
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
+    try {
+        s = s.replace(/\p{M}+/gu, '');
+    } catch {
+        s = s.replace(/[\u0300-\u036f]/g, '');
+    }
+    s = s.toLowerCase();
+    let out = '';
+    for (const ch of s) {
+        if (/^[0-9a-z]$/.test(ch)) {
+            out += ch;
+            continue;
+        }
+        let t = ch;
+        try {
+            t = ch.normalize('NFKD').replace(/\p{M}+/gu, '');
+        } catch {
+            try {
+                t = ch.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+            } catch {
+                t = '';
+            }
+        }
+        t = String(t).toLowerCase();
+        for (const c of t) {
+            if (/^[0-9a-z]$/.test(c)) out += c;
+        }
+    }
+    return out;
 }
 
 function buildDefaultStudentUsername(firstRaw, lastRaw) {
@@ -2333,7 +2370,7 @@ function hasEffectiveAdminSession() {
     return !!(
         isTeacherLoggedIn
         && isAdminLoggedIn
-        && String(adminAccount?.username || '').trim()
+        && String(adminAccount?.username || DEFAULT_ADMIN_USERNAME || '').trim()
     );
 }
 
@@ -2450,6 +2487,7 @@ async function initRoster(preloadedRoster = null) {
         schoolThemeColors = {};
         schoolBillingModels = {};
         schoolBillingConfigs = {};
+        schoolScheduleProfiles = {};
         calendarToolbarExternalLink = '';
         speakonStudentWeeklyClass = {};
         studentGoogleMeetLinksByName = {};
@@ -2472,14 +2510,9 @@ async function initRoster(preloadedRoster = null) {
             ? { ...saved.studentSchools }
             : {};
     studentSchoolByName = {};
-    privateStudentsList.forEach((name) => {
-        studentSchoolByName[name] = String(fromStorage[name] || 'HomeTeachers').trim() || 'HomeTeachers';
-    });
-    speakonStudentsList.forEach((name) => {
-        studentSchoolByName[name] = String(fromStorage[name] || 'SpeakOn').trim() || 'SpeakOn';
-    });
-    passportStudentsList.forEach((name) => {
-        studentSchoolByName[name] = String(fromStorage[name] || 'Passport').trim() || 'Passport';
+    getAllStudentNames().forEach((name) => {
+        const stored = String(fromStorage[name] || '').trim();
+        if (stored) studentSchoolByName[name] = stored;
     });
     const phonesRaw =
         saved.studentPhones && typeof saved.studentPhones === 'object' && !Array.isArray(saved.studentPhones)
@@ -2705,6 +2738,19 @@ async function initRoster(preloadedRoster = null) {
         if (!k || !cfg || typeof cfg !== 'object') return;
         schoolBillingConfigs[k] = { ...cfg };
     });
+    const scheduleProfilesRaw =
+        saved.schoolScheduleProfiles &&
+        typeof saved.schoolScheduleProfiles === 'object' &&
+        !Array.isArray(saved.schoolScheduleProfiles)
+            ? saved.schoolScheduleProfiles
+            : {};
+    schoolScheduleProfiles = {};
+    Object.keys(scheduleProfilesRaw).forEach((key) => {
+        const k = String(key || '').trim().toLowerCase();
+        if (!k) return;
+        const mode = normalizeSchoolScheduleMode(scheduleProfilesRaw[key]?.mode);
+        if (mode) schoolScheduleProfiles[k] = { mode };
+    });
     calendarToolbarExternalLink = String(saved.calendarToolbarExternalLink || '').trim();
     const swcRaw =
         saved.speakonWeeklyClass && typeof saved.speakonWeeklyClass === 'object' && !Array.isArray(saved.speakonWeeklyClass)
@@ -2724,6 +2770,14 @@ async function initRoster(preloadedRoster = null) {
         };
     });
     normalizeCustomSchoolsList();
+    migrateSchoolScheduleProfilesFromRoster();
+    const fillMissingStudentSchool = (name, legacyMode) => {
+        if (String(studentSchoolByName[name] || '').trim()) return;
+        studentSchoolByName[name] = getSchoolTitleForScheduleMode(legacyMode);
+    };
+    privateStudentsList.forEach((name) => fillMissingStudentSchool(name, SCHOOL_SCHEDULE_MODE.STANDARD));
+    speakonStudentsList.forEach((name) => fillMissingStudentSchool(name, SCHOOL_SCHEDULE_MODE.WEEKLY));
+    passportStudentsList.forEach((name) => fillMissingStudentSchool(name, SCHOOL_SCHEDULE_MODE.CLASS_ONLY));
     loadStudentClassReportRows();
 }
 
@@ -2755,6 +2809,91 @@ function getAvailableSchoolNames() {
         if (s) schools.add(s);
     });
     return [...schools].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function getAllStudentNames() {
+    return [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
+}
+
+function getDefaultSchoolTitle() {
+    const names = getAvailableSchoolNames();
+    if (names.length) return names[0];
+    const custom = customSchoolsList.map((s) => String(s || '').trim()).filter(Boolean);
+    return custom[0] || '';
+}
+
+function normalizeSchoolScheduleMode(raw) {
+    const m = String(raw || '').trim().toLowerCase();
+    if (m === 'weekly' || m === 'speakon') return SCHOOL_SCHEDULE_MODE.WEEKLY;
+    if (m === 'classonly' || m === 'class-only' || m === 'passport') return SCHOOL_SCHEDULE_MODE.CLASS_ONLY;
+    if (m === 'standard' || m === 'private' || m === 'dual') return SCHOOL_SCHEDULE_MODE.STANDARD;
+    return '';
+}
+
+function getSchoolScheduleProfile(schoolTitle) {
+    const key = schoolThemeKey(schoolTitle);
+    const stored = key ? schoolScheduleProfiles[key] : null;
+    const mode = normalizeSchoolScheduleMode(stored?.mode) || SCHOOL_SCHEDULE_MODE.STANDARD;
+    return {
+        mode,
+        supportsExtraSlot: mode === SCHOOL_SCHEDULE_MODE.STANDARD || mode === SCHOOL_SCHEDULE_MODE.WEEKLY,
+        usesWeeklyClassTemplate: mode === SCHOOL_SCHEDULE_MODE.WEEKLY,
+        classOnlySchedule: mode === SCHOOL_SCHEDULE_MODE.CLASS_ONLY
+    };
+}
+
+function getSchoolTitleForScheduleMode(mode) {
+    const want = normalizeSchoolScheduleMode(mode) || SCHOOL_SCHEDULE_MODE.STANDARD;
+    for (const school of getAvailableSchoolNames()) {
+        if (getSchoolScheduleProfile(school).mode === want) return school;
+    }
+    return getDefaultSchoolTitle();
+}
+
+function setSchoolScheduleProfile(schoolTitle, modeRaw) {
+    const key = schoolThemeKey(schoolTitle);
+    if (!key) return;
+    const mode = normalizeSchoolScheduleMode(modeRaw) || SCHOOL_SCHEDULE_MODE.STANDARD;
+    schoolScheduleProfiles[key] = { mode };
+}
+
+function getLegacySlotExportLabels() {
+    const standard = getSchoolTitleForScheduleMode(SCHOOL_SCHEDULE_MODE.STANDARD);
+    const weekly = getSchoolTitleForScheduleMode(SCHOOL_SCHEDULE_MODE.WEEKLY);
+    const classOnly = getSchoolTitleForScheduleMode(SCHOOL_SCHEDULE_MODE.CLASS_ONLY);
+    return {
+        available: 'Available',
+        unavailable: 'Unavailable',
+        navy: standard || 'Class',
+        cyan: standard ? `${standard} (extra)` : 'Extra class',
+        magenta: weekly || 'Class',
+        salmon: weekly ? `${weekly} (extra)` : 'Extra class',
+        special: classOnly || 'Class'
+    };
+}
+
+function migrateSchoolScheduleProfilesFromRoster() {
+    getAvailableSchoolNames().forEach((school) => {
+        const key = schoolThemeKey(school);
+        if (!key || schoolScheduleProfiles[key]?.mode) return;
+        const schoolLc = school.trim().toLowerCase();
+        const students = getAllStudentNames().filter(
+            (n) => String(studentSchoolByName[n] || '').trim().toLowerCase() === schoolLc
+        );
+        let mode = SCHOOL_SCHEDULE_MODE.STANDARD;
+        if (students.some((n) => speakonStudentsList.includes(n))) {
+            mode = SCHOOL_SCHEDULE_MODE.WEEKLY;
+        } else if (students.some((n) => passportStudentsList.includes(n))) {
+            mode = SCHOOL_SCHEDULE_MODE.CLASS_ONLY;
+        }
+        schoolScheduleProfiles[key] = { mode };
+    });
+    customSchoolsList.forEach((school) => {
+        const key = schoolThemeKey(school);
+        if (key && !schoolScheduleProfiles[key]) {
+            schoolScheduleProfiles[key] = { mode: SCHOOL_SCHEDULE_MODE.STANDARD };
+        }
+    });
 }
 
 /** School dropdown for add/edit student: teachers only see their own schools (from assigned students + eligible custom schools). */
@@ -3565,17 +3704,23 @@ function getStudentSchoolName(name) {
     const stored = String(studentSchoolByName[key] || '').trim();
     if (stored) return stored;
     const n = key.toLowerCase();
-    if (privateStudentsList.some((x) => x.trim().toLowerCase() === n)) return 'HomeTeachers';
-    if (speakonStudentsList.some((x) => x.trim().toLowerCase() === n)) return 'SpeakOn';
-    if (passportStudentsList.some((x) => x.trim().toLowerCase() === n)) return 'Passport';
+    if (speakonStudentsList.some((x) => x.trim().toLowerCase() === n)) {
+        return getSchoolTitleForScheduleMode(SCHOOL_SCHEDULE_MODE.WEEKLY);
+    }
+    if (passportStudentsList.some((x) => x.trim().toLowerCase() === n)) {
+        return getSchoolTitleForScheduleMode(SCHOOL_SCHEDULE_MODE.CLASS_ONLY);
+    }
+    if (privateStudentsList.some((x) => x.trim().toLowerCase() === n)) {
+        return getSchoolTitleForScheduleMode(SCHOOL_SCHEDULE_MODE.STANDARD);
+    }
     return '';
 }
 
+/** Legacy roster bucket key for storage/CSS (not a school display name). */
 function rosterKindFromSchoolName(schoolName) {
-    const s = String(schoolName || '').trim().toLowerCase();
-    if (!s) return '';
-    if (s.includes('passport')) return 'passport';
-    if (s.includes('speakon')) return 'speakon';
+    const profile = getSchoolScheduleProfile(schoolName);
+    if (profile.usesWeeklyClassTemplate) return 'speakon';
+    if (profile.classOnlySchedule) return 'passport';
     return 'private';
 }
 
@@ -3589,14 +3734,10 @@ function getSchoolExternalLinkUrl(displayTitle) {
     return String(schoolExternalLinks[k] || '').trim();
 }
 
-function schoolSectionUsesPassportStyleHeader(displayTitle) {
-    return !!getSchoolSpreadsheetUrl(displayTitle);
-}
-
 function getSchoolSpreadsheetUrl(displayTitle) {
     const per = getSchoolExternalLinkUrl(displayTitle);
     if (per) return per;
-    if (rosterKindFromSchoolName(displayTitle) === 'passport') {
+    if (getSchoolScheduleProfile(displayTitle).classOnlySchedule) {
         return String(passportHeaderPageLink || '').trim();
     }
     return '';
@@ -3620,12 +3761,12 @@ function getStudentRosterKind(name) {
     return rosterKindFromSchoolName(getStudentSchoolName(name));
 }
 
-function isSpeakOnStudentName(name) {
+function isWeeklyTemplateStudent(name) {
     return isStudentName(name) && getStudentRosterKind(name) === 'speakon';
 }
 
 /** Match roster name to key in speakonStudentWeeklyClass (handles case / stray spacing in saved JSON). */
-function getSpeakonWeeklyClassStorageKey(studentName) {
+function getStudentWeeklyClassStorageKey(studentName) {
     const want = String(studentName || '').trim().toLowerCase();
     if (!want) return '';
     const exact = String(studentName || '').trim();
@@ -3636,8 +3777,8 @@ function getSpeakonWeeklyClassStorageKey(studentName) {
     return found || '';
 }
 
-function getSpeakonWeeklyClassEntry(studentName) {
-    const key = getSpeakonWeeklyClassStorageKey(studentName);
+function getStudentWeeklyClassEntry(studentName) {
+    const key = getStudentWeeklyClassStorageKey(studentName);
     const raw = key ? speakonStudentWeeklyClass[key] : null;
     if (!raw || typeof raw !== 'object') {
         return { classDay: '', classHour: '', extraDay: '', extraHour: '' };
@@ -3650,68 +3791,24 @@ function getSpeakonWeeklyClassEntry(studentName) {
     };
 }
 
-function fillSpeakOnDaySelect(selectEl) {
-    if (!selectEl) return;
-    const prev = selectEl.value;
-    selectEl.innerHTML = '';
-    const none = document.createElement('option');
-    none.value = '';
-    none.textContent = '— None —';
-    selectEl.appendChild(none);
-    DAYS.forEach((d) => {
-        const o = document.createElement('option');
-        o.value = d;
-        o.textContent = d;
-        selectEl.appendChild(o);
-    });
-    if (prev && [...selectEl.options].some((opt) => opt.value === prev)) {
-        selectEl.value = prev;
-    }
-}
-
-function fillSpeakOnHourSelect(selectEl) {
-    if (!selectEl) return;
-    const prev = selectEl.value;
-    selectEl.innerHTML = '';
-    const none = document.createElement('option');
-    none.value = '';
-    none.textContent = '— None —';
-    selectEl.appendChild(none);
-    for (let h = START_HOUR; h < END_HOUR; h++) {
-        const o = document.createElement('option');
-        o.value = String(h);
-        o.textContent = formatHour(h);
-        selectEl.appendChild(o);
-    }
-    if (prev && [...selectEl.options].some((opt) => opt.value === prev)) {
-        selectEl.value = prev;
-    }
-}
-
 /**
- * SpeakOn class/extra slots come only from weekly picks; strip old overlay states then apply.
+ * Weekly-template students: apply roster weekly slots on top of painted cells (do not wipe other class/extra cells).
  * @param {Record<string, string | null | undefined>} sched
  * @param {string} studentName
  */
-function mergeSpeakonWeeklyClassIntoScheduleCopy(sched, studentName) {
-    if (!isSpeakOnStudentName(studentName)) {
-        return { ...sched };
+function mergeWeeklyClassIntoScheduleCopy(sched, studentName) {
+    const out = { ...sched };
+    if (!isWeeklyTemplateStudent(studentName)) {
+        return out;
     }
-    const c = getSpeakonWeeklyClassEntry(studentName);
+    const c = getStudentWeeklyClassEntry(studentName);
     const hasCfg =
         (c.classDay && String(c.classHour || '').trim() !== '') ||
         (c.extraDay && String(c.extraHour || '').trim() !== '');
     if (!hasCfg) {
-        return { ...sched };
+        return out;
     }
-    const out = { ...sched };
     const states = getStudentOverlayStates(studentName);
-    Object.keys(out).forEach((k) => {
-        const val = String(out[k] || '').trim().toLowerCase();
-        if (val === states.classState || val === states.extraState || val === 'magenta' || val === 'salmon') {
-            delete out[k];
-        }
-    });
     const ch = Number.parseInt(String(c.classHour || ''), 10);
     const eh = Number.parseInt(String(c.extraHour || ''), 10);
     if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
@@ -3721,6 +3818,235 @@ function mergeSpeakonWeeklyClassIntoScheduleCopy(sched, studentName) {
         out[`${c.extraDay}-${eh}`] = states.extraState;
     }
     return out;
+}
+
+function studentUsesWeeklyClassTemplate(studentName) {
+    const schoolTitle = getStudentSchoolName(studentName) || getDefaultSchoolTitle();
+    return !!getSchoolScheduleProfile(schoolTitle).usesWeeklyClassTemplate;
+}
+
+/** Map a stored student slot value to this student's current class/extra overlay token (or ''). */
+function normalizeStudentScheduleOverlayToken(rawVal, studentName) {
+    const { classState, extraState } = getStudentOverlayStates(studentName);
+    const low = String(rawVal || '').trim().toLowerCase();
+    if (!low) return '';
+    if (low === classState) return classState;
+    if (extraState && low === extraState) return extraState;
+    if (low === 'magenta' || low === 'special' || low === 'navy') return classState;
+    if (low === 'salmon' || low === 'cyan') return extraState;
+    const resolved = resolveSchoolTokenInfoFromState(low);
+    const token = String(resolved?.token || low).trim().toLowerCase();
+    if (token === classState) return classState;
+    if (extraState && token === extraState) return extraState;
+    const parsed = parseSchoolStateToken(token);
+    if (parsed) {
+        const studentSchoolKey = schoolThemeKey(getStudentSchoolName(studentName) || getDefaultSchoolTitle());
+        if (parsed.schoolKey === studentSchoolKey) {
+            return parsed.variant === 'extra' ? extraState : classState;
+        }
+    }
+    return '';
+}
+
+/** School class/extra token from a slot state, if any. */
+function getClassOrExtraTokenFromSlotState(state) {
+    const low = String(state ?? '').trim().toLowerCase();
+    if (!low || low === 'null' || low === 'available') return null;
+    if (parseSchoolStateToken(low) || isLegacyOverlayState(low)) return state;
+    return null;
+}
+
+/** Tutor reposition / booked slot (yellow), not availability or class. */
+function isTeacherRepositionSlotState(state) {
+    const s = String(state || '').trim().toLowerCase();
+    return s === 'unavailable' || s === 'rescheduled' || s === BOOKED_CLASS_SLOT_STATE;
+}
+
+/**
+ * Merge slot states: class/extra > reposition/booked > available > empty.
+ * @param {string|null|undefined} classOrExtraToken
+ * @param {string|null|undefined} teacherRawState
+ * @param {{ studentSlot?: string|null, rescheduledStudentName?: string }} [opts]
+ */
+function resolveScheduleSlotPriority(classOrExtraToken, teacherRawState, opts = {}) {
+    const classToken = getClassOrExtraTokenFromSlotState(classOrExtraToken);
+    if (classToken) return classToken;
+
+    const studentSlot = opts.studentSlot;
+    const sLow = studentSlot != null ? String(studentSlot).trim().toLowerCase() : '';
+    if (sLow && sLow !== 'available' && sLow !== 'null' && isTeacherRepositionSlotState(studentSlot)) {
+        return studentSlot;
+    }
+
+    const rescheduledStudentName = String(opts.rescheduledStudentName || '').trim();
+    const tLow = teacherRawState != null ? String(teacherRawState).trim().toLowerCase() : '';
+    if ((tLow === 'unavailable' || tLow === 'rescheduled') && rescheduledStudentName) {
+        return 'rescheduled';
+    }
+    if (tLow === BOOKED_CLASS_SLOT_STATE) {
+        return BOOKED_CLASS_SLOT_STATE;
+    }
+    if (tLow === 'available') {
+        return 'available';
+    }
+    if (tLow && tLow !== 'null') {
+        return teacherRawState;
+    }
+    if (sLow && sLow !== 'null') {
+        return studentSlot;
+    }
+    return null;
+}
+
+/** Teacher roster: slot cannot be toggled to green (class, reposition, or school-managed). */
+function isTeacherSlotOccupiedForAvailability(day, hour) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
+    if (isSchoolManagedTeacherSlotLocked(day, hour)) return true;
+    const state = getSlotState(day, hour);
+    const low = String(state || '').trim().toLowerCase();
+    if (!low || low === 'null' || low === 'available') return false;
+    return true;
+}
+
+/**
+ * Teacher schedules aggregate class/extra overlays from assigned student grids.
+ * Weekly template remains supported as fallback.
+ * @param {Record<string, string | null | undefined>} sched
+ * @param {string} [teacherName] when set, only students assigned to this teacher profile
+ */
+function applyAllStudentColorsToTeacherScheduleCopy(sched, teacherName) {
+    const out = { ...sched };
+    const teacherFilter = String(teacherName || '').trim();
+    Object.keys(out).forEach((k) => {
+        const current = String(out[k] || '').trim();
+        if (parseSchoolStateToken(current) || isLegacyOverlayState(current)) {
+            delete out[k];
+        }
+    });
+    const keyBest = {};
+    const classPriorityByKind = { speakon: 3, private: 2, passport: 1 };
+    const extraPriorityByKind = { speakon: 2, private: 1, passport: 0 };
+    const keyClassPriority = {};
+    const keyExtraPriority = {};
+    const students = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    for (const studentName of students) {
+        if (teacherFilter && !isStudentRosterAssignedToTeacherProfile(studentName, teacherFilter)) {
+            continue;
+        }
+        const { classState, extraState } = getStudentOverlayStates(studentName);
+        const kind = getStudentRosterKind(studentName) || 'private';
+        const slotMap = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
+        for (const [k, v] of Object.entries(slotMap)) {
+            const val = normalizeStudentScheduleOverlayToken(v, studentName);
+            if (val !== classState && val !== extraState) continue;
+            if (val === classState) {
+                const currScore = keyClassPriority[k] || 0;
+                const nextScore = classPriorityByKind[kind] || 0;
+                if (nextScore >= currScore) {
+                    keyBest[k] = val;
+                    keyClassPriority[k] = nextScore;
+                }
+            } else if (val === extraState) {
+                if ((keyClassPriority[k] || 0) > 0) continue;
+                const currScore = keyExtraPriority[k] || 0;
+                const nextScore = extraPriorityByKind[kind] || 0;
+                if (nextScore >= currScore) {
+                    keyBest[k] = val;
+                    keyExtraPriority[k] = nextScore;
+                }
+            }
+        }
+    }
+
+    for (const studentName of getAllRosterStudentNamesSorted()) {
+        if (teacherFilter && !isStudentRosterAssignedToTeacherProfile(studentName, teacherFilter)) {
+            continue;
+        }
+        if (!studentUsesWeeklyClassTemplate(studentName)) continue;
+        const states = getStudentOverlayStates(studentName);
+        const c = getStudentWeeklyClassEntry(studentName);
+        const hasCfg =
+            (c.classDay && String(c.classHour || '').trim() !== '') ||
+            (c.extraDay && String(c.extraHour || '').trim() !== '');
+        if (!hasCfg) continue;
+        const ch = Number.parseInt(String(c.classHour || ''), 10);
+        const eh = Number.parseInt(String(c.extraHour || ''), 10);
+        if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
+            const ek = `${c.extraDay}-${eh}`;
+            if (!(keyClassPriority[ek] || 0) && !(keyExtraPriority[ek] || 0)) {
+                keyBest[ek] = states.extraState;
+                keyExtraPriority[ek] = extraPriorityByKind.speakon;
+            }
+        }
+        if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
+            const ck = `${c.classDay}-${ch}`;
+            const curr = keyClassPriority[ck] || 0;
+            if (curr <= classPriorityByKind.speakon) {
+                keyBest[ck] = states.classState;
+                keyClassPriority[ck] = classPriorityByKind.speakon;
+            }
+        }
+    }
+
+    Object.keys(keyBest).forEach((k) => {
+        out[k] = keyBest[k];
+    });
+    return out;
+}
+
+/** Which schedule keys should receive weekly class color sync for the current session. */
+function getTeacherNamesForWeeklyClassSync() {
+    if (String(loggedInStudentFullName || '').trim()) {
+        const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
+        return tk ? [tk] : [];
+    }
+    if (isAdminLoggedIn) {
+        return teachersList.map((t) => String(t || '').trim()).filter(Boolean);
+    }
+    if (isTeacherLoggedIn && String(loggedInTeacherName || '').trim()) {
+        return [String(loggedInTeacherName).trim()];
+    }
+    return teachersList.map((t) => String(t || '').trim()).filter(Boolean);
+}
+
+/** Recompute weekly class/extra overlays on teacher profiles from student grids + roster. */
+function syncWeeklyClassToAllTeacherSchedules() {
+    getTeacherNamesForWeeklyClassSync().forEach((tName) => {
+        const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
+        const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
+        const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
+        teacherSchedules[tName] = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, tName);
+        if (Object.keys(unavailableMeta).length > 0) {
+            teacherSchedules[tName][TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = unavailableMeta;
+        }
+    });
+    if (currentTeacher && isActiveTeacherName(currentTeacher)) {
+        const slotsOnly = getScheduleSlotMapWithoutMeta(teacherSchedules[currentTeacher] || {});
+        slotStates = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, currentTeacher);
+        if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+            refreshCalendarDisplay();
+        }
+    } else if (
+        currentTeacher &&
+        loggedInStudentFullName &&
+        String(currentTeacher).trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
+    ) {
+        const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
+        if (tk) {
+            slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tk);
+            if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+                refreshCalendarDisplay();
+            }
+        }
+    } else if (isTeacherViewingStudentCalendar()) {
+        refreshCalendarTeacherAggregateOverlay();
+        if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+            refreshCalendarDisplay();
+        }
+    }
 }
 
 /**
@@ -3737,17 +4063,6 @@ function stripTeacherAvailabilityFromStudentScheduleCopy(sched) {
     return out;
 }
 
-function stripSpeakonColorsFromScheduleCopy(sched) {
-    const out = { ...sched };
-    Object.keys(out).forEach((k) => {
-        const v = String(out[k] || '').trim().toLowerCase();
-        if (v === 'magenta' || v === 'salmon' || parseSchoolStateToken(v) || isLegacyOverlayState(v)) {
-            delete out[k];
-        }
-    });
-    return out;
-}
-
 function isActiveTeacherName(name) {
     const n = String(name || '').trim().toLowerCase();
     if (!n) return false;
@@ -3755,7 +4070,7 @@ function isActiveTeacherName(name) {
 }
 
 function makeSchoolStateToken(schoolTitle, variant) {
-    const key = schoolThemeKey(schoolTitle) || schoolThemeKey('HomeTeachers');
+    const key = schoolThemeKey(schoolTitle) || schoolThemeKey(getDefaultSchoolTitle());
     const kind = variant === 'extra' ? 'extra' : 'class';
     return `school::${key}::${kind}`;
 }
@@ -3788,174 +4103,31 @@ function resolveSchoolTokenInfoFromState(state) {
     }
     const legacy = String(state || '').trim().toLowerCase();
     const legacyMap = {
-        navy: { school: 'HomeTeachers', variant: 'class' },
-        cyan: { school: 'HomeTeachers', variant: 'extra' },
-        magenta: { school: 'SpeakOn', variant: 'class' },
-        salmon: { school: 'SpeakOn', variant: 'extra' },
-        special: { school: 'Passport', variant: 'class' }
+        navy: { profileMode: SCHOOL_SCHEDULE_MODE.STANDARD, variant: 'class' },
+        cyan: { profileMode: SCHOOL_SCHEDULE_MODE.STANDARD, variant: 'extra' },
+        magenta: { profileMode: SCHOOL_SCHEDULE_MODE.WEEKLY, variant: 'class' },
+        salmon: { profileMode: SCHOOL_SCHEDULE_MODE.WEEKLY, variant: 'extra' },
+        special: { profileMode: SCHOOL_SCHEDULE_MODE.CLASS_ONLY, variant: 'class' }
     };
     const cfg = legacyMap[legacy];
     if (!cfg) return null;
-    const tokenValue = makeSchoolStateToken(cfg.school, cfg.variant);
-    const schoolTheme = getSchoolTheme(cfg.school);
+    const schoolTitle = getSchoolTitleForScheduleMode(cfg.profileMode);
+    const tokenValue = makeSchoolStateToken(schoolTitle, cfg.variant);
+    const schoolTheme = getSchoolTheme(schoolTitle);
     const color = cfg.variant === 'extra' ? schoolTheme.secondary : schoolTheme.primary;
     return { token: tokenValue, color };
 }
 
 function getStudentOverlayStates(studentName) {
-    const schoolTitle = getStudentSchoolName(studentName) || (getStudentRosterKind(studentName) === 'speakon' ? 'SpeakOn' : (getStudentRosterKind(studentName) === 'passport' ? 'Passport' : 'HomeTeachers'));
-    const kind = getStudentRosterKind(studentName);
-    if (kind === 'passport') {
+    const schoolTitle = getStudentSchoolName(studentName) || getDefaultSchoolTitle();
+    const profile = getSchoolScheduleProfile(schoolTitle);
+    if (profile.classOnlySchedule) {
         return { classState: makeSchoolStateToken(schoolTitle, 'class'), extraState: '' };
     }
     return {
         classState: makeSchoolStateToken(schoolTitle, 'class'),
         extraState: makeSchoolStateToken(schoolTitle, 'extra')
     };
-}
-
-/** States authored on the teacher grid — must not be replaced by SpeakOn/student overlays when syncing to KV (matches `BOOKED_CLASS_SLOT_STATE` + tutor-only slots). */
-function isTeacherExclusiveScheduleOverlayState(state) {
-    const s = String(state || '').trim().toLowerCase();
-    return s === 'available' || s === 'unavailable' || s === 'rescheduled' || s === 'booked';
-}
-
-/**
- * Teacher schedules aggregate class/extra overlays from all student grids.
- * SpeakOn weekly template remains supported as fallback.
- * @param {Record<string, string | null | undefined>} sched
- */
-function applyAllSpeakOnStudentColorsToTeacherScheduleCopy(sched) {
-    const out = { ...sched };
-    Object.keys(out).forEach((k) => {
-        const current = String(out[k] || '').trim();
-        if (parseSchoolStateToken(current) || isLegacyOverlayState(current)) {
-            delete out[k];
-        }
-    });
-    const keyBest = {};
-    const classPriorityByKind = { speakon: 3, private: 2, passport: 1 };
-    const extraPriorityByKind = { speakon: 2, private: 1, passport: 0 };
-    const keyClassPriority = {};
-    const keyExtraPriority = {};
-    const students = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: 'base' })
-    );
-
-    for (const studentName of students) {
-        const { classState, extraState } = getStudentOverlayStates(studentName);
-        const kind = getStudentRosterKind(studentName) || 'private';
-        const st = teacherSchedules[studentName] || {};
-        for (const [k, v] of Object.entries(st)) {
-            const rawVal = String(v || '').trim().toLowerCase();
-            let val = '';
-            if (rawVal === classState || rawVal === extraState) {
-                val = rawVal;
-            } else if (rawVal === 'magenta' || rawVal === 'special' || rawVal === 'navy') {
-                val = classState;
-            } else if (rawVal === 'salmon' || rawVal === 'cyan') {
-                val = extraState;
-            } else {
-                const resolved = resolveSchoolTokenInfoFromState(rawVal);
-                val = resolved?.token || '';
-            }
-            if (val !== classState && val !== extraState) continue;
-            if (val === classState) {
-                const currScore = keyClassPriority[k] || 0;
-                const nextScore = classPriorityByKind[kind] || 0;
-                if (nextScore >= currScore) {
-                    keyBest[k] = val;
-                    keyClassPriority[k] = nextScore;
-                }
-            } else if (val === extraState) {
-                if ((keyClassPriority[k] || 0) > 0) continue;
-                const currScore = keyExtraPriority[k] || 0;
-                const nextScore = extraPriorityByKind[kind] || 0;
-                if (nextScore >= currScore) {
-                    keyBest[k] = val;
-                    keyExtraPriority[k] = nextScore;
-                }
-            }
-        }
-    }
-
-    for (const studentName of speakonStudentsList) {
-        const states = getStudentOverlayStates(studentName);
-        const c = getSpeakonWeeklyClassEntry(studentName);
-        const hasCfg =
-            (c.classDay && String(c.classHour || '').trim() !== '') ||
-            (c.extraDay && String(c.extraHour || '').trim() !== '');
-        if (!hasCfg) continue;
-        const ch = Number.parseInt(String(c.classHour || ''), 10);
-        const eh = Number.parseInt(String(c.extraHour || ''), 10);
-        if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
-            const ek = `${c.extraDay}-${eh}`;
-            if (!(keyClassPriority[ek] || 0) && !(keyExtraPriority[ek] || 0)) {
-                keyBest[ek] = states.extraState;
-                keyExtraPriority[ek] = extraPriorityByKind.speakon;
-            }
-        }
-        if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
-            const ck = `${c.classDay}-${ch}`;
-            const curr = keyClassPriority[ck] || 0;
-            if (curr <= classPriorityByKind.speakon) {
-                keyBest[ck] = states.classState;
-                keyClassPriority[ck] = classPriorityByKind.speakon;
-            }
-        }
-    }
-
-    Object.keys(keyBest).forEach((k) => {
-        if (isTeacherExclusiveScheduleOverlayState(out[k])) return;
-        out[k] = keyBest[k];
-    });
-    return out;
-}
-
-/** Which schedule keys should receive SpeakOn color sync for the current session (avoids recreating other teachers' grids). */
-function getTeacherNamesForSpeakOnSync() {
-    if (String(loggedInStudentFullName || '').trim()) {
-        const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
-        return tk ? [tk] : [];
-    }
-    if (isAdminLoggedIn) {
-        return teachersList.map((t) => String(t || '').trim()).filter(Boolean);
-    }
-    if (isTeacherLoggedIn && String(loggedInTeacherName || '').trim()) {
-        return [String(loggedInTeacherName).trim()];
-    }
-    return teachersList.map((t) => String(t || '').trim()).filter(Boolean);
-}
-
-/** Recompute SpeakOn magenta/salmon on every teacher profile from student grids + roster. */
-function syncSpeakOnWeeklyToAllTeacherSchedules() {
-    getTeacherNamesForSpeakOnSync().forEach((tName) => {
-        const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
-        const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
-        const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
-        teacherSchedules[tName] = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(slotsOnly);
-        if (Object.keys(unavailableMeta).length > 0) {
-            teacherSchedules[tName][TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = unavailableMeta;
-        }
-    });
-    if (currentTeacher && isActiveTeacherName(currentTeacher)) {
-        slotStates = getScheduleSlotMapWithoutMeta(teacherSchedules[currentTeacher]);
-        if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
-            refreshCalendarDisplay();
-        }
-    } else if (
-        currentTeacher &&
-        loggedInStudentFullName &&
-        String(currentTeacher).trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
-    ) {
-        const tk = getTutorRosterNameForStudent(loggedInStudentFullName);
-        if (tk) {
-            slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tk);
-            if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
-                refreshCalendarDisplay();
-            }
-        }
-    }
 }
 
 let calendarStudentPopoverOpen = false;
@@ -3979,7 +4151,7 @@ function getAllRosterStudentNamesSorted() {
 }
 
 function getStudentSchoolKey(name) {
-    return schoolThemeKey(getStudentSchoolName(name) || 'HomeTeachers');
+    return schoolThemeKey(getStudentSchoolName(name) || getDefaultSchoolTitle());
 }
 
 function isStudentNameVisibleBySchoolFilter(name) {
@@ -3988,6 +4160,59 @@ function isStudentNameVisibleBySchoolFilter(name) {
     if (!calendarStudentNamesInCellsVisible) return false;
     if (calendarNameVisibleSchoolKeys.size === 0) return false;
     return calendarNameVisibleSchoolKeys.has(getStudentSchoolKey(name));
+}
+
+/** Same assigned tutor (roster), used for student↔student calendar visibility and class report. */
+function areStudentsSameTutorCohort(studentA, studentB) {
+    const a = String(studentA || '').trim();
+    const b = String(studentB || '').trim();
+    if (!a || !b) return false;
+    if (a.toLowerCase() === b.toLowerCase()) return true;
+    const ta = getTutorRosterNameForStudent(a);
+    const tb = getTutorRosterNameForStudent(b);
+    return !!(ta && tb && ta === tb);
+}
+
+/** Default / empty slot (white): no custom context menu. */
+function isCalendarSlotEmptyWhiteForContextMenu(day, hour) {
+    const st = getDisplaySlotState(day, hour);
+    const low = String(st ?? '').trim().toLowerCase();
+    return !low || low === 'null';
+}
+
+/** True when the student is assigned to the given teacher on the roster (canonical names). */
+function isStudentRosterAssignedToTeacherProfile(studentName, teacherName) {
+    const s = String(studentName || '').trim();
+    const t = canonicalTeacherNameOnRoster(String(teacherName || '').trim());
+    if (!s || !t) return false;
+    const asg = canonicalTeacherNameOnRoster(getStudentTeacherInfo(s));
+    return !!(asg && asg.toLowerCase() === t.toLowerCase());
+}
+
+/**
+ * Whether a roster student name may appear on the current calendar grid (teacher aggregate vs student profile).
+ */
+function isStudentNameVisibleOnCalendarCell(rosterStudent) {
+    const r = String(rosterStudent || '').trim();
+    if (!r || !currentTeacher) return false;
+    if (isActiveTeacherName(currentTeacher)) {
+        // Master schedule: all classes for students on this teacher (not school-filtered for names).
+        return isStudentRosterAssignedToTeacherProfile(r, currentTeacher);
+    }
+    if (!isStudentName(currentTeacher)) {
+        return isStudentNameVisibleBySchoolFilter(r);
+    }
+    const viewer = String(currentTeacher).trim();
+    if (!loggedInStudentFullName) {
+        // Teacher viewing one student (Schools): only that student's names in cells.
+        if (isStudentName(viewer)) {
+            return r.toLowerCase() === viewer.toLowerCase();
+        }
+        return isStudentNameVisibleBySchoolFilter(r);
+    }
+    // Logged-in student: merged grid shows everyone's class colors; name chips only for self.
+    const mine = String(loggedInStudentFullName || '').trim().toLowerCase();
+    return r.toLowerCase() === mine;
 }
 
 function syncCalendarStudentNamesButtonState() {
@@ -4017,7 +4242,10 @@ function ensureCalendarSchoolFilterSelection() {
 }
 
 function getStudentNamesForTeacherSlot(day, hour, state) {
-    if (!state || !currentTeacher || !isActiveTeacherName(currentTeacher)) return [];
+    if (!state || !currentTeacher) return [];
+    const isTutorGrid = isActiveTeacherName(currentTeacher);
+    const isStudentGrid = isStudentName(currentTeacher);
+    if (!isTutorGrid && !isStudentGrid) return [];
     const resolvedState = resolveSchoolTokenInfoFromState(state);
     const normalizedState = resolvedState?.token || String(state || '').trim().toLowerCase();
     if (!parseSchoolStateToken(normalizedState) && !isLegacyOverlayState(normalizedState)) return [];
@@ -4040,30 +4268,89 @@ function getStudentNamesForTeacherSlot(day, hour, state) {
             studentState = resolveSchoolTokenInfoFromState(rawStudentState)?.token || rawStudentState;
         }
         if (studentState === classState || (extraState && studentState === extraState)) {
-            if (!used.has(studentName) && isStudentNameVisibleBySchoolFilter(studentName)) {
+            if (!used.has(studentName) && isStudentNameVisibleOnCalendarCell(studentName)) {
                 used.add(studentName);
                 names.push(studentName);
             }
             continue;
         }
         if (getStudentRosterKind(studentName) !== 'speakon') continue;
-        const weekly = getSpeakonWeeklyClassEntry(studentName);
+        const weekly = getStudentWeeklyClassEntry(studentName);
         const classHour = Number.parseInt(String(weekly.classHour || ''), 10);
         const extraHour = Number.parseInt(String(weekly.extraHour || ''), 10);
         const isClass = normalizedState === classState && weekly.classDay === day && classHour === hour;
         const isExtra = normalizedState === extraState && weekly.extraDay === day && extraHour === hour;
-        if ((isClass || isExtra) && !used.has(studentName) && isStudentNameVisibleBySchoolFilter(studentName)) {
+        if ((isClass || isExtra) && !used.has(studentName) && isStudentNameVisibleOnCalendarCell(studentName)) {
             used.add(studentName);
             names.push(studentName);
         }
     }
+    if (loggedInStudentFullName) {
+        const selfLc = String(loggedInStudentFullName || '').trim().toLowerCase();
+        return names.filter((n) => String(n || '').trim().toLowerCase() === selfLc);
+    }
     return names;
+}
+
+/** Normalize school / legacy slot tokens for comparisons across teacher vs student grids. */
+function teacherSlotStateToComparableToken(state) {
+    const resolved = resolveSchoolTokenInfoFromState(state);
+    return String(resolved?.token || String(state || '').trim().toLowerCase()).trim().toLowerCase();
+}
+
+/**
+ * @returns {boolean} whether any student data was changed
+ */
+function removeStudentScheduledClassContributions(studentName, day, hour, teacherGridState) {
+    const key = `${day}-${hour}`;
+    const { classState, extraState } = getStudentOverlayStates(studentName);
+    const classToken = teacherSlotStateToComparableToken(classState);
+    const extraToken = extraState ? teacherSlotStateToComparableToken(extraState) : '';
+
+    let touched = false;
+    const full =
+        teacherSchedules[studentName] && typeof teacherSchedules[studentName] === 'object'
+            ? { ...teacherSchedules[studentName] }
+            : {};
+    const slots = getScheduleSlotMapWithoutMeta(full);
+    const atKey = slots[key];
+    if (atKey != null && String(atKey).trim() !== '') {
+        const atTok = teacherSlotStateToComparableToken(atKey);
+        if (atTok === classToken || (extraToken && atTok === extraToken)) {
+            delete slots[key];
+            touched = true;
+        }
+    }
+
+    if (!touched) return false;
+    teacherSchedules[studentName] = withUnavailableStudentNamesMeta(studentName, slots);
+    return true;
+}
+
+function performTeacherGridClearScheduledClass(day, hour) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
+    if (isLoggedInStudentCalendarReadOnly()) return false;
+    if (isGateViewingAlienTeacherGrid()) return false;
+    const state = getSlotState(day, hour);
+    const low = String(state || '').trim().toLowerCase();
+    if (!low || low === 'null' || low === 'available') return false;
+
+    const names = getStudentNamesForTeacherSlot(day, hour, state);
+    for (const nm of names) {
+        removeStudentScheduledClassContributions(nm, day, hour, state);
+    }
+    saveRoster();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+    loadTeacherSchedule(currentTeacher);
+    setSlotState(day, hour, 'available');
+    return true;
 }
 
 function getSchoolManagedTeacherStateTokenForSlot(teacherName, day, hour) {
     if (!teacherName || !isActiveTeacherName(teacherName)) return '';
     const key = `${day}-${hour}`;
-    const aggregated = applyAllSpeakOnStudentColorsToTeacherScheduleCopy({});
+    const aggregated = applyAllStudentColorsToTeacherScheduleCopy({}, teacherName);
     const raw = String(aggregated[key] || '').trim().toLowerCase();
     if (!raw) return '';
     const resolved = resolveSchoolTokenInfoFromState(raw);
@@ -4072,7 +4359,8 @@ function getSchoolManagedTeacherStateTokenForSlot(teacherName, day, hour) {
 }
 
 function isSchoolManagedTeacherSlotLocked(day, hour) {
-    return !!getSchoolManagedTeacherStateTokenForSlot(currentTeacher, day, hour);
+    const profileKey = getCalendarProfileKeyForTeacherMeta();
+    return !!getSchoolManagedTeacherStateTokenForSlot(profileKey, day, hour);
 }
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
@@ -4095,13 +4383,12 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
             if (index > 0) {
                 wrap.appendChild(document.createTextNode(', '));
             }
-            const chip = document.createElement('button');
-            chip.type = 'button';
+            const chip = document.createElement('span');
             chip.className = 'time-slot-student-chip';
+            chip.dataset.studentName = name;
             chip.dataset.studentId = buildGoogleMeetStudentId(name);
             chip.textContent = normalizeStudentDisplayName(name);
             chip.title = name;
-            chip.setAttribute('aria-label', `Show ${name} in student list`);
             wrap.appendChild(chip);
         });
         slotEl.appendChild(wrap);
@@ -4113,72 +4400,19 @@ function renderStudentNamesInSlot(slotEl, day, hour, state) {
     }
 }
 
-/** Expand a collapsed Class Report school group (keeps `classReportCollapsedBySchool` in sync). */
-function expandClassReportGroupIfCollapsed(groupEl) {
-    if (!groupEl || !groupEl.classList.contains('collapsed')) return false;
-    const key = String(groupEl.dataset.classReportSchoolKey || '').trim();
-    if (key) {
-        classReportCollapsedBySchool[key] = false;
-    }
-    const body = groupEl.querySelector('.class-report-group-body');
-    const title = groupEl.querySelector('.class-report-group-title');
-    title?.setAttribute('aria-expanded', 'true');
-    groupEl.classList.remove('collapsed');
-    if (body) {
-        const prevTransition = body.style.transition;
-        body.style.transition = 'none';
-        body.style.maxHeight = '';
-        body.style.opacity = '1';
-        body.style.transform = 'translateY(0)';
-        void body.offsetHeight;
-        body.style.transition = prevTransition;
-    }
-    return true;
-}
-
-/** Teacher calendar: scroll Class Report list to the student and highlight the row (same look as row hover). */
-function scrollSidebarStudentIntoViewFromCalendarChip(studentId) {
-    const id = String(studentId || '').trim();
-    if (!id || !currentTeacher || !isActiveTeacherName(currentTeacher)) return;
-
-    const esc = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id.replace(/"/g, '\\"');
-    const reportItem = document.querySelector(`.class-report-student-item[data-student-id="${esc}"]`);
-    if (!reportItem) return;
-
-    const reportGroup = reportItem.closest('.class-report-group');
-    const hadToExpand = expandClassReportGroupIfCollapsed(reportGroup);
-
-    const prefersReduce =
-        typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const runScrollAndHighlight = () => {
-        reportItem.scrollIntoView({
-            behavior: prefersReduce ? 'auto' : 'smooth',
-            block: 'center'
-        });
-        reportItem.classList.add('class-report-student-item--calendar-focus');
-        window.setTimeout(() => {
-            reportItem.classList.remove('class-report-student-item--calendar-focus');
-        }, 1200);
-    };
-
-    if (hadToExpand) {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(runScrollAndHighlight);
-        });
-    } else {
-        runScrollAndHighlight();
-    }
-}
-
 function getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state) {
     const normalized = String(state || '').trim().toLowerCase();
     if (normalized !== 'unavailable' && normalized !== 'rescheduled' && normalized !== BOOKED_CLASS_SLOT_STATE) return '';
     const key = `${day}-${hour}`;
     if (loggedInStudentFullName) {
-        return String(studentVisibleRescheduledNamesBySlot[key] || '').trim();
+        const nm = String(studentVisibleRescheduledNamesBySlot[key] || '').trim();
+        const selfLc = String(loggedInStudentFullName || '').trim().toLowerCase();
+        if (!nm || nm.trim().toLowerCase() !== selfLc) return '';
+        return nm;
     }
-    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return '';
-    const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
+    const metaTeacher = getCalendarProfileKeyForTeacherMeta();
+    if (!metaTeacher || !isActiveTeacherName(metaTeacher)) return '';
+    const byTeacher = teacherUnavailableStudentNamesByTeacher[metaTeacher];
     if (!byTeacher || typeof byTeacher !== 'object') return '';
     return String(byTeacher[key] || '').trim();
 }
@@ -4197,11 +4431,14 @@ function isCustomContextMenuEnabledForCurrentSelection() {
     return !!currentTeacher && !isActiveTeacherName(currentTeacher);
 }
 
-function isTeacherGreenCellContextMenuEnabled(day, hour) {
+function isTeacherCalendarClearContextMenuEnabled(day, hour) {
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
     if (isLoggedInStudentCalendarReadOnly()) return false;
-    const state = String(getSlotState(day, hour) || '').trim().toLowerCase();
-    return state === 'available';
+    if (isGateViewingAlienTeacherGrid()) return false;
+    const raw = getSlotState(day, hour);
+    const low = String(raw || '').trim().toLowerCase();
+    if (!low || low === 'null' || low === 'available') return false;
+    return true;
 }
 
 /**
@@ -4242,53 +4479,6 @@ function teacherBookGreenSlotForStudent(day, hour, studentName) {
     }
     setSlotState(day, hour, BOOKED_CLASS_SLOT_STATE);
     return true;
-}
-
-function handleTeacherGreenContextMenuAction(action) {
-    if (!currentSlot || !action) return;
-    const { day, hour } = currentSlot;
-    if (action === 'block') {
-        setSlotState(day, hour, null);
-        return;
-    }
-    if (action === 'reposition') {
-        openStudentRepositionModal(day, hour);
-        return;
-    }
-    if (action === 'book') {
-        const selectedSchool = String(contextMenu?.dataset.selectedSchool || '').trim();
-        if (!selectedSchool) {
-            showAppMessage('Please choose a school first.');
-            return;
-        }
-        showAppMessage(`Booking flow for ${selectedSchool} on ${day} at ${formatHour(hour)} will be added next.`);
-        return;
-    }
-    if (action === 'book-school') {
-        const selectedSchool = String(contextMenu?.dataset.selectedSchool || '').trim();
-        if (!selectedSchool) {
-            showAppMessage('Please choose a school first.');
-            return;
-        }
-        showAppMessage(`Booking flow for ${selectedSchool} on ${day} at ${formatHour(hour)} will be added next.`);
-        return;
-    }
-    if (action === 'set-class-reposition') {
-        showBookClassStudentsSubmenuForAllStudents();
-        return;
-    }
-    if (action === 'reserve') {
-        showAppMessage(`Reserve flow for ${day} at ${formatHour(hour)} will be added next.`);
-        return;
-    }
-    if (action === 'note') {
-        showAppMessage(`Slot notes for ${day} at ${formatHour(hour)} will be added next.`);
-        return;
-    }
-    if (action === 'clear') {
-        setSlotState(day, hour, null);
-        return;
-    }
 }
 
 function applyStateVisualToSlot(slot, state) {
@@ -4917,13 +5107,6 @@ function renameStudentClassReportRows(oldName, newName) {
             else await persistClassReportOfflineSnapshot();
         });
     }
-}
-
-function getPreferredPassportStudentName() {
-    if (currentTeacher && passportStudentsList.includes(currentTeacher)) {
-        return currentTeacher;
-    }
-    return passportStudentsList[0] || '';
 }
 
 function openSchoolExternalLinkFromSidebar(displayTitle) {
@@ -6132,6 +6315,58 @@ function renderStudentClassReportTable(studentName) {
 
 }
 
+function applyClassReportSidebarStudentHighlight(studentFullName) {
+    const want = String(studentFullName || '').trim().toLowerCase();
+    document.querySelectorAll('.class-report-student-item').forEach((li) => {
+        const n = String(li.dataset.studentName || '').trim().toLowerCase();
+        li.classList.toggle('class-report-student-item--active', !!want && n === want);
+    });
+}
+
+function expandClassReportSidebarGroupIfNeededForEl(targetEl) {
+    const group = targetEl && targetEl.closest ? targetEl.closest('.class-report-group') : null;
+    if (!group || !group.classList.contains('collapsed')) return;
+    const gk = String(group.dataset.classReportSchoolKey || '').trim();
+    group.classList.remove('collapsed');
+    const body = group.querySelector('.class-report-group-body');
+    if (body) {
+        body.style.maxHeight = '';
+        body.style.opacity = '1';
+        body.style.transform = '';
+    }
+    const title = group.querySelector('.class-report-group-title');
+    title?.setAttribute('aria-expanded', 'true');
+    if (gk) classReportCollapsedBySchool[gk] = false;
+}
+
+function scrollClassReportSidebarStudentIntoView(studentFullName) {
+    const want = String(studentFullName || '').trim().toLowerCase();
+    let target = null;
+    document.querySelectorAll('.class-report-student-item').forEach((li) => {
+        if (String(li.dataset.studentName || '').trim().toLowerCase() === want) target = li;
+    });
+    if (!target) return;
+    expandClassReportSidebarGroupIfNeededForEl(target);
+    try {
+        target.scrollIntoView({ block: 'nearest', behavior: 'smooth', inline: 'nearest' });
+    } catch {
+        target.scrollIntoView();
+    }
+}
+
+/**
+ * Teacher / admin: calendar name chip — highlight (only) that student in the Class Report sidebar list.
+ * Does not open the feed panel or change the main calendar layout.
+ */
+function highlightClassReportSidebarStudentFromCalendarChip(studentFullName) {
+    const name = String(studentFullName || '').trim();
+    if (!name || !isStudentName(name)) return;
+    if (!((isTeacherLoggedIn || isAdminLoggedIn) && !loggedInStudentFullName)) return;
+
+    applyClassReportSidebarStudentHighlight(name);
+    window.requestAnimationFrame(() => scrollClassReportSidebarStudentIntoView(name));
+}
+
 function removeStudentClassReportRowAt(studentName, index) {
     if (!canEditFeed()) {
         console.warn('Permission denied: students cannot delete feed content.');
@@ -6144,7 +6379,11 @@ function removeStudentClassReportRowAt(studentName, index) {
         delete studentClassReportRows[studentName];
     }
     saveStudentClassReportRows();
-    if (currentTeacher === studentName && isStudentName(studentName)) {
+    const focus = String(classReportFocusStudentName || '').trim();
+    if (
+        (currentTeacher === studentName && isStudentName(studentName)) ||
+        (focus && focus === studentName)
+    ) {
         renderStudentClassReportTable(studentName);
     }
 }
@@ -6466,9 +6705,52 @@ function shouldMaskSuperviseeScheduleAvailabilityOnly() {
     );
 }
 
+function isTeacherViewingStudentCalendar() {
+    return (
+        !loggedInStudentFullName &&
+        isTeacherLoggedIn &&
+        !!currentTeacher &&
+        isStudentName(currentTeacher)
+    );
+}
+
+function clearCalendarTeacherAggregateOverlay() {
+    calendarTeacherAggregateOverlay = null;
+    calendarTeacherAggregateOverlayTutorKey = '';
+}
+
+function refreshCalendarTeacherAggregateOverlay() {
+    const tutorKey = String(calendarTeacherAggregateOverlayTutorKey || '').trim();
+    if (!tutorKey || !isActiveTeacherName(tutorKey)) {
+        clearCalendarTeacherAggregateOverlay();
+        return;
+    }
+    const tutorSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
+    teacherUnavailableStudentNamesByTeacher[tutorKey] = getUnavailableStudentNamesMetaFromSchedule(tutorSchedule);
+    calendarTeacherAggregateOverlay = computeSlotStatesForProfile(tutorKey);
+}
+
+function mergeTeacherStudentViewDisplaySlot(studentSlot, aggregateSlot) {
+    const classToken =
+        getClassOrExtraTokenFromSlotState(studentSlot) ||
+        getClassOrExtraTokenFromSlotState(aggregateSlot);
+    const resolved = resolveScheduleSlotPriority(classToken, aggregateSlot, { studentSlot });
+    return resolved ?? studentSlot ?? aggregateSlot ?? null;
+}
+
+function getCalendarProfileKeyForTeacherMeta() {
+    if (isTeacherViewingStudentCalendar() && calendarTeacherAggregateOverlayTutorKey) {
+        return calendarTeacherAggregateOverlayTutorKey;
+    }
+    return currentTeacher;
+}
+
 function getDisplaySlotState(day, hour) {
     const key = `${day}-${hour}`;
-    const raw = slotStates[key] ?? null;
+    let raw = slotStates[key] ?? null;
+    if (isTeacherViewingStudentCalendar() && calendarTeacherAggregateOverlay) {
+        raw = mergeTeacherStudentViewDisplaySlot(raw, calendarTeacherAggregateOverlay[key]);
+    }
     if (isAdminLoggedIn) return raw;
     if (!shouldMaskSuperviseeScheduleAvailabilityOnly()) return raw;
     const low = String(raw || '').trim().toLowerCase();
@@ -6977,6 +7259,7 @@ function saveRoster() {
         schoolThemeColors,
         schoolBillingModels,
         schoolBillingConfigs,
+        schoolScheduleProfiles,
         calendarToolbarExternalLink,
         passportLinks: passportFollowupLinks,
         passportHeaderPageLink,
@@ -7017,8 +7300,7 @@ let currentTeacher = null;
 // Store slot states for current teacher (working copy)
 let slotStates = {};
 
-// Left-click toggles only availability (no red step)
-const STATE_CYCLE = [null, 'available'];
+// Left-click on teacher calendar: empty ↔ available (green) only; other slot types unchanged.
 /** Tutor/teacher grid: booked class slot (yellow); assigned name in `__unavailableStudentNames` meta. */
 const BOOKED_CLASS_SLOT_STATE = 'booked';
 
@@ -7080,6 +7362,27 @@ function withUnavailableStudentNamesMeta(teacherName, schedule) {
     }
     next[TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = cleaned;
     return next;
+}
+
+/**
+ * Keeps `__unavailableStudentNames` aligned with slot states after student→teacher aggregate sync
+ * (e.g. booked meta must not remain when the cell became a school class color).
+ * @param {Record<string, string>} meta
+ * @param {Record<string, string | null | undefined>} slotMap
+ */
+function pruneUnavailableStudentMetaForSlotMap(meta, slotMap) {
+    const out = {};
+    const m = meta && typeof meta === 'object' ? meta : {};
+    for (const [slotKey, studentName] of Object.entries(m)) {
+        const key = String(slotKey || '').trim();
+        const name = String(studentName || '').trim();
+        if (!key || !name) continue;
+        const st = String(slotMap[key] ?? '').trim().toLowerCase();
+        if (st === 'unavailable' || st === 'rescheduled' || st === BOOKED_CLASS_SLOT_STATE) {
+            out[key] = name;
+        }
+    }
+    return out;
 }
 
 // Cloudflare API endpoint
@@ -7325,7 +7628,6 @@ async function pollRosterUpdates() {
             console.warn('Roster poll: could not stringify remote roster, re-applying.', e);
             await initRoster(rosterObj);
             rosterLastUpdateTimestamp = remoteTimestamp;
-            syncSpeakOnWeeklyToAllTeacherSchedules();
             renderSidebar();
             resyncSelectionAfterSidebarRender();
             if (String(loggedInStudentFullName || '').trim()) {
@@ -7345,7 +7647,6 @@ async function pollRosterUpdates() {
 
         await initRoster(rosterObj);
         rosterLastUpdateTimestamp = remoteTimestamp;
-        syncSpeakOnWeeklyToAllTeacherSchedules();
         renderSidebar();
         resyncSelectionAfterSidebarRender();
         if (studentLoggedIn) {
@@ -7679,7 +7980,6 @@ function startPolling() {
                                         console.log('Data changed - updating from cloud');
                                         Object.assign(teacherSchedules, schedules);
                                         applyTeacherDataIsolationInMemory();
-                                        syncSpeakOnWeeklyToAllTeacherSchedules();
 
                                         updateSyncStatus('synced', '✓ Updated from cloud');
                                         setTimeout(() => {
@@ -8085,6 +8385,7 @@ function performTeacherSessionLogout() {
     isAdminLoggedIn = false;
     loggedInTeacherName = '';
     loggedInStudentFullName = '';
+    classReportFocusStudentName = '';
     currentTeacher = null;
     clearSavedLoginCredentials();
     broadcastSessionLogoutToOtherTabs();
@@ -8557,7 +8858,7 @@ function renderSidebar() {
     const studentGroups = new Map();
     const rosterScopeStudents = getStudentNamesVisibleInNavigation();
     rosterScopeStudents.forEach((name) => {
-        const school = getStudentSchoolName(name) || 'HomeTeachers';
+        const school = getStudentSchoolName(name) || getDefaultSchoolTitle();
         const key = school.trim().toLowerCase();
         if (!studentGroups.has(key)) {
             studentGroups.set(key, {
@@ -8580,7 +8881,7 @@ function renderSidebar() {
         if (
             scopedTeacher &&
             !rosterScopeStudents.some(
-                (n) => (getStudentSchoolName(n) || 'HomeTeachers').trim().toLowerCase() === key
+                (n) => (getStudentSchoolName(n) || getDefaultSchoolTitle()).trim().toLowerCase() === key
             )
         ) {
             return;
@@ -8602,7 +8903,6 @@ function renderSidebar() {
             itemClass: group.rosterKey === 'passport' ? 'category-passport' : (group.rosterKey === 'speakon' ? 'category-speakon' : 'category-private'),
             deletable: true,
             parent: studentsInner,
-            usesSchoolLinkHeader: schoolSectionUsesPassportStyleHeader(group.title)
         }))
         .filter((g) => !loggedInStudentFullName || g.names.length > 0)
         .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
@@ -8978,7 +9278,11 @@ function populateClassReportStudentLists(container) {
                 itemContent.appendChild(actionsWrap);
                 itemContent.appendChild(studentNameLabel);
                 li.appendChild(itemContent);
-                if (classReportVisible && currentTeacher === name && isStudentName(name)) {
+                const selectedForSidebar = String(classReportFocusStudentName || '').trim();
+                const fallbackStudent =
+                    classReportVisible && isStudentName(currentTeacher) ? String(currentTeacher).trim() : '';
+                const effectiveSelect = selectedForSidebar || fallbackStudent;
+                if (classReportVisible && effectiveSelect === name && isStudentName(name)) {
                     li.classList.add('class-report-student-item--active');
                 }
                 li.addEventListener('click', () => selectTeacher(name, { view: 'classReport' }));
@@ -9062,7 +9366,7 @@ function populateClassReportStudentLists(container) {
     const grouped = new Map();
     const rosterScopeStudents = getStudentNamesVisibleInNavigation();
     rosterScopeStudents.forEach((name) => {
-        const school = getStudentSchoolName(name) || 'HomeTeachers';
+        const school = getStudentSchoolName(name) || getDefaultSchoolTitle();
         const key = school.trim().toLowerCase();
         if (!grouped.has(key)) {
             grouped.set(key, { title: school, names: [], kind: rosterKindFromSchoolName(school) });
@@ -9081,7 +9385,7 @@ function populateClassReportStudentLists(container) {
         if (
             scopedTeacher &&
             !rosterScopeStudents.some(
-                (n) => (getStudentSchoolName(n) || 'HomeTeachers').trim().toLowerCase() === key
+                (n) => (getStudentSchoolName(n) || getDefaultSchoolTitle()).trim().toLowerCase() === key
             )
         ) {
             return;
@@ -9745,7 +10049,6 @@ function removeGateStaffAccountByProfile(profileNameRaw, expectedAppRole) {
     saveRoster();
     if (expectedAppRole === 'class-supervisor') {
         markSchedulePendingCloudUpload();
-        syncSpeakOnWeeklyToAllTeacherSchedules();
         saveAllSchedulesLocal();
         saveAllSchedules();
     }
@@ -9849,7 +10152,6 @@ function removeAccountFromAdmin(role, name) {
         saveRoster();
         saveStudentClassReportRows();
         void flushClassReportReplaceManifestFromMemory();
-        syncSpeakOnWeeklyToAllTeacherSchedules();
         saveAllSchedulesLocal();
         saveAllSchedules();
         renderSidebar();
@@ -9885,7 +10187,6 @@ async function setAdminDashboard() {
         if (fresh && typeof fresh === 'object' && !Array.isArray(fresh)) {
             await initRoster(fresh);
             applyTeacherDataIsolationInMemory();
-            syncSpeakOnWeeklyToAllTeacherSchedules();
         }
     } catch {
         /* keep in-memory roster if cloud refresh fails */
@@ -10037,6 +10338,7 @@ function stripUnusedCustomSchoolProfiles() {
         delete schoolThemeColors[sk];
         delete schoolBillingModels[sk];
         delete schoolBillingConfigs[sk];
+        delete schoolScheduleProfiles[sk];
         delete googleMeetSharedLinkModeBySchoolKey[sk];
         delete classReportCollapsedBySchool[sk];
         return false;
@@ -10082,6 +10384,7 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
     delete schoolThemeColors[schoolKey];
     delete schoolBillingModels[schoolKey];
     delete schoolBillingConfigs[schoolKey];
+    delete schoolScheduleProfiles[schoolKey];
     delete googleMeetSharedLinkModeBySchoolKey[schoolKey];
 
     if (currentTeacher && removedKeys.has(currentTeacher.trim().toLowerCase())) {
@@ -10364,6 +10667,10 @@ function saveSchoolSettingsFromModal() {
         if (Object.prototype.hasOwnProperty.call(schoolBillingConfigs, schoolKey)) {
             schoolBillingConfigs[nextSchoolKey] = { ...(schoolBillingConfigs[schoolKey] || {}) };
             delete schoolBillingConfigs[schoolKey];
+        }
+        if (Object.prototype.hasOwnProperty.call(schoolScheduleProfiles, schoolKey)) {
+            schoolScheduleProfiles[nextSchoolKey] = { ...(schoolScheduleProfiles[schoolKey] || {}) };
+            delete schoolScheduleProfiles[schoolKey];
         }
         if (Object.prototype.hasOwnProperty.call(googleMeetSharedLinkModeBySchoolKey, schoolKey)) {
             googleMeetSharedLinkModeBySchoolKey[nextSchoolKey] = !!googleMeetSharedLinkModeBySchoolKey[schoolKey];
@@ -10701,7 +11008,6 @@ async function initTeachers() {
     applyTeacherDataIsolationInMemory();
     await loadAllSchedules();
     applyTeacherDataIsolationInMemory();
-    syncSpeakOnWeeklyToAllTeacherSchedules();
     renderSidebar();
     setupTeacherListEditDelegation();
     setupSidebarAdminLogoffDelegation();
@@ -10748,7 +11054,13 @@ function selectTeacher(teacherName, opts) {
     }
 
     if (loggedInStudentFullName) {
-        if (String(teacherName || '').trim().toLowerCase() !== String(loggedInStudentFullName).trim().toLowerCase()) {
+        const mine = String(loggedInStudentFullName || '').trim();
+        const tn = String(teacherName || '').trim();
+        const req = opts && opts.view;
+        const isOwn = tn.toLowerCase() === mine.toLowerCase();
+        const allowPick =
+            isOwn || (req === 'classReport' && isStudentName(tn) && areStudentsSameTutorCohort(mine, tn));
+        if (!allowPick) {
             showAppMessage('You can only view your own schedule.');
             return;
         }
@@ -10771,6 +11083,12 @@ function selectTeacher(teacherName, opts) {
         showClassReport = isStudentName(teacherName);
     } else {
         showClassReport = isStudentName(teacherName);
+    }
+
+    if (showClassReport && isStudentName(teacherName)) {
+        classReportFocusStudentName = String(teacherName || '').trim();
+    } else {
+        classReportFocusStudentName = '';
     }
 
     let scheduleLoadKey = String(teacherName || '').trim();
@@ -10832,7 +11150,12 @@ function resyncSelectionAfterSidebarRender() {
     if (!isTeacherLoggedIn) return;
     const reportPanel = document.getElementById('studentClassReportPanel');
     const classReportVisible = reportPanel && !reportPanel.hidden;
-    const sidebarName = String(loggedInStudentFullName || currentTeacher || '').trim();
+    const focus = String(classReportFocusStudentName || '').trim();
+    const sidebarName = String(
+        classReportVisible && focus && isStudentName(focus)
+            ? focus
+            : loggedInStudentFullName || currentTeacher || ''
+    ).trim();
     if (!sidebarName) return;
     const opts =
         classReportVisible && isStudentName(sidebarName) ? { view: 'classReport' } : { view: 'calendar' };
@@ -10885,7 +11208,6 @@ function removeStudentFromRoster(name, rosterKey) {
     delete studentCountryByName[removedName];
     saveStudentClassReportRows();
     void flushClassReportReplaceManifestFromMemory();
-    syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
 
@@ -11312,7 +11634,6 @@ function openEditStudentModal(studentName, rosterKey) {
     const levelInput = document.getElementById('editStudentLevel');
     const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
-    const passportLinkInput = document.getElementById('editStudentPassportLink');
     const originalNameInput = document.getElementById('editStudentOriginalName');
     const originalCategoryInput = document.getElementById('editStudentOriginalCategory');
     if (!modal || !firstInput || !lastInput || !phoneInput || !phoneCountrySelect || !schoolSelect || !originalNameInput || !originalCategoryInput) {
@@ -11320,7 +11641,15 @@ function openEditStudentModal(studentName, rosterKey) {
     }
 
     const parsed = splitName(studentName);
-    const currentSchool = getStudentSchoolName(studentName) || (rosterKey === 'passport' ? 'Passport' : (rosterKey === 'speakon' ? 'SpeakOn' : 'HomeTeachers'));
+    const currentSchool =
+        getStudentSchoolName(studentName) ||
+        getSchoolTitleForScheduleMode(
+            rosterKey === 'passport'
+                ? SCHOOL_SCHEDULE_MODE.CLASS_ONLY
+                : rosterKey === 'speakon'
+                  ? SCHOOL_SCHEDULE_MODE.WEEKLY
+                  : SCHOOL_SCHEDULE_MODE.STANDARD
+        );
     firstInput.value = parsed.first;
     lastInput.value = parsed.last;
     if (countryInput) resetPhoneCountryDialSyncState(countryInput);
@@ -11339,7 +11668,9 @@ function openEditStudentModal(studentName, rosterKey) {
     if (ageInput) ageInput.value = String(studentAgesByName[studentName] || '');
     syncEditStudentAgeFromBirthDate();
     if (levelInput) levelInput.value = String(studentLevelsByName[studentName] || '');
-    if (usernameInput) usernameInput.value = String(studentUsernamesByName[studentName] || buildDefaultStudentUsernameFromFullName(studentName));
+    if (usernameInput) {
+        syncStudentUsernameFromNameFields(firstInput, lastInput, usernameInput);
+    }
     if (passwordInput) passwordInput.value = '';
     if (passportLinkInput) passportLinkInput.value = String(passportFollowupLinks[studentName] || '');
     const externalFollowUpEl = document.getElementById('editStudentExternalFollowUpLink');
@@ -11405,7 +11736,6 @@ async function upsertStudentFromEditForm(action = 'save') {
     const email = String(document.getElementById('editStudentEmail')?.value || '').trim();
     const username = String(document.getElementById('editStudentUsername')?.value || '').trim();
     const nextPasswordRaw = String(document.getElementById('editStudentPassword')?.value || '').trim();
-    const passportLink = String(document.getElementById('editStudentPassportLink')?.value || '').trim();
     const nextSchool = String(schoolName || '').trim();
     const nextKind = rosterKindFromSchoolName(nextSchool);
     const birthDateValue = String(document.getElementById('editStudentBirthDate')?.value || '').trim();
@@ -11660,61 +11990,6 @@ async function upsertStudentFromEditForm(action = 'save') {
         currentTeacher = fullName;
     }
 
-    const classDayInput = document.getElementById('editStudentSpeakonClassDay');
-    const classHourInput = document.getElementById('editStudentSpeakonClassHour');
-    const extraDayInput = document.getElementById('editStudentSpeakonExtraDay');
-    const extraHourInput = document.getElementById('editStudentSpeakonExtraHour');
-    const hasScheduleInputs = !!(classDayInput && classHourInput && extraDayInput && extraHourInput);
-    const shouldEditSpeakonSchedule = nextKind === 'speakon' && hasScheduleInputs;
-
-    if (nextKind === 'speakon') {
-        if (originalName !== fullName && speakonStudentWeeklyClass[originalName]) {
-            speakonStudentWeeklyClass[fullName] = speakonStudentWeeklyClass[originalName];
-            delete speakonStudentWeeklyClass[originalName];
-        }
-        if (shouldEditSpeakonSchedule) {
-            const bucket = {
-                classDay: String(classDayInput.value || '').trim(),
-                classHour: String(classHourInput.value || '').trim(),
-                extraDay: String(extraDayInput.value || '').trim(),
-                extraHour: String(extraHourInput.value || '').trim()
-            };
-            const templateEmpty =
-                !bucket.classDay &&
-                !String(bucket.classHour || '').trim() &&
-                !bucket.extraDay &&
-                !String(bucket.extraHour || '').trim();
-            const speakonCanonical =
-                speakonStudentsList.find((n) => n.trim().toLowerCase() === fullName.trim().toLowerCase()) || fullName;
-            if (templateEmpty) {
-                Object.keys(speakonStudentWeeklyClass).forEach((k) => {
-                    if (String(k || '').trim().toLowerCase() === fullName.trim().toLowerCase()) {
-                        delete speakonStudentWeeklyClass[k];
-                    }
-                });
-                const ts = { ...(teacherSchedules[fullName] || {}) };
-                teacherSchedules[fullName] = stripSpeakonColorsFromScheduleCopy(ts);
-            } else {
-                Object.keys(speakonStudentWeeklyClass).forEach((k) => {
-                    if (
-                        k !== speakonCanonical &&
-                        String(k || '').trim().toLowerCase() === speakonCanonical.trim().toLowerCase()
-                    ) {
-                        delete speakonStudentWeeklyClass[k];
-                    }
-                });
-                speakonStudentWeeklyClass[speakonCanonical] = bucket;
-            }
-        }
-    }
-
-    if (shouldEditSpeakonSchedule) {
-        if (teacherSchedules[fullName]) {
-            teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy(teacherSchedules[fullName], fullName);
-        } else {
-            teacherSchedules[fullName] = mergeSpeakonWeeklyClassIntoScheduleCopy({}, fullName);
-        }
-    }
     const reportPanelEl = document.getElementById('studentClassReportPanel');
     const classReportOpen = reportPanelEl && !reportPanelEl.hidden;
     if (loggedInStudentFullName) {
@@ -11727,10 +12002,8 @@ async function upsertStudentFromEditForm(action = 'save') {
             }
         }
     } else if (currentTeacher && currentTeacher.trim().toLowerCase() === fullName.trim().toLowerCase()) {
-        slotStates = { ...teacherSchedules[fullName] };
+        loadTeacherSchedule(fullName);
     }
-
-    syncSpeakOnWeeklyToAllTeacherSchedules();
 
     if (loggedInStudentFullName && !classReportOpen) {
         loadTeacherSchedule(String(loggedInStudentFullName).trim());
@@ -11746,7 +12019,6 @@ async function upsertStudentFromEditForm(action = 'save') {
     } else {
         selectTeacher(teachersList[0] || fullName);
     }
-    syncSpeakOnWeeklyToAllTeacherSchedules();
     saveAllSchedulesLocal();
     saveAllSchedules();
     const selfStudent = String(loggedInStudentFullName || '').trim();
@@ -11872,6 +12144,7 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, bi
     );
     schoolBillingModels[k] = billingModel;
     schoolBillingConfigs[k] = { ...billingConfig };
+    setSchoolScheduleProfile(schoolName, SCHOOL_SCHEDULE_MODE.STANDARD);
 
     customSchoolsList.push(schoolName);
     customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
@@ -12469,276 +12742,6 @@ function handleEditStudentPhoneCountryChanged() {
     );
 }
 
-function updateAddStudentPassportFieldVisibility() {
-    const teacherNameRow = document.getElementById('addTeacherNameRow');
-    const teacherHeaderRow = document.getElementById('addTeacherHeaderRow');
-    const studentNameRow = document.getElementById('addStudentNameRow');
-    const studentHeaderRow = document.getElementById('addStudentHeaderRow');
-    const studentFields = document.getElementById('addStudentFields');
-    const schoolFields = document.getElementById('addSchoolFields');
-    const teacherFields = document.getElementById('addTeacherFields');
-    const teacherFirstInput = document.getElementById('addTeacherFirst');
-    const teacherLastInput = document.getElementById('addTeacherLast');
-    const teacherPhoneInput = document.getElementById('addTeacherPhone');
-    const studentFirstInput = document.getElementById('addStudentFirst');
-    const studentLastInput = document.getElementById('addStudentLast');
-    const studentPhoneInput = document.getElementById('addStudentPhone');
-    const schoolWrap = document.getElementById('addStudentGroupWrap');
-    const cityInput = document.getElementById('addStudentCity');
-    const countryInput = document.getElementById('addStudentCountry');
-    const teacherContactRow = document.getElementById('addTeacherContactRow');
-    const studentContactRow = document.getElementById('addStudentContactRow');
-    const contactCityWrap = document.getElementById('addStudentContactCityWrap');
-    const contactCountryWrap = document.getElementById('addStudentContactCountryWrap');
-    const accountWrap = document.getElementById('addStudentAccountWrap');
-    const studentEmailInput = document.getElementById('addStudentEmail');
-    const studentUsernameInput = document.getElementById('addStudentUsername');
-    const studentPasswordInput = document.getElementById('addStudentPassword');
-    const schoolInput = document.getElementById('addSchoolNameInput');
-    const schoolSelect = document.getElementById('addStudentGroupSelect');
-    const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
-    const teacherPhoneCountrySelect = document.getElementById('addTeacherPhoneCountry');
-    const teacherEmailWrap = document.getElementById('addTeacherEmailWrap');
-    const teacherEmailInput = document.getElementById('addTeacherEmail');
-    const teacherPasswordInput = document.getElementById('addTeacherPassword');
-    const passportLinkWrap = document.getElementById('addStudentPassportLinkWrap');
-    const passportLinkInput = document.getElementById('addStudentPassportLink');
-    const teacherWrap = document.getElementById('addStudentMentorWrap');
-    const teacherSelect = document.getElementById('addStudentMentor');
-    const addStudentMentorRow = document.getElementById('addStudentMentorRow');
-    const schoolReadonlyWrap = document.getElementById('addStudentSchoolReadonlyWrap');
-    const schoolReadonlyText = document.getElementById('addStudentSchoolReadonly');
-    const schoolFieldLabel = document.querySelector('.add-student-group-field-label');
-    const addSchoolExternalWrap = document.getElementById('addSchoolExternalWrap');
-    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
-    const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
-    const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
-    const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
-    const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
-    const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
-    const dialog = getAddModalDialogEl();
-    const submitBtn = document.getElementById('addStudentFormSubmit');
-    if (!dialog || !schoolInput || !schoolSelect) return;
-
-    const isTeacherMode = addModalMode === 'teacher';
-    const isStudentEntryMode = addModalMode === 'student-entry';
-    const isStudentGlobalMode = addModalMode === 'student-global';
-    const isAddSchoolMode = addModalMode === 'school';
-    const showStudentFields = isStudentEntryMode || isStudentGlobalMode;
-    const useNameFields = isTeacherMode || isStudentEntryMode;
-    const useNameFieldsAny = useNameFields || isStudentGlobalMode;
-    const modal = document.getElementById('addModal');
-
-    if (modal) {
-        modal.classList.toggle('add-modal--student', showStudentFields);
-        modal.classList.toggle('add-modal--teacher', isTeacherMode);
-        modal.classList.toggle('add-modal--school', isAddSchoolMode);
-    }
-
-    if (teacherContactRow) {
-        teacherContactRow.classList.toggle('is-hidden', !isTeacherMode);
-        teacherContactRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
-    }
-
-    if (studentContactRow) {
-        studentContactRow.classList.toggle('is-hidden', !showStudentFields);
-        studentContactRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-    }
-    if (studentHeaderRow) {
-        studentHeaderRow.classList.toggle('is-hidden', !showStudentFields);
-        studentHeaderRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-    }
-    if (teacherHeaderRow) {
-        teacherHeaderRow.classList.toggle('is-hidden', !isTeacherMode);
-        teacherHeaderRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
-    }
-    if (teacherFields) {
-        teacherFields.classList.toggle('is-hidden', !isTeacherMode);
-        teacherFields.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
-    }
-    if (contactCityWrap) {
-        contactCityWrap.classList.toggle('is-hidden', !showStudentFields);
-        contactCityWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-    }
-    if (contactCountryWrap) {
-        contactCountryWrap.classList.toggle('is-hidden', !showStudentFields);
-        contactCountryWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-    }
-    if (accountWrap) {
-        accountWrap.classList.toggle('is-hidden', !showStudentFields);
-        accountWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-    }
-    if (!showStudentFields) {
-        if (studentEmailInput) studentEmailInput.value = '';
-        if (studentUsernameInput) studentUsernameInput.value = buildDefaultStudentUsername('', '');
-        if (studentPasswordInput) {
-            studentPasswordInput.value = '';
-        }
-        if (cityInput) cityInput.value = '';
-        if (countryInput) countryInput.value = '';
-    }
-
-    if (studentFields) {
-        studentFields.classList.toggle('is-hidden', !showStudentFields);
-        studentFields.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-    }
-    if (schoolFields) {
-        schoolFields.classList.toggle('is-hidden', !isAddSchoolMode);
-        schoolFields.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
-    }
-
-    const showStudentTeacherField = isStudentEntryMode || isStudentGlobalMode;
-    if (teacherWrap && teacherSelect) {
-        teacherWrap.classList.toggle('is-hidden', !showStudentTeacherField);
-        teacherWrap.setAttribute('aria-hidden', showStudentTeacherField ? 'false' : 'true');
-        if (showStudentTeacherField) {
-            refreshAddStudentTeacherSelect(teacherSelect.value);
-        } else {
-            teacherSelect.value = '';
-        }
-    }
-    if (addStudentMentorRow) {
-        addStudentMentorRow.classList.toggle('is-hidden', isTeacherMode);
-        addStudentMentorRow.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
-    }
-    if (teacherNameRow && teacherFirstInput && teacherLastInput) {
-        teacherNameRow.classList.toggle('is-hidden', !isTeacherMode);
-        teacherNameRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
-        teacherFirstInput.required = isTeacherMode;
-        teacherLastInput.required = isTeacherMode;
-        if (teacherPhoneInput) teacherPhoneInput.required = isTeacherMode;
-        if (!isTeacherMode) {
-            teacherFirstInput.value = '';
-            teacherLastInput.value = '';
-            if (teacherPhoneInput) teacherPhoneInput.value = '';
-            if (teacherPhoneCountrySelect) {
-                teacherPhoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
-                updateAddTeacherPhonePlaceholder();
-            }
-        }
-    }
-    if (studentNameRow && studentFirstInput && studentLastInput) {
-        studentNameRow.classList.toggle('is-hidden', !showStudentFields);
-        studentNameRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
-        studentFirstInput.required = showStudentFields;
-        studentLastInput.required = showStudentFields;
-        if (!showStudentFields) {
-            studentFirstInput.value = '';
-            studentLastInput.value = '';
-            if (studentPhoneInput) studentPhoneInput.value = '';
-            if (phoneCountrySelect) {
-                phoneCountrySelect.value = DEFAULT_PHONE_COUNTRY_ISO;
-                updateAddStudentPhonePlaceholder();
-            }
-        }
-    }
-    if (teacherEmailWrap && teacherEmailInput) {
-        teacherEmailWrap.classList.toggle('is-hidden', !isTeacherMode);
-        teacherEmailWrap.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
-        teacherEmailInput.required = isTeacherMode;
-        if (teacherPasswordInput) teacherPasswordInput.required = isTeacherMode;
-        if (!isTeacherMode) {
-            teacherEmailInput.value = '';
-            if (teacherPasswordInput) teacherPasswordInput.value = '';
-        }
-    }
-    const showLocationRow = isStudentGlobalMode;
-    if (schoolWrap) {
-        schoolWrap.classList.toggle('is-hidden', !showLocationRow);
-        schoolWrap.setAttribute('aria-hidden', showLocationRow ? 'false' : 'true');
-    }
-    if (!showLocationRow) {
-        if (schoolReadonlyWrap) {
-            schoolReadonlyWrap.classList.add('is-hidden');
-            schoolReadonlyWrap.setAttribute('aria-hidden', 'true');
-        }
-        if (schoolReadonlyText) schoolReadonlyText.textContent = '';
-    }
-
-    const useSchoolSelect = isStudentGlobalMode;
-    const showSchoolReadonly = isStudentEntryMode;
-
-    if (schoolReadonlyWrap && schoolReadonlyText) {
-        if (showSchoolReadonly && addStudentTargetSchool) {
-            schoolReadonlyText.textContent = addStudentTargetSchool;
-            schoolReadonlyWrap.classList.remove('is-hidden');
-            schoolReadonlyWrap.setAttribute('aria-hidden', 'false');
-        } else {
-            schoolReadonlyWrap.classList.add('is-hidden');
-            schoolReadonlyWrap.setAttribute('aria-hidden', 'true');
-            schoolReadonlyText.textContent = '';
-        }
-    }
-    if (schoolFieldLabel) {
-        schoolFieldLabel.classList.toggle('is-hidden', showSchoolReadonly);
-        schoolFieldLabel.setAttribute('aria-hidden', showSchoolReadonly ? 'true' : 'false');
-    }
-
-    if (schoolInput) {
-        schoolInput.required = isAddSchoolMode;
-        schoolInput.classList.toggle('is-hidden', !isAddSchoolMode);
-        schoolInput.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
-        if (!isAddSchoolMode) schoolInput.value = '';
-    }
-    if (schoolSelect) {
-        schoolSelect.classList.toggle('is-hidden', !useSchoolSelect);
-        schoolSelect.setAttribute('aria-hidden', useSchoolSelect ? 'false' : 'true');
-        schoolSelect.required = useSchoolSelect;
-        if (!useSchoolSelect) {
-            schoolSelect.value = '';
-        } else {
-            refreshAddStudentSchoolSelect(schoolSelect.value);
-            syncAddStudentModalThemeFromSchoolTitle(schoolSelect.value);
-        }
-    }
-
-    if (isStudentEntryMode && addStudentTargetSchool) {
-        syncAddStudentModalThemeFromSchoolTitle(addStudentTargetSchool);
-    }
-
-    if (addSchoolExternalWrap) {
-        addSchoolExternalWrap.classList.toggle('is-hidden', !isAddSchoolMode);
-        addSchoolExternalWrap.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
-    }
-    if (!isAddSchoolMode) {
-        if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;
-        if (addSchoolExternalPanel) {
-            addSchoolExternalPanel.classList.add('is-collapsed');
-            addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
-        }
-        if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
-        if (addSchoolBillingModel) {
-            addSchoolBillingModel.value = '';
-            addSchoolBillingModel.required = false;
-        }
-        closeAddSchoolColorPopup();
-        updateAddSchoolBillingExplainer();
-    }
-    if (isAddSchoolMode && addSchoolBillingModel) {
-        addSchoolBillingModel.required = true;
-    }
-
-    if (passportLinkWrap && passportLinkInput) {
-        const showPassportLink = showStudentFields;
-        passportLinkWrap.classList.toggle('is-visible', showPassportLink);
-        passportLinkWrap.setAttribute('aria-hidden', showPassportLink ? 'false' : 'true');
-        passportLinkInput.required = false;
-        if (!showPassportLink) {
-            passportLinkInput.value = '';
-        }
-    }
-    dialog.classList.toggle('add-modal-dialog--expanded', isTeacherMode);
-
-    if (submitBtn) {
-        submitBtn.textContent = isTeacherMode ? 'Add teacher' : ((isStudentEntryMode || isStudentGlobalMode) ? 'Add student' : 'Add school');
-    }
-    if (phoneCountrySelect && useNameFieldsAny) {
-        updateAddStudentPhonePlaceholder();
-    }
-    renderAddSchoolThemeSquares();
-    updateAddSchoolBillingExplainer();
-}
-
 function openAddStudentModal(mode = 'school') {
     if (!canManageRoster()) {
         denyStudentAction('Permission denied: students cannot manage roster records.');
@@ -12760,7 +12763,6 @@ function openAddStudentModal(mode = 'school') {
     const cityInput = document.getElementById('addStudentCity');
     const countryInput = document.getElementById('addStudentCountry');
     const studentPasswordInput = document.getElementById('addStudentPassword');
-    const passportLinkInput = document.getElementById('addStudentPassportLink');
     const teacherEmailInput = document.getElementById('addTeacherEmail');
     const teacherPasswordInput = document.getElementById('addTeacherPassword');
     const teacherPasswordGenerateBtn = document.getElementById('addTeacherPasswordGenerate');
@@ -12860,7 +12862,6 @@ function openAddStudentModal(mode = 'school') {
     updateAddStudentPhonePlaceholder();
     updateAddTeacherPhonePlaceholder();
     syncStudentUsernameFromNameFields(studentFirstInput, studentLastInput, studentUsernameInput);
-    updateAddStudentPassportFieldVisibility();
 
     openModalWithAnimation(modal);
     if (addModalMode === 'teacher' && teacherFirstInput) {
@@ -14247,7 +14248,6 @@ function setupAddStudentModal() {
     if (backdrop) {
         backdrop.addEventListener('click', () => closeAddStudentModal());
     }
-    schoolInput?.addEventListener('input', updateAddStudentPassportFieldVisibility);
     bindAddStudentUsernameAutoSync(studentFirstInput, studentLastInput, studentUsernameInput);
     if (modal.dataset.teacherUiBound !== '1') {
         modal.dataset.teacherUiBound = '1';
@@ -14440,15 +14440,18 @@ function saveTeacherSchedule(teacherName) {
     if (!teacherName) return;
     const copy = { ...slotStates };
     if (isActiveTeacherName(teacherName)) {
-        const nextTeacherSlots = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(copy);
+        const nextTeacherSlots = applyAllStudentColorsToTeacherScheduleCopy(copy, teacherName);
         teacherSchedules[teacherName] = withUnavailableStudentNamesMeta(teacherName, nextTeacherSlots);
     } else {
-        let next = mergeSpeakonWeeklyClassIntoScheduleCopy(copy, teacherName);
+        let next = mergeWeeklyClassIntoScheduleCopy(copy, teacherName);
         if (isStudentName(teacherName)) {
             next = stripTeacherAvailabilityFromStudentScheduleCopy(next);
         }
         teacherSchedules[teacherName] = next;
-        syncSpeakOnWeeklyToAllTeacherSchedules();
+        syncWeeklyClassToAllTeacherSchedules();
+        if (isTeacherViewingStudentCalendar()) {
+            refreshCalendarTeacherAggregateOverlay();
+        }
     }
     markSchedulePendingCloudUpload();
     saveAllSchedulesLocal();
@@ -14471,9 +14474,19 @@ function saveTeacherSchedule(teacherName) {
 function computeSlotStatesForProfile(name) {
     const raw = teacherSchedules[name] ? getScheduleSlotMapWithoutMeta(teacherSchedules[name]) : {};
     if (isActiveTeacherName(name)) {
-        return applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
+        return applyAllStudentColorsToTeacherScheduleCopy(raw, name);
     }
-    return mergeSpeakonWeeklyClassIntoScheduleCopy(raw, name);
+    return mergeWeeklyClassIntoScheduleCopy(raw, name);
+}
+
+/**
+ * Tutor aggregate cell state that should render as a scheduled class color (not availability / reposition).
+ */
+function isTutorSlotDisplayedClassColorState(tVal) {
+    const low = String(tVal ?? '').trim().toLowerCase();
+    if (!low || low === 'null' || low === 'available') return false;
+    if (low === 'unavailable' || low === 'rescheduled' || low === BOOKED_CLASS_SLOT_STATE) return false;
+    return !!(parseSchoolStateToken(low) || isLegacyOverlayState(low));
 }
 
 /**
@@ -14491,25 +14504,20 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
             const key = `${day}-${hour}`;
             const s = stu[key];
             const t = tut[key];
-            const sLow = s != null ? String(s).trim().toLowerCase() : '';
-            const tLow = t != null ? String(t).trim().toLowerCase() : '';
             const rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
-            if ((tLow === 'unavailable' || tLow === 'rescheduled') && rescheduledStudentName) {
-                // Student view should always display all rescheduled slots globally.
-                merged[key] = 'rescheduled';
+            const classToken =
+                getClassOrExtraTokenFromSlotState(s) ||
+                (isTutorSlotDisplayedClassColorState(t) ? t : null);
+            const mergedState = resolveScheduleSlotPriority(classToken, t, {
+                studentSlot: s,
+                rescheduledStudentName
+            });
+            merged[key] = mergedState;
+            if (mergedState === 'rescheduled' && rescheduledStudentName) {
                 visibleRescheduledNames[key] = rescheduledStudentName;
-            } else if (tLow === BOOKED_CLASS_SLOT_STATE) {
-                merged[key] = BOOKED_CLASS_SLOT_STATE;
+            } else if (mergedState === BOOKED_CLASS_SLOT_STATE) {
                 const nm = String(tutorUnavailableMeta[key] || '').trim();
                 if (nm) visibleRescheduledNames[key] = nm;
-            } else if (sLow && sLow !== 'available') {
-                merged[key] = s;
-            } else if (tLow === 'available') {
-                merged[key] = 'available';
-            } else if (s) {
-                merged[key] = s;
-            } else {
-                merged[key] = null;
             }
         }
     });
@@ -14523,22 +14531,30 @@ function loadTeacherSchedule(teacherName) {
     const raw = getScheduleSlotMapWithoutMeta(rawSchedule);
     const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(rawSchedule);
     studentVisibleRescheduledNamesBySlot = {};
-    if (
-        loggedInStudentFullName &&
-        String(teacherName || '').trim().toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()
-    ) {
-        const tutorKey = getTutorRosterNameForStudent(loggedInStudentFullName);
-        if (tutorKey) {
-            slotStates = mergeStudentCalendarWithTutorFreeSlots(loggedInStudentFullName, tutorKey);
+    clearCalendarTeacherAggregateOverlay();
+    if (isStudentName(teacherName)) {
+        const tutorKey = getTutorRosterNameForStudent(teacherName);
+        const selfSession =
+            String(loggedInStudentFullName || '').trim().toLowerCase() ===
+            String(teacherName || '').trim().toLowerCase();
+        // Tutor merge shows peers' class colors but must NOT be loaded when a teacher edits a student:
+        // saving that merged map would write other students' cells into this student's stored schedule.
+        if (tutorKey && selfSession) {
+            slotStates = mergeStudentCalendarWithTutorFreeSlots(teacherName, tutorKey);
             return;
+        }
+        // Teacher viewing a student under Schools: show the tutor master colors; keep slotStates as this student only.
+        if (tutorKey && isActiveTeacherName(tutorKey) && !loggedInStudentFullName) {
+            calendarTeacherAggregateOverlayTutorKey = tutorKey;
+            refreshCalendarTeacherAggregateOverlay();
         }
     }
     if (isActiveTeacherName(teacherName)) {
         teacherUnavailableStudentNamesByTeacher[teacherName] = unavailableMeta;
-        slotStates = applyAllSpeakOnStudentColorsToTeacherScheduleCopy(raw);
+        slotStates = applyAllStudentColorsToTeacherScheduleCopy(raw, teacherName);
         teacherSchedules[teacherName] = withUnavailableStudentNamesMeta(teacherName, { ...slotStates });
     } else {
-        slotStates = mergeSpeakonWeeklyClassIntoScheduleCopy(raw, teacherName);
+        slotStates = mergeWeeklyClassIntoScheduleCopy(raw, teacherName);
         if (isStudentName(teacherName)) {
             slotStates = stripTeacherAvailabilityFromStudentScheduleCopy(slotStates);
         }
@@ -14651,35 +14667,67 @@ function initCalendar() {
             slot.dataset.day = day;
             slot.dataset.hour = hour;
 
-            // Left click: student name chip scrolls sidebar; otherwise cycle slot state
             slot.addEventListener('click', (e) => {
                 if (e.button !== 0 && e.button != null) return;
-                const chip = e.target.closest('.time-slot-student-chip');
-                if (chip && slot.contains(chip)) {
-                    const sid = String(chip.dataset.studentId || '').trim();
-                    if (sid) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        scrollSidebarStudentIntoViewFromCalendarChip(sid);
-                    }
-                    return;
-                }
-                cycleSlotState(day, hour);
+                if (e.target.closest('.time-slot-student-chip')) return;
+                if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
+                cycleTeacherAvailabilitySlotState(day, hour);
             });
 
-            // Right click: show context menu
+            // Right click: student/school calendar → Class / Extra; teacher roster → Clear only.
             slot.addEventListener('contextmenu', (e) => {
-                const hasSchoolMenu = isCustomContextMenuEnabledForCurrentSelection();
-                const hasTeacherGreenMenu = isTeacherGreenCellContextMenuEnabled(day, hour);
-                if (!hasSchoolMenu && !hasTeacherGreenMenu) {
+                if (isCalendarSlotEmptyWhiteForContextMenu(day, hour)) {
+                    e.preventDefault();
+                    if (isCustomContextMenuEnabledForCurrentSelection()) {
+                        showContextMenu(e, day, hour, 'school');
+                        return;
+                    }
                     hideContextMenu();
                     return;
                 }
-                e.preventDefault();
-                showContextMenu(e, day, hour, hasTeacherGreenMenu ? 'teacher-green' : 'school');
+                const hasSchoolMenu = isCustomContextMenuEnabledForCurrentSelection();
+                const hasTeacherClearMenu = isTeacherCalendarClearContextMenuEnabled(day, hour);
+                if (hasSchoolMenu) {
+                    e.preventDefault();
+                    showContextMenu(e, day, hour, 'school');
+                    return;
+                }
+                if (hasTeacherClearMenu) {
+                    e.preventDefault();
+                    showContextMenu(e, day, hour, 'teacher-clear');
+                    return;
+                }
+                hideContextMenu();
             });
 
             timeSlotsContainer.appendChild(slot);
+        });
+    }
+
+    if (timeSlotsContainer && timeSlotsContainer.dataset.timeSlotStudentChipClickBound !== '1') {
+        timeSlotsContainer.dataset.timeSlotStudentChipClickBound = '1';
+        timeSlotsContainer.addEventListener('click', (e) => {
+            const chip = e.target && e.target.closest && e.target.closest('.time-slot-student-chip');
+            if (!chip || !timeSlotsContainer.contains(chip)) return;
+            if (!isTeacherLoggedIn) return;
+            const raw = String(chip.dataset.studentName || chip.title || '').trim();
+            if (!raw || !isStudentName(raw)) return;
+            if (loggedInStudentFullName) {
+                const mine = String(loggedInStudentFullName || '').trim();
+                if (
+                    raw.toLowerCase() !== mine.toLowerCase() &&
+                    !areStudentsSameTutorCohort(mine, raw)
+                ) {
+                    return;
+                }
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if ((isTeacherLoggedIn || isAdminLoggedIn) && !loggedInStudentFullName) {
+                highlightClassReportSidebarStudentFromCalendarChip(raw);
+                return;
+            }
+            selectTeacher(raw, { view: 'classReport' });
         });
     }
 
@@ -14703,20 +14751,6 @@ function initCalendar() {
             refreshStudentListScrollIndicatorsAfterLayout();
             return;
         }
-        const studentItem = e.target.closest('.context-submenu-student-item');
-        if (studentItem && contextMenu.contains(studentItem)) {
-            const list = studentItem.closest('.context-students-submenu-list');
-            list?.querySelectorAll('.context-submenu-student-item.is-selected').forEach((el) => el.classList.remove('is-selected'));
-            studentItem.classList.add('is-selected');
-            contextMenu.dataset.selectedStudent = String(studentItem.dataset.student || '').trim();
-            if (currentContextMenuMode === 'teacher-green' && currentSlot && currentTeacher) {
-                const selectedStudentName = String(studentItem.dataset.student || '').trim();
-                if (selectedStudentName && teacherBookGreenSlotForStudent(currentSlot.day, currentSlot.hour, selectedStudentName)) {
-                    hideContextMenu();
-                }
-                return;
-            }
-        }
         const item = e.target.closest('.context-menu-item, .context-submenu-item');
         if (!item || !contextMenu.contains(item)) return;
         const selectedSchool = String(item.dataset.school || '').trim();
@@ -14727,20 +14761,14 @@ function initCalendar() {
             showBookClassStudentsSubmenu(selectedSchool);
             return;
         }
-        const action = String(item.dataset.action || '').trim();
-        if (currentContextMenuMode === 'teacher-green' && action) {
-            handleTeacherGreenContextMenuAction(action);
-            if (action === 'book-school') {
-                hideContextMenu();
-                return;
-            }
-            if (action === 'set-class-reposition') {
-                return;
+        if (currentContextMenuMode === 'teacher-clear') {
+            const clearAction = String(item.dataset.action || '').trim();
+            if (clearAction === 'clear' && currentSlot) {
+                performTeacherGridClearScheduledClass(currentSlot.day, currentSlot.hour);
             }
             hideContextMenu();
             return;
         }
-        if (currentContextMenuMode === 'teacher-green') return;
         const color = item.dataset.color;
         if (!currentSlot || typeof color === 'undefined') {
             hideContextMenu();
@@ -15141,16 +15169,22 @@ function setSlotState(day, hour, state) {
         }
     }
 
-    if (isActiveTeacherName(currentTeacher)) {
-        const managedToken = getSchoolManagedTeacherStateTokenForSlot(currentTeacher, day, hour);
+    const managedProfileKey = getCalendarProfileKeyForTeacherMeta();
+    if (managedProfileKey && isActiveTeacherName(managedProfileKey)) {
+        const managedToken = getSchoolManagedTeacherStateTokenForSlot(managedProfileKey, day, hour);
         if (managedToken) {
             const normalizedNext = String(state || '').trim().toLowerCase();
-            const resolvedNext = resolveSchoolTokenInfoFromState(normalizedNext);
-            const normalizedManaged = String(managedToken || '').trim().toLowerCase();
-            const normalizedResolvedNext = String(resolvedNext?.token || normalizedNext || '').trim().toLowerCase();
-            if (normalizedResolvedNext !== normalizedManaged) {
-                showAppMessage('This class is managed by Schools and cannot be edited here.');
-                return;
+            // Clearing to empty, free (green), or availability: allow. Other colors must match Schools-managed token.
+            if (!normalizedNext || normalizedNext === 'null' || normalizedNext === 'available') {
+                /* allow */
+            } else {
+                const resolvedNext = resolveSchoolTokenInfoFromState(normalizedNext);
+                const normalizedManaged = String(managedToken || '').trim().toLowerCase();
+                const normalizedResolvedNext = String(resolvedNext?.token || normalizedNext || '').trim().toLowerCase();
+                if (normalizedResolvedNext !== normalizedManaged) {
+                    showAppMessage('This class is managed by Schools and cannot be edited here.');
+                    return;
+                }
             }
         }
     }
@@ -15187,16 +15221,13 @@ function setSlotState(day, hour, state) {
     
 }
 
-// Cycle through states on left click: null <-> available
-function cycleSlotState(day, hour) {
-    if (!currentTeacher) return;
-    if (isLoggedInStudentCalendarReadOnly()) {
-        const st = getSlotState(day, hour);
-        if (String(st || '').trim().toLowerCase() === 'available') {
-            openStudentRepositionModal(day, hour);
-        }
-        return;
-    }
+/**
+ * Teacher roster calendar only: first left-click sets availability (green); second clears to empty.
+ * Does not run on student/school calendars or on slots that already hold a class, booking, etc.
+ */
+function cycleTeacherAvailabilitySlotState(day, hour) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
+    if (isLoggedInStudentCalendarReadOnly()) return;
     if (isGateViewingAlienTeacherGrid()) {
         showAppMessage('Only the teacher adjusts availability here. Use the menu to book a class when allowed.');
         return;
@@ -15205,14 +15236,20 @@ function cycleSlotState(day, hour) {
         showAppMessage('This class is managed by Schools and cannot be edited here.');
         return;
     }
+    if (isTeacherSlotOccupiedForAvailability(day, hour)) {
+        return;
+    }
 
     const currentState = getSlotState(day, hour);
-    const currentIndex = STATE_CYCLE.indexOf(currentState);
-    const nextState = currentIndex === -1
-        ? 'available'
-        : STATE_CYCLE[(currentIndex + 1) % STATE_CYCLE.length];
-    
-    setSlotState(day, hour, nextState);
+    const curLow = String(currentState || '').trim().toLowerCase();
+    if (!currentState || curLow === '' || curLow === 'null') {
+        setSlotState(day, hour, 'available');
+        return;
+    }
+    if (curLow === 'available') {
+        setSlotState(day, hour, null);
+        return;
+    }
 }
 
 // Show context menu on right click
@@ -15383,9 +15420,9 @@ function refreshStudentListScrollIndicatorsAfterLayout() {
 }
 
 function getContextMenuSchoolConfig() {
-    let schoolTitle = 'HomeTeachers';
+    let schoolTitle = getDefaultSchoolTitle();
     if (currentTeacher && isStudentName(currentTeacher)) {
-        schoolTitle = getStudentSchoolName(currentTeacher) || 'HomeTeachers';
+        schoolTitle = getStudentSchoolName(currentTeacher) || getDefaultSchoolTitle();
     }
     const classState = makeSchoolStateToken(schoolTitle, 'class');
     const extraState = makeSchoolStateToken(schoolTitle, 'extra');
@@ -15400,7 +15437,13 @@ function getContextMenuSchoolConfig() {
 
 function getCalendarStatePaletteByContext() {
     const getSchoolForKindInTeacherView = (kind) => {
-        const defaultSchool = kind === 'passport' ? 'Passport' : (kind === 'speakon' ? 'SpeakOn' : 'HomeTeachers');
+        const defaultSchool = getSchoolTitleForScheduleMode(
+            kind === 'passport'
+                ? SCHOOL_SCHEDULE_MODE.CLASS_ONLY
+                : kind === 'speakon'
+                  ? SCHOOL_SCHEDULE_MODE.WEEKLY
+                  : SCHOOL_SCHEDULE_MODE.STANDARD
+        );
         if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return defaultSchool;
         const teacherSched = teacherSchedules[currentTeacher] || {};
         const relevantStudents = kind === 'passport'
@@ -15436,7 +15479,7 @@ function getCalendarStatePaletteByContext() {
         special: passportTheme.primary
     };
     if (currentTeacher && isStudentName(currentTeacher)) {
-        const schoolTitle = getStudentSchoolName(currentTeacher) || 'HomeTeachers';
+        const schoolTitle = getStudentSchoolName(currentTeacher) || getDefaultSchoolTitle();
         const schoolTheme = getSchoolTheme(schoolTitle);
         const states = getStudentOverlayStates(currentTeacher);
         if (states.classState) palette[states.classState] = schoolTheme.primary;
@@ -15543,72 +15586,10 @@ function refreshContextMenuTheme() {
     contextMenu.classList.remove('context-menu--book-submenu-expanded');
     contextMenu.classList.remove('context-menu--book-submenu-left');
     delete contextMenu.dataset.selectedStudent;
-    if (currentContextMenuMode === 'teacher-green') {
-        delete contextMenu.dataset.selectedSchool;
-        const schools = getAvailableSchoolNames();
-        const schoolItems = schools.length
-            ? schools
-                .map((schoolName, index) => {
-                    const safe = escapeHtmlAttr(String(schoolName || '').trim());
-                    const delay = ((index + 1) * 0.1).toFixed(2);
-                    const hasStudents = getStudentNamesForSchool(schoolName).length > 0;
-                    const chevron = hasStudents
-                        ? '<span class="context-submenu-item-chevron" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-submenu-item-chevron-icon"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg></span>'
-                        : '';
-                    return `<button type="button" class="context-submenu-item${hasStudents ? ' context-submenu-item--has-students' : ''}" style="--submenu-delay:${delay}s" data-action="book-school" data-school="${safe}"><span class="context-submenu-item-label">${safe}</span>${chevron}</button>`;
-                })
-                .join('')
-            : '<div class="context-submenu-empty">No schools available</div>';
+    if (currentContextMenuMode === 'teacher-clear') {
         contextMenu.innerHTML = `
-            <div class="context-menu-group">
-                <div class="context-menu-group-title">Schedule</div>
-                <div class="context-menu-item-with-submenu">
-                    <button type="button" class="context-menu-item context-menu-item--stacked context-menu-item--has-submenu context-menu-item--chevron-row">
-                        <span class="context-menu-label">Book class (Reposition)</span>
-                        <span class="context-menu-chevron-btn context-menu-chevron-btn--trigger" role="button" tabindex="0" aria-label="Open schools submenu to pick a student">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--right">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                            </svg>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--left">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                            </svg>
-                        </span>
-                    </button>
-                    <div class="context-submenu" role="menu" aria-label="Schools">
-                        <div class="context-submenu-col context-submenu-col--school-options">
-                            ${schoolItems}
-                        </div>
-                    </div>
-                    <div class="context-students-submenu" hidden>
-                        <div class="context-students-submenu-title"></div>
-                        <div class="context-students-submenu-scroll-indicator context-students-submenu-scroll-indicator--up" hidden aria-hidden="true">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-students-submenu-scroll-indicator-icon">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
-                            </svg>
-                        </div>
-                        <div class="context-students-submenu-list"></div>
-                        <div class="context-students-submenu-scroll-indicator context-students-submenu-scroll-indicator--down" hidden aria-hidden="true">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-students-submenu-scroll-indicator-icon">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-                <button type="button" class="context-menu-item context-menu-item--stacked context-menu-item--chevron-row" data-action="set-class-reposition">
-                    <span class="context-menu-label">All students…</span>
-                    <span class="context-menu-chevron-btn" aria-hidden="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--right">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="context-menu-chevron-icon context-menu-chevron-icon--left">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                        </svg>
-                    </span>
-                </button>
-            </div>
-            <div class="context-menu-group context-menu-group--separated">
-                <div class="context-menu-group-title">Slot Management</div>
-                <button type="button" class="context-menu-item context-menu-item--stacked" data-action="clear">
+            <div class="context-menu-row">
+                <button type="button" class="context-menu-item context-menu-item--compact" data-action="clear">
                     <span class="context-menu-label">Clear</span>
                 </button>
             </div>
@@ -15632,7 +15613,7 @@ function refreshContextMenuTheme() {
             </button>
         </div>
     `;
-    const rows = contextMenu.querySelectorAll('.context-menu-item');
+    const rows = contextMenu.querySelectorAll('.context-menu-row .context-menu-item--compact');
     if (rows[0]) rows[0].style.setProperty('--menu-option-color', cfg.classColor);
     if (rows[1]) rows[1].style.setProperty('--menu-option-color', cfg.extraColor);
 }
@@ -15678,7 +15659,7 @@ function selectAll() {
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
-                if (isSchoolManagedTeacherSlotLocked(day, hour)) {
+                if (isSchoolManagedTeacherSlotLocked(day, hour) || isTeacherSlotOccupiedForAvailability(day, hour)) {
                     return;
                 }
                 slotStates[key] = 'available';
@@ -15746,15 +15727,7 @@ function exportSchedule() {
     let text = `${currentTeacher.toUpperCase()}'S TEACHING AVAILABILITY SCHEDULE\n`;
     text += '='.repeat(50) + '\n\n';
     
-    const stateLabels = {
-        available: 'Available',
-        unavailable: 'Unavailable',
-        navy: 'HomeTeachers',
-        cyan: 'HomeTeachers (extra)',
-        magenta: 'SpeakOn',
-        salmon: 'SpeakOn (extra)',
-        special: 'Special Class'
-    };
+    const stateLabels = getLegacySlotExportLabels();
     
     let hasSelections = false;
     
@@ -15837,15 +15810,7 @@ function exportSchedulePDF() {
         special: [167, 155, 142]         // Special class
     };
     
-    const stateLabels = {
-        available: 'Available',
-        unavailable: 'Unavailable',
-        navy: 'HomeTeachers',
-        cyan: 'HomeTeachers (extra)',
-        magenta: 'SpeakOn',
-        salmon: 'SpeakOn (extra)',
-        special: 'Special Class'
-    };
+    const stateLabels = getLegacySlotExportLabels();
     
     // Title
     doc.setFontSize(18);
