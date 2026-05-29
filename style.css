@@ -8362,7 +8362,6 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 .context-menu-item.context-menu-item--stacked {
-    justify-content: space-between;
     border-radius: 5px;
 }
 
@@ -9554,7 +9553,6 @@ body.student-school-calendar .time-slot.state-available {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 168px;
 }
 
 .context-menu-school-slots .context-menu-item--compact {
