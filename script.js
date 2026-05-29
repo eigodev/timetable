@@ -4063,6 +4063,26 @@ function stripTeacherAvailabilityFromStudentScheduleCopy(sched) {
     return out;
 }
 
+/**
+ * Student schedule storage must only keep student-authored class/extra tokens.
+ * Tutor availability/reposition/booked states are view overlays and must not be persisted on student records.
+ */
+function stripTeacherOverlayStatesFromStudentScheduleCopy(sched) {
+    const out = { ...sched };
+    Object.keys(out).forEach((k) => {
+        const low = String(out[k] || '').trim().toLowerCase();
+        if (
+            low === 'available' ||
+            low === 'unavailable' ||
+            low === 'rescheduled' ||
+            low === BOOKED_CLASS_SLOT_STATE
+        ) {
+            delete out[k];
+        }
+    });
+    return out;
+}
+
 function isActiveTeacherName(name) {
     const n = String(name || '').trim().toLowerCase();
     if (!n) return false;
@@ -4411,10 +4431,16 @@ function getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state
         if (!nm || nm.trim().toLowerCase() !== selfLc) return '';
         return nm;
     }
-    const metaTeacher = getCalendarProfileKeyForTeacherMeta();
+    let metaTeacher = getCalendarProfileKeyForTeacherMeta();
+    if ((!metaTeacher || !isActiveTeacherName(metaTeacher)) && currentTeacher && isStudentName(currentTeacher)) {
+        metaTeacher = getTutorRosterNameForStudent(currentTeacher);
+    }
     if (!metaTeacher || !isActiveTeacherName(metaTeacher)) return '';
-    const byTeacher = teacherUnavailableStudentNamesByTeacher[metaTeacher];
-    if (!byTeacher || typeof byTeacher !== 'object') return '';
+    let byTeacher = teacherUnavailableStudentNamesByTeacher[metaTeacher];
+    if (!byTeacher || typeof byTeacher !== 'object') {
+        byTeacher = getUnavailableStudentNamesMetaFromSchedule(teacherSchedules[metaTeacher] || {});
+        teacherUnavailableStudentNamesByTeacher[metaTeacher] = byTeacher;
+    }
     return String(byTeacher[key] || '').trim();
 }
 
@@ -14448,6 +14474,7 @@ function saveTeacherSchedule(teacherName) {
         let next = mergeWeeklyClassIntoScheduleCopy(copy, teacherName);
         if (isStudentName(teacherName)) {
             next = stripTeacherAvailabilityFromStudentScheduleCopy(next);
+            next = stripTeacherOverlayStatesFromStudentScheduleCopy(next);
         }
         teacherSchedules[teacherName] = next;
         syncWeeklyClassToAllTeacherSchedules();
@@ -14662,8 +14689,20 @@ function initCalendar() {
             slot.addEventListener('click', (e) => {
                 if (e.button !== 0 && e.button != null) return;
                 if (e.target.closest('.time-slot-student-chip')) return;
-                if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
-                cycleTeacherAvailabilitySlotState(day, hour);
+                if (!currentTeacher) return;
+                if (isActiveTeacherName(currentTeacher)) {
+                    cycleTeacherAvailabilitySlotState(day, hour);
+                    return;
+                }
+                if (isLoggedInStudentCalendarReadOnly()) return;
+                const currentState = getSlotState(day, hour);
+                const normalized = String(currentState || '').trim().toLowerCase();
+                const resolvedToken = String(
+                    resolveSchoolTokenInfoFromState(normalized)?.token || normalized
+                ).trim().toLowerCase();
+                if (parseSchoolStateToken(resolvedToken) || isLegacyOverlayState(resolvedToken)) {
+                    setSlotState(day, hour, null);
+                }
             });
 
             // Right click: student/school calendar → Class / Extra; teacher roster → Clear only.
