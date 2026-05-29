@@ -5958,6 +5958,118 @@ tr td.add-teacher-availability-table-day {
     border-radius: var(--calendar-surface-radius, 20px);
 }
 
+.main-content .main-form-panel {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    overflow: auto;
+    background: #fff;
+    border-radius: var(--calendar-surface-radius, 20px);
+    padding: var(--calendar-surface-padding, 20px);
+    box-sizing: border-box;
+}
+
+.main-form-host {
+    width: 100%;
+    max-width: 1150px;
+    margin: 0 auto;
+}
+
+.main-form-host--google-meet,
+.main-form-host--weekly-prompt {
+    max-width: none;
+}
+
+.main-form-panel .add-modal,
+.main-form-panel .edit-student-modal,
+.main-form-panel .student-modal-overlay {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    padding: 0 !important;
+    width: 100%;
+    height: auto;
+}
+
+.main-form-panel .add-modal-backdrop,
+.main-form-panel .edit-student-modal-backdrop {
+    display: none !important;
+}
+
+.main-form-panel .student-modal-overlay::before {
+    display: none !important;
+}
+
+.main-form-panel .student-modal-overlay.is-open {
+    display: block !important;
+}
+
+.main-form-panel .add-modal-dialog,
+.main-form-panel .edit-student-dialog,
+.main-form-panel .student-modal-overlay .student-modal-card {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 12px;
+    padding: 24px 32px;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.main-form-panel .google-meet-links-layer {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+}
+
+.main-form-panel .google-meet-links-layer-backdrop {
+    display: none !important;
+}
+
+.main-form-panel .google-meet-popup {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    padding: 20px 24px;
+    box-shadow: none;
+    border-radius: 12px;
+    box-sizing: border-box;
+}
+
+.main-form-panel .calendar-prompt-popover {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    z-index: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 12px;
+    overflow: visible;
+}
+
 .main-content .student-class-report-panel {
     grid-column: 1 / -1;
     grid-row: 1;

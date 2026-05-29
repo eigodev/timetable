@@ -432,6 +432,335 @@ function getAddModalDialogEl() {
         || document.querySelector('.add-modal-dialog');
 }
 
+const MAIN_FORM_HOST_IDS = {
+    add: 'mainFormAddHost',
+    editStudent: 'mainFormEditStudentHost',
+    addStudentModern: 'mainFormAddStudentModernHost',
+    googleMeet: 'mainFormGoogleMeetHost',
+    weeklyPrompt: 'mainFormWeeklyPromptHost'
+};
+
+/** @type {{ calendar: boolean, materials: boolean, admin: boolean, report: boolean }} */
+let mainFormPanelRestore = { calendar: true, materials: false, admin: false, report: false };
+
+function mountMainFormViews() {
+    if (document.body.dataset.mainFormMounted === '1') return;
+    document.body.dataset.mainFormMounted = '1';
+
+    const mounts = [
+        { hostId: MAIN_FORM_HOST_IDS.add, modalId: 'addModal', backdropId: 'addModalBackdrop' },
+        { hostId: MAIN_FORM_HOST_IDS.editStudent, modalId: 'editStudentModal', backdropId: 'editStudentModalBackdrop' },
+        { hostId: MAIN_FORM_HOST_IDS.addStudentModern, modalId: 'studentModalOverlay', backdropId: null },
+        { hostId: MAIN_FORM_HOST_IDS.googleMeet, modalId: 'googleMeetLinksLayer', backdropId: null, backdropSelector: '.google-meet-links-layer-backdrop' }
+    ];
+
+    mounts.forEach(({ hostId, modalId, backdropId, backdropSelector }) => {
+        const host = document.getElementById(hostId);
+        const modal = document.getElementById(modalId);
+        if (!host || !modal || host.contains(modal)) return;
+        modal.classList.add('main-form-embedded');
+        host.appendChild(modal);
+        const backdrop = backdropId
+            ? document.getElementById(backdropId)
+            : (backdropSelector && modal.querySelector(backdropSelector));
+        if (backdrop) backdrop.hidden = true;
+    });
+}
+
+function isMainFormPanelOpen() {
+    const panel = document.getElementById('mainFormPanel');
+    return !!(panel && !panel.hidden);
+}
+
+function showMainFormPanel(activeHostId) {
+    mountMainFormViews();
+    const panel = document.getElementById('mainFormPanel');
+    if (!panel || !activeHostId) return;
+
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const materialsHost = document.getElementById('materialsFrameHost');
+    const adminPanel = document.getElementById('adminControlPanel');
+    const reportPanel = document.getElementById('studentClassReportPanel');
+
+    mainFormPanelRestore = {
+        calendar: calendarWrapper ? !calendarWrapper.hidden : true,
+        materials: !!(materialsHost && materialsHost.classList.contains('materials-frame-host--open')),
+        admin: adminPanel ? !adminPanel.hidden : false,
+        report: reportPanel ? !reportPanel.hidden : false
+    };
+
+    if (calendarWrapper) calendarWrapper.hidden = true;
+    hideMaterialsMainView();
+    if (adminPanel) adminPanel.hidden = true;
+    if (reportPanel) reportPanel.hidden = true;
+
+    Object.values(MAIN_FORM_HOST_IDS).forEach((hostId) => {
+        const host = document.getElementById(hostId);
+        if (host) host.hidden = hostId !== activeHostId;
+    });
+    panel.hidden = false;
+}
+
+function hideMainFormPanel() {
+    const panel = document.getElementById('mainFormPanel');
+    if (panel) panel.hidden = true;
+    Object.values(MAIN_FORM_HOST_IDS).forEach((hostId) => {
+        const host = document.getElementById(hostId);
+        if (host) host.hidden = true;
+    });
+
+    const calendarWrapper = document.getElementById('calendarWrapper');
+    const adminPanel = document.getElementById('adminControlPanel');
+    const reportPanel = document.getElementById('studentClassReportPanel');
+
+    if (calendarWrapper) calendarWrapper.hidden = !mainFormPanelRestore.calendar;
+    if (adminPanel) adminPanel.hidden = !mainFormPanelRestore.admin;
+    if (reportPanel) reportPanel.hidden = !mainFormPanelRestore.report;
+}
+
+window.showMainFormPanel = showMainFormPanel;
+window.hideMainFormPanel = hideMainFormPanel;
+window.isMainFormPanelOpen = isMainFormPanelOpen;
+
+function dismissMainFormPanel() {
+    if (!isMainFormPanelOpen()) return;
+    const googleMeetHost = document.getElementById(MAIN_FORM_HOST_IDS.googleMeet);
+    const weeklyPromptHost = document.getElementById(MAIN_FORM_HOST_IDS.weeklyPrompt);
+    const editHost = document.getElementById(MAIN_FORM_HOST_IDS.editStudent);
+    const addHost = document.getElementById(MAIN_FORM_HOST_IDS.add);
+    const modernHost = document.getElementById(MAIN_FORM_HOST_IDS.addStudentModern);
+    if (googleMeetHost && !googleMeetHost.hidden) {
+        closeGoogleMeetLinksLayer();
+    } else if (weeklyPromptHost && !weeklyPromptHost.hidden) {
+        closeCalendarPromptPopover();
+    } else if (editHost && !editHost.hidden) {
+        closeEditStudentModal();
+    } else if (addHost && !addHost.hidden) {
+        closeAddStudentModal();
+    } else if (modernHost && !modernHost.hidden) {
+        if (typeof window.closeNewAddStudentModal === 'function') {
+            window.closeNewAddStudentModal();
+        } else {
+            hideMainFormPanel();
+            const overlay = document.getElementById('studentModalOverlay');
+            closeMainFormShell(overlay);
+        }
+    }
+}
+
+function openMainFormShell(shellEl) {
+    if (!shellEl) return;
+    shellEl.classList.remove('is-closing');
+    shellEl.classList.add('is-open');
+    shellEl.setAttribute('aria-hidden', 'false');
+}
+
+function closeMainFormShell(shellEl) {
+    if (!shellEl) return;
+    shellEl.classList.remove('is-open', 'is-closing');
+    shellEl.setAttribute('aria-hidden', 'true');
+}
+
+function syncAddModalFormVisibility() {
+    const teacherNameRow = document.getElementById('addTeacherNameRow');
+    const teacherHeaderRow = document.getElementById('addTeacherHeaderRow');
+    const studentNameRow = document.getElementById('addStudentNameRow');
+    const studentHeaderRow = document.getElementById('addStudentHeaderRow');
+    const studentFields = document.getElementById('addStudentFields');
+    const schoolFields = document.getElementById('addSchoolFields');
+    const teacherFields = document.getElementById('addTeacherFields');
+    const teacherFirstInput = document.getElementById('addTeacherFirst');
+    const teacherLastInput = document.getElementById('addTeacherLast');
+    const teacherPhoneInput = document.getElementById('addTeacherPhone');
+    const studentFirstInput = document.getElementById('addStudentFirst');
+    const studentLastInput = document.getElementById('addStudentLast');
+    const studentPhoneInput = document.getElementById('addStudentPhone');
+    const cityInput = document.getElementById('addStudentCity');
+    const countryInput = document.getElementById('addStudentCountry');
+    const teacherContactRow = document.getElementById('addTeacherContactRow');
+    const studentContactRow = document.getElementById('addStudentContactRow');
+    const contactCityWrap = document.getElementById('addStudentContactCityWrap');
+    const contactCountryWrap = document.getElementById('addStudentContactCountryWrap');
+    const accountWrap = document.getElementById('addStudentAccountWrap');
+    const studentEmailInput = document.getElementById('addStudentEmail');
+    const studentUsernameInput = document.getElementById('addStudentUsername');
+    const studentPasswordInput = document.getElementById('addStudentPassword');
+    const schoolInput = document.getElementById('addSchoolNameInput');
+    const schoolSelect = document.getElementById('addStudentGroupSelect');
+    const phoneCountrySelect = document.getElementById('addStudentPhoneCountry');
+    const teacherPhoneCountrySelect = document.getElementById('addTeacherPhoneCountry');
+    const teacherEmailWrap = document.getElementById('addTeacherEmailWrap');
+    const teacherEmailInput = document.getElementById('addTeacherEmail');
+    const teacherPasswordInput = document.getElementById('addTeacherPassword');
+    const teacherWrap = document.getElementById('addStudentMentorWrap');
+    const teacherSelect = document.getElementById('addStudentMentor');
+    const addStudentMentorRow = document.getElementById('addStudentMentorRow');
+    const schoolFieldLabel = document.querySelector('.add-student-group-field-label');
+    const addSchoolExternalWrap = document.getElementById('addSchoolExternalWrap');
+    const addSchoolBillingModel = document.getElementById('addSchoolBillingModel');
+    const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
+    const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
+    const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
+    const dialog = getAddModalDialogEl();
+    const submitBtn = document.getElementById('addStudentFormSubmit');
+    const addModalRoot = document.getElementById('addModal');
+    if (!dialog || !schoolInput || !schoolSelect) return;
+
+    const isTeacherMode = addModalMode === 'teacher';
+    const isStudentEntryMode = addModalMode === 'student-entry';
+    const isStudentGlobalMode = addModalMode === 'student-global';
+    const isAddSchoolMode = addModalMode === 'school';
+    const showStudentFields = isStudentEntryMode || isStudentGlobalMode;
+    const useNameFieldsAny = isTeacherMode || showStudentFields;
+
+    if (addModalRoot) {
+        addModalRoot.classList.toggle('add-modal--school', isAddSchoolMode);
+        addModalRoot.classList.toggle('add-modal--teacher', isTeacherMode);
+    }
+
+    if (teacherContactRow) {
+        teacherContactRow.classList.toggle('is-hidden', !isTeacherMode);
+        teacherContactRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+    }
+    if (studentContactRow) {
+        studentContactRow.classList.toggle('is-hidden', !showStudentFields);
+        studentContactRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (studentHeaderRow) {
+        studentHeaderRow.classList.toggle('is-hidden', !showStudentFields);
+        studentHeaderRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (teacherHeaderRow) {
+        teacherHeaderRow.classList.toggle('is-hidden', !isTeacherMode);
+        teacherHeaderRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+    }
+    if (teacherFields) {
+        teacherFields.classList.toggle('is-hidden', !isTeacherMode);
+        teacherFields.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+    }
+    if (contactCityWrap) {
+        contactCityWrap.classList.toggle('is-hidden', !showStudentFields);
+        contactCityWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (contactCountryWrap) {
+        contactCountryWrap.classList.toggle('is-hidden', !showStudentFields);
+        contactCountryWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (accountWrap) {
+        accountWrap.classList.toggle('is-hidden', !showStudentFields);
+        accountWrap.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (!showStudentFields) {
+        if (studentEmailInput) studentEmailInput.value = '';
+        if (studentUsernameInput) studentUsernameInput.value = buildDefaultStudentUsername('', '');
+        if (studentPasswordInput) studentPasswordInput.value = '';
+        if (cityInput) cityInput.value = '';
+        if (countryInput) countryInput.value = '';
+    }
+    if (studentFields) {
+        studentFields.classList.toggle('is-hidden', !showStudentFields);
+        studentFields.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+    }
+    if (schoolFields) {
+        schoolFields.classList.toggle('is-hidden', !isAddSchoolMode);
+        schoolFields.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
+    }
+
+    const showStudentTeacherField = isStudentEntryMode || isStudentGlobalMode;
+    if (teacherWrap && teacherSelect) {
+        teacherWrap.classList.toggle('is-hidden', !showStudentTeacherField);
+        teacherWrap.setAttribute('aria-hidden', showStudentTeacherField ? 'false' : 'true');
+        if (showStudentTeacherField) {
+            refreshAddStudentTeacherSelect(teacherSelect.value);
+        } else {
+            teacherSelect.value = '';
+        }
+    }
+    if (addStudentMentorRow) {
+        addStudentMentorRow.classList.toggle('is-hidden', isTeacherMode);
+        addStudentMentorRow.setAttribute('aria-hidden', isTeacherMode ? 'true' : 'false');
+    }
+    if (teacherNameRow && teacherFirstInput && teacherLastInput) {
+        teacherNameRow.classList.toggle('is-hidden', !isTeacherMode);
+        teacherNameRow.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+        teacherFirstInput.required = isTeacherMode;
+        teacherLastInput.required = isTeacherMode;
+        if (teacherPhoneInput) teacherPhoneInput.required = isTeacherMode;
+    }
+    if (studentNameRow && studentFirstInput && studentLastInput) {
+        studentNameRow.classList.toggle('is-hidden', !showStudentFields);
+        studentNameRow.setAttribute('aria-hidden', showStudentFields ? 'false' : 'true');
+        studentFirstInput.required = showStudentFields;
+        studentLastInput.required = showStudentFields;
+    }
+    if (teacherEmailWrap && teacherEmailInput) {
+        teacherEmailWrap.classList.toggle('is-hidden', !isTeacherMode);
+        teacherEmailWrap.setAttribute('aria-hidden', isTeacherMode ? 'false' : 'true');
+        teacherEmailInput.required = isTeacherMode;
+        if (teacherPasswordInput) teacherPasswordInput.required = isTeacherMode;
+    }
+
+    const useSchoolSelect = isStudentGlobalMode;
+    if (schoolInput) {
+        schoolInput.required = isAddSchoolMode;
+        schoolInput.classList.toggle('is-hidden', !isAddSchoolMode);
+        schoolInput.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
+        if (!isAddSchoolMode) schoolInput.value = '';
+    }
+    if (schoolSelect) {
+        schoolSelect.classList.toggle('is-hidden', !useSchoolSelect);
+        schoolSelect.setAttribute('aria-hidden', useSchoolSelect ? 'false' : 'true');
+        schoolSelect.required = useSchoolSelect;
+        if (!useSchoolSelect) {
+            schoolSelect.value = '';
+        } else {
+            refreshAddStudentSchoolSelect(schoolSelect.value);
+            syncAddStudentModalThemeFromSchoolTitle(schoolSelect.value);
+        }
+    }
+    if (schoolFieldLabel) {
+        const showSchoolReadonly = isStudentEntryMode;
+        schoolFieldLabel.classList.toggle('is-hidden', showSchoolReadonly);
+        schoolFieldLabel.setAttribute('aria-hidden', showSchoolReadonly ? 'true' : 'false');
+    }
+    if (isStudentEntryMode && addStudentTargetSchool) {
+        syncAddStudentModalThemeFromSchoolTitle(addStudentTargetSchool);
+    }
+    if (addSchoolExternalWrap) {
+        addSchoolExternalWrap.classList.toggle('is-hidden', !isAddSchoolMode);
+        addSchoolExternalWrap.setAttribute('aria-hidden', isAddSchoolMode ? 'false' : 'true');
+    }
+    if (!isAddSchoolMode) {
+        if (addSchoolExternalCheckbox) addSchoolExternalCheckbox.checked = false;
+        if (addSchoolExternalPanel) {
+            addSchoolExternalPanel.classList.add('is-collapsed');
+            addSchoolExternalPanel.setAttribute('aria-hidden', 'true');
+        }
+        if (addSchoolExternalUrl) addSchoolExternalUrl.value = '';
+        if (addSchoolBillingModel) {
+            addSchoolBillingModel.value = '';
+            addSchoolBillingModel.required = false;
+        }
+        closeAddSchoolColorPopup();
+        updateAddSchoolBillingExplainer();
+    }
+    if (isAddSchoolMode && addSchoolBillingModel) {
+        addSchoolBillingModel.required = true;
+    }
+
+    dialog.classList.remove('add-student-dialog--expanded');
+    if (submitBtn) {
+        submitBtn.textContent = isTeacherMode
+            ? 'Add teacher'
+            : (showStudentFields ? 'Add student' : 'Add school');
+    }
+    if (phoneCountrySelect && useNameFieldsAny) {
+        updateAddStudentPhonePlaceholder();
+    }
+    renderAddSchoolThemeSquares();
+    updateAddSchoolBillingExplainer();
+}
+
 function setGoogleMeetToggleText(nextText, animate = false) {
     const schoolToggleText = document.getElementById('googleMeetSchoolToggleText');
     if (!schoolToggleText) {
@@ -547,24 +876,10 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
-            const calendarPromptPop = document.getElementById('calendarPromptPopover');
-            if (calendarPromptPop && !calendarPromptPop.hidden) {
-                e.preventDefault();
-                closeCalendarPromptPopover();
-                return;
-            }
-
             const meetLinksAddDialog = document.getElementById('googleMeetLinksAddDialog');
             if (meetLinksAddDialog && !meetLinksAddDialog.hidden) {
                 e.preventDefault();
                 closeGoogleMeetAddLinkDialog();
-                return;
-            }
-
-            const googleMeetLinksLayer = document.getElementById('googleMeetLinksLayer');
-            if (googleMeetLinksLayer && !googleMeetLinksLayer.hidden) {
-                e.preventDefault();
-                closeGoogleMeetLinksLayer();
                 return;
             }
 
@@ -638,17 +953,9 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
-            const editStudentModal = document.getElementById('editStudentModal');
-            if (editStudentModal?.classList.contains('is-open')) {
+            if (isMainFormPanelOpen()) {
                 e.preventDefault();
-                closeEditStudentModal();
-                return;
-            }
-
-            const addModal = document.getElementById('addModal');
-            if (addModal?.classList.contains('is-open')) {
-                e.preventDefault();
-                closeAddStudentModal();
+                dismissMainFormPanel();
                 return;
             }
         },
@@ -749,7 +1056,6 @@ function setupGlobalPointerDownToDismissOverlays() {
             }
 
             const modalDismissOrder = [
-                { id: 'googleMeetLinksLayer', close: closeGoogleMeetLinksLayer },
                 { id: 'studentRepositionModal', close: closeStudentRepositionModal },
                 { id: 'supervisionPendingNoticeModal', close: closeSupervisionPendingNoticeModal },
                 { id: 'supervisionInviteModal', close: closeSupervisionInviteModal },
@@ -759,10 +1065,12 @@ function setupGlobalPointerDownToDismissOverlays() {
                 { id: 'adminDashboardDeleteModal', close: closeAdminDashboardDeleteModal },
                 { id: 'deleteSchoolModal', close: closeDeleteSchoolModal },
                 { id: 'schoolSettingsModal', close: closeSchoolSettingsModal },
-                { id: 'googleMeetModal', close: closeGoogleMeetModal },
-                { id: 'editStudentModal', close: closeEditStudentModal },
-                { id: 'addModal', close: closeAddStudentModal }
+                { id: 'googleMeetModal', close: closeGoogleMeetModal }
             ];
+
+            if (isMainFormPanelOpen()) {
+                return;
+            }
 
             for (const item of modalDismissOrder) {
                 const modal = document.getElementById(item.id);
@@ -4673,23 +4981,17 @@ function positionCalendarLinkPopover(anchorEl) {
 }
 
 function ensureCalendarPromptPopover() {
+    mountMainFormViews();
+    const host = document.getElementById(MAIN_FORM_HOST_IDS.weeklyPrompt);
     let backdrop = document.getElementById('calendarPromptPopoverBackdrop');
-    if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.id = 'calendarPromptPopoverBackdrop';
-        backdrop.className = 'calendar-prompt-popover-backdrop';
+    if (backdrop) {
         backdrop.hidden = true;
-        document.body.appendChild(backdrop);
-    }
-    if (backdrop.dataset.bound !== '1') {
-        backdrop.dataset.bound = '1';
-        backdrop.addEventListener('click', () => closeCalendarPromptPopover());
     }
     let pop = document.getElementById('calendarPromptPopover');
     if (!pop) {
         pop = document.createElement('div');
         pop.id = 'calendarPromptPopover';
-        pop.className = 'calendar-prompt-popover';
+        pop.className = 'calendar-prompt-popover main-form-embedded';
         pop.hidden = true;
         pop.innerHTML =
             '<div class="calendar-prompt-popover-header">' +
@@ -4725,7 +5027,13 @@ function ensureCalendarPromptPopover() {
             '    </div>' +
             '  </div>' +
             '</div>';
-        document.body.appendChild(pop);
+        if (host) {
+            host.appendChild(pop);
+        } else {
+            document.body.appendChild(pop);
+        }
+    } else if (host && pop.parentElement !== host) {
+        host.appendChild(pop);
     }
     if (pop.dataset.actionsBound !== '1') {
         pop.dataset.actionsBound = '1';
@@ -4784,48 +5092,32 @@ function closeCalendarPromptPopover() {
     const pop = document.getElementById('calendarPromptPopover');
     const backdrop = document.getElementById('calendarPromptPopoverBackdrop');
     const btn = document.getElementById('classReportWeeklyPromptBtn');
+    if (calendarPromptPopoverHideTimer) {
+        window.clearTimeout(calendarPromptPopoverHideTimer);
+        calendarPromptPopoverHideTimer = null;
+    }
+    if (calendarPromptBackdropHideTimer) {
+        window.clearTimeout(calendarPromptBackdropHideTimer);
+        calendarPromptBackdropHideTimer = null;
+    }
     if (backdrop) {
-        backdrop.classList.remove('calendar-prompt-popover-backdrop--enter');
-        backdrop.classList.add('calendar-prompt-popover-backdrop--leave');
-        backdrop.hidden = false;
-        if (calendarPromptBackdropHideTimer) {
-            window.clearTimeout(calendarPromptBackdropHideTimer);
-            calendarPromptBackdropHideTimer = null;
-        }
-        let finishedBackdrop = false;
-        const finishBackdropHide = () => {
-            if (finishedBackdrop) return;
-            finishedBackdrop = true;
-            backdrop.removeEventListener('animationend', finishBackdropHide);
-            backdrop.hidden = true;
-            backdrop.classList.remove('calendar-prompt-popover-backdrop--leave');
-            calendarPromptBackdropHideTimer = null;
-        };
-        backdrop.addEventListener('animationend', finishBackdropHide);
-        calendarPromptBackdropHideTimer = window.setTimeout(finishBackdropHide, 240);
+        backdrop.hidden = true;
+        backdrop.classList.remove('calendar-prompt-popover-backdrop--enter', 'calendar-prompt-popover-backdrop--leave');
     }
     if (pop) {
-        pop.classList.remove('calendar-prompt-popover--enter');
-        pop.classList.add('calendar-prompt-popover--leave');
-        pop.hidden = false;
-        if (calendarPromptPopoverHideTimer) {
-            window.clearTimeout(calendarPromptPopoverHideTimer);
-            calendarPromptPopoverHideTimer = null;
-        }
-        let finished = false;
-        const finishHide = () => {
-            if (finished) return;
-            finished = true;
-            pop.removeEventListener('animationend', finishHide);
-            pop.hidden = true;
-            pop.classList.remove('calendar-prompt-popover--leave');
-            calendarPromptPopoverHideTimer = null;
-        };
-        pop.addEventListener('animationend', finishHide);
-        calendarPromptPopoverHideTimer = window.setTimeout(finishHide, 260);
+        pop.hidden = true;
+        pop.classList.remove('calendar-prompt-popover--enter', 'calendar-prompt-popover--leave');
+        pop.style.left = '';
+        pop.style.top = '';
     }
     if (btn) btn.setAttribute('aria-expanded', 'false');
     calendarPromptPopoverOpen = false;
+    if (isMainFormPanelOpen()) {
+        const weeklyHost = document.getElementById(MAIN_FORM_HOST_IDS.weeklyPrompt);
+        if (weeklyHost && !weeklyHost.hidden) {
+            hideMainFormPanel();
+        }
+    }
 }
 
 function getNextDateForWeekday(dayName, now = new Date()) {
@@ -4944,7 +5236,6 @@ function animateCalendarPromptPreviewHeight(previewEl) {
 function toggleCalendarPromptPopover(anchorEl) {
     ensureCalendarPromptPopover();
     const pop = document.getElementById('calendarPromptPopover');
-    const backdrop = document.getElementById('calendarPromptPopoverBackdrop');
     if (!pop) return;
     if (calendarPromptPopoverOpen) {
         closeCalendarPromptPopover();
@@ -4954,30 +5245,13 @@ function toggleCalendarPromptPopover(anchorEl) {
     updateCalendarPromptPreview();
     closeCalendarStudentNamesPopover();
     closeCalendarLinkPopover();
-    if (calendarPromptPopoverHideTimer) {
-        window.clearTimeout(calendarPromptPopoverHideTimer);
-        calendarPromptPopoverHideTimer = null;
-    }
-    if (calendarPromptBackdropHideTimer) {
-        window.clearTimeout(calendarPromptBackdropHideTimer);
-        calendarPromptBackdropHideTimer = null;
-    }
-    if (backdrop) {
-        backdrop.hidden = false;
-        backdrop.classList.remove('calendar-prompt-popover-backdrop--leave');
-        backdrop.classList.remove('calendar-prompt-popover-backdrop--enter');
-        void backdrop.offsetWidth;
-        backdrop.classList.add('calendar-prompt-popover-backdrop--enter');
-    }
+    showMainFormPanel(MAIN_FORM_HOST_IDS.weeklyPrompt);
     pop.hidden = false;
-    pop.classList.remove('calendar-prompt-popover--leave');
-    pop.classList.remove('calendar-prompt-popover--enter');
-    void pop.offsetWidth;
-    pop.classList.add('calendar-prompt-popover--enter');
+    pop.classList.remove('calendar-prompt-popover--leave', 'calendar-prompt-popover--enter');
+    pop.style.left = '';
+    pop.style.top = '';
     calendarPromptPopoverOpen = true;
     anchorEl?.setAttribute('aria-expanded', 'true');
-    positionCalendarPromptPopover(anchorEl);
-    requestAnimationFrame(() => positionCalendarPromptPopover(anchorEl));
 }
 
 function closeCalendarLinkPopover() {
@@ -7164,7 +7438,7 @@ function appendGateOnlyRoleSelfRow(container) {
     row.appendChild(nameEl);
     row.addEventListener('click', (e) => {
         if (e.target.closest('.teacher-item-edit')) return;
-        selectTeacher(self, { view: 'calendar' });
+        selectTeacher(self, { view: 'calendar', dismissMainForm: true });
     });
     container.appendChild(row);
 }
@@ -9177,7 +9451,7 @@ function renderSidebar() {
                 if (e.target.closest('.student-external-link-btn')) {
                     return;
                 }
-                selectTeacher(name, { view: 'calendar' });
+                selectTeacher(name, { view: 'calendar', dismissMainForm: true });
             });
 
             sectionItems.appendChild(teacherItem);
@@ -9313,11 +9587,11 @@ function populateClassReportStudentLists(container) {
                 if (classReportVisible && effectiveSelect === name && isStudentName(name)) {
                     li.classList.add('class-report-student-item--active');
                 }
-                li.addEventListener('click', () => selectTeacher(name, { view: 'classReport' }));
+                li.addEventListener('click', () => selectTeacher(name, { view: 'classReport', dismissMainForm: true }));
                 li.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        selectTeacher(name, { view: 'classReport' });
+                        selectTeacher(name, { view: 'classReport', dismissMainForm: true });
                     }
                 });
                 ul.appendChild(li);
@@ -11073,12 +11347,16 @@ async function initTeachers() {
 
 /**
  * @param {string} teacherName
- * @param {{ view?: 'calendar' | 'classReport' }} [opts]
+ * @param {{ view?: 'calendar' | 'classReport', dismissMainForm?: boolean }} [opts]
  */
 function selectTeacher(teacherName, opts) {
     if (!isTeacherLoggedIn) {
         setLoggedOutDashboard();
         return;
+    }
+
+    if (opts && opts.dismissMainForm) {
+        dismissMainFormPanel();
     }
 
     if (loggedInStudentFullName) {
@@ -11158,6 +11436,9 @@ function selectTeacher(teacherName, opts) {
     const adminPanel = document.getElementById('adminControlPanel');
 
     hideMaterialsMainView();
+
+    const mainFormPanel = document.getElementById('mainFormPanel');
+    if (mainFormPanel) mainFormPanel.hidden = true;
 
     if (showClassReport) {
         if (calendarWrapper) calendarWrapper.hidden = true;
@@ -11709,14 +11990,16 @@ function openEditStudentModal(studentName, rosterKey) {
     originalCategoryInput.value = rosterKey;
     refreshEditStudentTeacherSelect(getStudentTeacherInfo(studentName));
 
-    openModalWithAnimation(modal);
+    showMainFormPanel(MAIN_FORM_HOST_IDS.editStudent);
+    openMainFormShell(modal);
     firstInput.focus();
 }
 
 function closeEditStudentModal() {
     const modal = document.getElementById('editStudentModal');
     if (!modal) return;
-    closeModalWithAnimation(modal);
+    closeMainFormShell(modal);
+    hideMainFormPanel();
 }
 
 function calculateStudentAgeFromBirthDate(value) {
@@ -12059,6 +12342,7 @@ async function upsertStudentFromEditForm(action = 'save') {
 }
 
 function setupEditStudentModal() {
+    mountMainFormViews();
     const modal = document.getElementById('editStudentModal');
     const form = document.getElementById('editStudentForm');
     const cancelBtn = document.getElementById('editStudentCancel');
@@ -12897,8 +13181,9 @@ function openAddStudentModal(mode = 'school') {
     updateAddStudentPhonePlaceholder();
     updateAddTeacherPhonePlaceholder();
     syncStudentUsernameFromNameFields(studentFirstInput, studentLastInput, studentUsernameInput);
-
-    openModalWithAnimation(modal);
+    syncAddModalFormVisibility();
+    showMainFormPanel(MAIN_FORM_HOST_IDS.add);
+    openMainFormShell(modal);
     if (addModalMode === 'teacher' && teacherFirstInput) {
         teacherFirstInput.focus();
     } else if ((addModalMode === 'student-entry' || addModalMode === 'student-global') && studentFirstInput) {
@@ -13472,46 +13757,36 @@ function openGoogleMeetLinksLayer() {
     }
     const popup = layer.querySelector('.google-meet-popup');
     const backdrop = layer.querySelector('.google-meet-links-layer-backdrop');
+    showMainFormPanel(MAIN_FORM_HOST_IDS.googleMeet);
     layer.hidden = false;
     layer.setAttribute('aria-hidden', 'false');
     if (popup) {
-        popup.classList.remove('google-meet-popup--leave');
-        popup.classList.remove('google-meet-popup--enter');
-        void popup.offsetWidth;
-        popup.classList.add('google-meet-popup--enter');
+        popup.classList.remove('google-meet-popup--leave', 'google-meet-popup--enter');
     }
     if (backdrop) {
-        backdrop.classList.remove('google-meet-links-layer-backdrop--leave');
-        backdrop.classList.remove('google-meet-links-layer-backdrop--enter');
-        void backdrop.offsetWidth;
-        backdrop.classList.add('google-meet-links-layer-backdrop--enter');
+        backdrop.hidden = true;
+        backdrop.classList.remove('google-meet-links-layer-backdrop--enter', 'google-meet-links-layer-backdrop--leave');
     }
 }
 
 function closeGoogleMeetLinksLayer() {
     const layer = document.getElementById('googleMeetLinksLayer');
-    if (!layer) return;
-    const popup = layer.querySelector('.google-meet-popup');
-    const backdrop = layer.querySelector('.google-meet-links-layer-backdrop');
-    if (popup) {
-        popup.classList.remove('google-meet-popup--enter');
-        popup.classList.add('google-meet-popup--leave');
-    }
-    if (backdrop) {
-        backdrop.classList.remove('google-meet-links-layer-backdrop--enter');
-        backdrop.classList.add('google-meet-links-layer-backdrop--leave');
-    }
+    if (!layer || layer.hidden) return;
     if (googleMeetLinksLayerHideTimer) {
         window.clearTimeout(googleMeetLinksLayerHideTimer);
+        googleMeetLinksLayerHideTimer = null;
     }
     closeGoogleMeetAddLinkDialog();
-    googleMeetLinksLayerHideTimer = window.setTimeout(() => {
-        layer.hidden = true;
-        layer.setAttribute('aria-hidden', 'true');
-        popup?.classList.remove('google-meet-popup--leave');
-        backdrop?.classList.remove('google-meet-links-layer-backdrop--leave');
-        googleMeetLinksLayerHideTimer = null;
-    }, 240);
+    const popup = layer.querySelector('.google-meet-popup');
+    const backdrop = layer.querySelector('.google-meet-links-layer-backdrop');
+    layer.hidden = true;
+    layer.setAttribute('aria-hidden', 'true');
+    popup?.classList.remove('google-meet-popup--leave', 'google-meet-popup--enter');
+    backdrop?.classList.remove('google-meet-links-layer-backdrop--enter', 'google-meet-links-layer-backdrop--leave');
+    const googleMeetHost = document.getElementById(MAIN_FORM_HOST_IDS.googleMeet);
+    if (googleMeetHost && !googleMeetHost.hidden) {
+        hideMainFormPanel();
+    }
 }
 
 function updateGoogleMeetLinksPopupStats() {
@@ -13880,6 +14155,7 @@ function closeGoogleMeetModal() {
 }
 
 function setupGoogleMeetModal() {
+    mountMainFormViews();
     const modal = document.getElementById('googleMeetModal');
     const form = document.getElementById('googleMeetForm');
     const backdrop = document.getElementById('googleMeetModalBackdrop');
@@ -14239,10 +14515,12 @@ function closeAddStudentModal() {
         addSchoolBillingModel.value = '';
         updateAddSchoolBillingExplainer();
     }
-    closeModalWithAnimation(modal);
+    closeMainFormShell(modal);
+    hideMainFormPanel();
 }
 
 function setupAddStudentModal() {
+    mountMainFormViews();
     ensureAddPopupProvidersRendered();
     const modal = document.getElementById('addModal');
     const form = document.getElementById('addStudentForm');

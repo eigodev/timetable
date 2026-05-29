@@ -134,6 +134,9 @@
         if (typeof window.refreshModernStudentTeacherSelect === 'function') {
             window.refreshModernStudentTeacherSelect();
         }
+        if (typeof window.showMainFormPanel === 'function') {
+            window.showMainFormPanel('mainFormAddStudentModernHost');
+        }
         overlay.classList.remove('is-closing');
         overlay.classList.add('is-open');
         overlay.setAttribute('aria-hidden', 'false');
@@ -142,20 +145,16 @@
     }
 
     function closeModal() {
-        if (overlay.classList.contains('is-closing')) return;
-        if (!overlay.classList.contains('is-open')) return;
         closeCountryPicker();
+        if (typeof window.hideMainFormPanel === 'function') {
+            window.hideMainFormPanel();
+        }
         if (studentModalCloseTimer) {
             clearTimeout(studentModalCloseTimer);
             studentModalCloseTimer = null;
         }
-        overlay.classList.remove('is-open');
-        overlay.classList.add('is-closing');
+        overlay.classList.remove('is-open', 'is-closing');
         overlay.setAttribute('aria-hidden', 'true');
-        studentModalCloseTimer = window.setTimeout(() => {
-            overlay.classList.remove('is-closing');
-            studentModalCloseTimer = null;
-        }, STUDENT_MODAL_CLOSE_ANIMATION_MS);
     }
 
     function clearAllErrors() {
@@ -422,12 +421,6 @@
         };
     }
 
-    overlay.addEventListener('click', (event) => {
-        if (event.target === overlay) {
-            closeModal();
-        }
-    });
-
     closeBtn?.addEventListener('click', closeModal);
     cancelBtn?.addEventListener('click', closeModal);
     openBtn?.addEventListener('click', openModal);
@@ -440,7 +433,8 @@
             closeCountryPicker();
             return;
         }
-        if (!overlay.classList.contains('is-open')) return;
+        const mainFormOpen = typeof window.isMainFormPanelOpen === 'function' && window.isMainFormPanelOpen();
+        if (!mainFormOpen && !overlay.classList.contains('is-open')) return;
         closeModal();
     });
 
