@@ -5966,7 +5966,6 @@ tr td.add-teacher-availability-table-day {
     overflow: auto;
     background: #fff;
     border-radius: var(--calendar-surface-radius, 20px);
-    padding: var(--calendar-surface-padding, 20px);
     box-sizing: border-box;
 }
 
