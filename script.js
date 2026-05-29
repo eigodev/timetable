@@ -1,6 +1,6 @@
 // Configuration
 const START_HOUR = 7; // 7 AM
-const END_HOUR = 23; // 11 PM (exclusive, includes 10 PM slot)
+const END_HOUR = 22; // 10 PM exclusive (last slot is 9:00 p.m.)
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // LocalStorage key (fallback)
@@ -5274,7 +5274,7 @@ const CLASS_TOPIC_EXERCISE_OPTIONS = [
 ];
 
 const CLASS_REPORT_TIME_START_HOUR = 7;
-const CLASS_REPORT_TIME_END_HOUR = 23;
+const CLASS_REPORT_TIME_END_HOUR = 21;
 
 function emptyStudentClassReportRow() {
     return {
