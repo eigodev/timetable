@@ -9600,20 +9600,32 @@ header h1 {
     }
 }
 
-@media (max-width: 1920px) {
+/* 1920×1080 — add/edit student, add teacher, add school popups */
+@media (min-width: 1910px) and (max-width: 1930px) and (min-height: 1040px) and (max-height: 1090px) {
     .student-modal-overlay .student-modal-card,
     .edit-student-dialog,
+    #editStudentModal .edit-student-dialog.student-modal-card,
     .add-modal-dialog,
-    .add-modal.add-modal--school .add-modal-dialog,
-    .google-meet-dialog,
-    .calendarPromptPopover {
+    .add-modal.add-modal--school .add-modal-dialog {
         position: fixed;
-        top: 2.15%;
-        left: 16.5%;
+        top: 3%;
+        left: 23.5%;
+        height: 685px;
+        width: 1150px;
+        padding: 40px;
+        box-sizing: border-box;
+        max-width: none;
+        max-height: none;
+    }
 
-        height: 900px;
-        width: 1580px;
-        padding: 50px;
+    #editStudentModal .edit-student-dialog.student-modal-card {
+        --student-modal-actions-right: 40px;
+        --student-modal-actions-bottom: 40px;
+    }
+
+    .student-modal-overlay .student-modal-card {
+        --student-modal-actions-right: 40px;
+        --student-modal-actions-bottom: 40px;
     }
 }
 
