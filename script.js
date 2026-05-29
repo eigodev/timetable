@@ -3889,10 +3889,10 @@ function resolveScheduleSlotPriority(classOrExtraToken, teacherRawState, opts = 
     if (tLow === 'available') {
         return 'available';
     }
-    if (tLow && tLow !== 'null') {
+    if (opts.includeTeacherNonPriorityFallback !== false && tLow && tLow !== 'null') {
         return teacherRawState;
     }
-    if (sLow && sLow !== 'null') {
+    if (opts.includeStudentFallback !== false && sLow && sLow !== 'null') {
         return studentSlot;
     }
     return null;
@@ -4334,6 +4334,7 @@ function performTeacherGridClearScheduledClass(day, hour) {
     const state = getSlotState(day, hour);
     const low = String(state || '').trim().toLowerCase();
     if (!low || low === 'null' || low === 'available') return false;
+    if (parseSchoolStateToken(low) || isLegacyOverlayState(low)) return false;
 
     const names = getStudentNamesForTeacherSlot(day, hour, state);
     for (const nm of names) {
@@ -4438,6 +4439,7 @@ function isTeacherCalendarClearContextMenuEnabled(day, hour) {
     const raw = getSlotState(day, hour);
     const low = String(raw || '').trim().toLowerCase();
     if (!low || low === 'null' || low === 'available') return false;
+    if (parseSchoolStateToken(low) || isLegacyOverlayState(low)) return false;
     return true;
 }
 
@@ -14495,7 +14497,7 @@ function isTutorSlotDisplayedClassColorState(tVal) {
 function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
     const stu = stripTeacherAvailabilityFromStudentScheduleCopy(computeSlotStatesForProfile(studentName));
     const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
-    const tut = computeSlotStatesForProfile(tutorKey);
+    const tut = getScheduleSlotMapWithoutMeta(tutSchedule);
     const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);
     const merged = {};
     const visibleRescheduledNames = {};
@@ -14505,14 +14507,13 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
             const s = stu[key];
             const t = tut[key];
             const rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
-            const classToken =
-                getClassOrExtraTokenFromSlotState(s) ||
-                (isTutorSlotDisplayedClassColorState(t) ? t : null);
+            const classToken = getClassOrExtraTokenFromSlotState(s);
             const mergedState = resolveScheduleSlotPriority(classToken, t, {
                 studentSlot: s,
-                rescheduledStudentName
+                rescheduledStudentName,
+                includeTeacherNonPriorityFallback: false
             });
-            merged[key] = mergedState;
+            merged[key] = mergedState === 'available' ? null : mergedState;
             if (mergedState === 'rescheduled' && rescheduledStudentName) {
                 visibleRescheduledNames[key] = rescheduledStudentName;
             } else if (mergedState === BOOKED_CLASS_SLOT_STATE) {
@@ -14534,19 +14535,10 @@ function loadTeacherSchedule(teacherName) {
     clearCalendarTeacherAggregateOverlay();
     if (isStudentName(teacherName)) {
         const tutorKey = getTutorRosterNameForStudent(teacherName);
-        const selfSession =
-            String(loggedInStudentFullName || '').trim().toLowerCase() ===
-            String(teacherName || '').trim().toLowerCase();
-        // Tutor merge shows peers' class colors but must NOT be loaded when a teacher edits a student:
-        // saving that merged map would write other students' cells into this student's stored schedule.
-        if (tutorKey && selfSession) {
+        // Student calendar scope: selected student classes/extras + tutor reposition slots only.
+        if (tutorKey) {
             slotStates = mergeStudentCalendarWithTutorFreeSlots(teacherName, tutorKey);
             return;
-        }
-        // Teacher viewing a student under Schools: show the tutor master colors; keep slotStates as this student only.
-        if (tutorKey && isActiveTeacherName(tutorKey) && !loggedInStudentFullName) {
-            calendarTeacherAggregateOverlayTutorKey = tutorKey;
-            refreshCalendarTeacherAggregateOverlay();
         }
     }
     if (isActiveTeacherName(teacherName)) {
@@ -14774,7 +14766,16 @@ function initCalendar() {
             hideContextMenu();
             return;
         }
-        setSlotState(currentSlot.day, currentSlot.hour, color || null);
+        let nextState = color || null;
+        if (currentContextMenuMode === 'school') {
+            const selectedState = String(getSlotState(currentSlot.day, currentSlot.hour) || '').trim().toLowerCase();
+            const selectedToken = String(resolveSchoolTokenInfoFromState(selectedState)?.token || selectedState).trim().toLowerCase();
+            const nextToken = String(resolveSchoolTokenInfoFromState(nextState)?.token || nextState || '').trim().toLowerCase();
+            if (nextToken && selectedToken === nextToken) {
+                nextState = null;
+            }
+        }
+        setSlotState(currentSlot.day, currentSlot.hour, nextState);
         hideContextMenu();
     });
     contextMenu?.addEventListener('scroll', (e) => {
