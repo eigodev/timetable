@@ -11662,6 +11662,7 @@ function openEditStudentModal(studentName, rosterKey) {
     const levelInput = document.getElementById('editStudentLevel');
     const usernameInput = document.getElementById('editStudentUsername');
     const passwordInput = document.getElementById('editStudentPassword');
+    const passportLinkInput = document.getElementById('editStudentPassportLink');
     const originalNameInput = document.getElementById('editStudentOriginalName');
     const originalCategoryInput = document.getElementById('editStudentOriginalCategory');
     if (!modal || !firstInput || !lastInput || !phoneInput || !phoneCountrySelect || !schoolSelect || !originalNameInput || !originalCategoryInput) {
@@ -12094,6 +12095,11 @@ function setupEditStudentModal() {
     }
     if (deleteBtn) {
         deleteBtn.addEventListener('click', async () => {
+            const originalName = String(document.getElementById('editStudentOriginalName')?.value || '').trim();
+            const ok = window.confirm(
+                `Delete student "${originalName || 'this student'}"? This cannot be undone.`
+            );
+            if (!ok) return;
             await upsertStudentFromEditForm('delete');
         });
     }
@@ -12797,6 +12803,7 @@ function openAddStudentModal(mode = 'school') {
     const teacherPasswordToggleBtn = document.getElementById('addTeacherPasswordToggle');
     const studentUsernameInput = document.getElementById('addStudentUsername');
     const studentPasswordGenerateBtn = document.getElementById('addStudentPasswordGenerate');
+    const passportLinkInput = document.getElementById('editStudentPassportLink');
     const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
     const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
     const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
