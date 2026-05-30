@@ -76,6 +76,31 @@ function normSchoolTitleKey(title) {
   return String(title || '').trim().toLowerCase();
 }
 
+function studentNamesInSchoolRoster(roster, schoolTitle) {
+  const sk = normSchoolTitleKey(schoolTitle);
+  if (!sk) return [];
+  const st = roster?.studentSchools && typeof roster.studentSchools === 'object' ? roster.studentSchools : {};
+  return allRosterStudentNames(roster).filter((n) => normSchoolTitleKey(st[String(n)]) === sk);
+}
+
+/** Match client `getCustomSchoolsVisibleInSession`: empty custom schools are shared; otherwise tutor must own every student in that school (unassigned students are shared). */
+function customSchoolVisibleToTeacher(fullRoster, schoolTitle, teacherProfile) {
+  const profile = String(teacherProfile || '').trim();
+  if (!profile) return false;
+  const inSchool = studentNamesInSchoolRoster(fullRoster, schoolTitle);
+  if (!inSchool.length) return true;
+  const st =
+    fullRoster?.studentTeachers && typeof fullRoster.studentTeachers === 'object'
+      ? fullRoster.studentTeachers
+      : {};
+  const profileLc = profile.toLowerCase();
+  return inSchool.every((n) => {
+    const assigned = tutorValueForStudent(st, n);
+    if (!String(assigned || '').trim()) return true;
+    return assigned.toLowerCase() === profileLc;
+  });
+}
+
 /** School-scoped maps (themes, external URLs, billing, Meet modes) use school title as key. */
 function filterMapBySchoolTitles(map, schoolTitles) {
   const allow = new Set([...schoolTitles].map((t) => normSchoolTitleKey(t)));
@@ -276,7 +301,11 @@ export function filterRosterForActor(roster, actor) {
       if (sch) schoolsNeeded.add(sch);
     }
     const cs = Array.isArray(r.customSchools) ? r.customSchools : [];
-    r.customSchools = cs.filter((s) => schoolsNeeded.has(String(s || '').trim()));
+    r.customSchools = cs.filter((s) => customSchoolVisibleToTeacher(roster, s, tp));
+    for (const s of r.customSchools) {
+      const title = String(s || '').trim();
+      if (title) schoolsNeeded.add(title);
+    }
 
     r.schoolExternalLinks = filterMapBySchoolTitles(r.schoolExternalLinks, schoolsNeeded);
     r.schoolThemeColors = filterMapBySchoolTitles(r.schoolThemeColors, schoolsNeeded);

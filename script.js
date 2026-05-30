@@ -1547,13 +1547,48 @@ function closeAddSchoolColorPopup() {
     addSchoolColorTarget = '';
 }
 
+/** Stable host survives `renderAddSchoolPopup()` innerHTML refreshes — use delegation, not per-node listeners. */
+function setupAddSchoolColorPickerDelegation() {
+    const host = document.querySelector('.addschoolpopup');
+    if (!host || host.dataset.addSchoolColorPickerBound === '1') return;
+    host.dataset.addSchoolColorPickerBound = '1';
+    host.addEventListener('click', (e) => {
+        if (!(e.target instanceof Element)) return;
+        if (e.target.closest('#addSchoolColorPopup')) {
+            e.stopPropagation();
+            return;
+        }
+        const openFor = (which, anchor) => {
+            if (!anchor) return;
+            e.stopPropagation();
+            openAddSchoolColorPopup(which, anchor);
+        };
+        const primarySquare = e.target.closest('.add-school-theme-square--primary');
+        if (primarySquare) {
+            openFor('primary', primarySquare);
+            return;
+        }
+        const secondarySquare = e.target.closest('.add-school-theme-square--secondary');
+        if (secondarySquare) {
+            openFor('secondary', secondarySquare);
+            return;
+        }
+        if (e.target.closest('#addSchoolPrimaryColorCode')) {
+            openFor('primary', host.querySelector('.add-school-theme-square--primary'));
+            return;
+        }
+        if (e.target.closest('#addSchoolSecondaryColorCode')) {
+            openFor('secondary', host.querySelector('.add-school-theme-square--secondary'));
+        }
+    });
+}
+
 function openAddSchoolColorPopup(target, anchorEl) {
     const popup = document.getElementById('addSchoolColorPopup');
     const options = document.getElementById('addSchoolColorPopupOptions');
     const primaryInput = document.getElementById('addSchoolPrimaryColor');
     const secondaryInput = document.getElementById('addSchoolSecondaryColor');
-    const dialog = getAddModalDialogEl();
-    if (!popup || !options || !anchorEl || !dialog || !primaryInput || !secondaryInput) return;
+    if (!popup || !options || !anchorEl || !primaryInput || !secondaryInput) return;
     addSchoolColorTarget = target === 'secondary' ? 'secondary' : 'primary';
     options.innerHTML = '';
     SCHOOL_THEME_PALETTE_GROUPS.forEach((group) => {
@@ -3215,6 +3250,51 @@ function getAllStudentNames() {
     return [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
 }
 
+function isScopedTeacherSession() {
+    return !!(
+        isTeacherLoggedIn &&
+        !isAdminLoggedIn &&
+        !loggedInStudentFullName &&
+        String(loggedInTeacherName || '').trim()
+    );
+}
+
+/** Empty custom schools: all teachers; otherwise only when every student in that school is visible to this teacher. */
+function getCustomSchoolsVisibleInSession() {
+    if (loggedInStudentFullName) return [];
+    if (!isScopedTeacherSession()) {
+        return customSchoolsList.map((s) => String(s || '').trim()).filter(Boolean);
+    }
+    const tLc = String(loggedInTeacherName || '').trim().toLowerCase();
+    const tutorLc = (n) => String(studentTeacherByName[n] || '').trim().toLowerCase();
+    const visibleStudentSet = new Set(
+        getStudentNamesVisibleInNavigation().map((n) => String(n || '').trim().toLowerCase())
+    );
+    const out = [];
+    customSchoolsList.forEach((raw) => {
+        const s = String(raw || '').trim();
+        if (!s) return;
+        const sk = s.toLowerCase();
+        const inSchool = getAllStudentNames().filter(
+            (n) => (getStudentSchoolName(n) || '').trim().toLowerCase() === sk
+        );
+        if (inSchool.length === 0) {
+            out.push(s);
+            return;
+        }
+        if (
+            inSchool.every((n) => {
+                const assigned = tutorLc(n);
+                if (!assigned) return visibleStudentSet.has(String(n || '').trim().toLowerCase());
+                return assigned === tLc;
+            })
+        ) {
+            out.push(s);
+        }
+    });
+    return out;
+}
+
 function getDefaultSchoolTitle() {
     const names = getAvailableSchoolNames();
     if (names.length) return names[0];
@@ -3303,31 +3383,15 @@ function getSchoolNamesForStudentSchoolSelect() {
         const school = String(getStudentSchoolName(asStudent) || '').trim();
         return school ? [school] : [];
     }
-    const isScopedTeacher =
-        isTeacherLoggedIn && !isAdminLoggedIn && String(loggedInTeacherName || '').trim();
-    if (!isScopedTeacher) {
+    if (!isScopedTeacherSession()) {
         return getAvailableSchoolNames();
     }
-    const tLc = String(loggedInTeacherName || '').trim().toLowerCase();
-    const tutorLc = (n) => String(studentTeacherByName[n] || '').trim().toLowerCase();
     const visible = new Set();
     getStudentNamesVisibleInNavigation().forEach((n) => {
         const s = String(getStudentSchoolName(n) || '').trim();
         if (s) visible.add(s);
     });
-    customSchoolsList.forEach((raw) => {
-        const s = String(raw || '').trim();
-        if (!s) return;
-        const sk = s.toLowerCase();
-        const inSchool = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter(
-            (n) => (getStudentSchoolName(n) || '').trim().toLowerCase() === sk
-        );
-        if (inSchool.length === 0) {
-            visible.add(s);
-        } else if (inSchool.every((n) => tutorLc(n) === tLc)) {
-            visible.add(s);
-        }
-    });
+    getCustomSchoolsVisibleInSession().forEach((s) => visible.add(s));
     return [...visible].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
@@ -9660,23 +9724,8 @@ function renderSidebar() {
         }
         studentGroups.get(key).names.push(name);
     });
-    customSchoolsList.forEach((raw) => {
-        const school = String(raw || '').trim();
-        if (!school) return;
+    getCustomSchoolsVisibleInSession().forEach((school) => {
         const key = school.toLowerCase();
-        const scopedTeacher =
-            isTeacherLoggedIn &&
-            !isAdminLoggedIn &&
-            !loggedInStudentFullName &&
-            String(loggedInTeacherName || '').trim();
-        if (
-            scopedTeacher &&
-            !rosterScopeStudents.some(
-                (n) => (getStudentSchoolName(n) || getDefaultSchoolTitle()).trim().toLowerCase() === key
-            )
-        ) {
-            return;
-        }
         if (!studentGroups.has(key)) {
             studentGroups.set(key, {
                 title: school,
@@ -10164,23 +10213,8 @@ function populateClassReportStudentLists(container) {
         }
         grouped.get(key).names.push(name);
     });
-    customSchoolsList.forEach((raw) => {
-        const school = String(raw || '').trim();
-        if (!school) return;
+    getCustomSchoolsVisibleInSession().forEach((school) => {
         const key = school.toLowerCase();
-        const scopedTeacher =
-            isTeacherLoggedIn &&
-            !isAdminLoggedIn &&
-            !loggedInStudentFullName &&
-            String(loggedInTeacherName || '').trim();
-        if (
-            scopedTeacher &&
-            !rosterScopeStudents.some(
-                (n) => (getStudentSchoolName(n) || getDefaultSchoolTitle()).trim().toLowerCase() === key
-            )
-        ) {
-            return;
-        }
         if (!grouped.has(key)) {
             grouped.set(key, { title: school, names: [], kind: rosterKindFromSchoolName(school) });
         }
@@ -12912,7 +12946,7 @@ function setupEditStudentModal() {
     });
 }
 
-function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, billingModelRaw) {
+async function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, billingModelRaw) {
     if (!canManageRoster()) {
         denyStudentAction('Permission denied: students cannot add schools.');
         return;
@@ -12977,6 +13011,7 @@ function addSchoolFromForm(schoolNameRaw, primaryColorRaw, secondaryColorRaw, bi
     customSchoolsList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
     saveRoster();
+    await flushRosterSaveToCloud();
     refreshContextMenuTheme();
     renderSidebar();
     if (currentTeacher || loggedInStudentFullName) {
@@ -15089,6 +15124,23 @@ function setupAddStudentModal() {
                     return;
                 }
             }
+            const offsiteBtn = target.closest('#addSchoolExternalOffsite');
+            if (offsiteBtn) {
+                const urlInput = document.getElementById('addSchoolExternalUrl');
+                const parsed = parseHttpUrlInput(urlInput?.value || '');
+                if (parsed.error && parsed.error !== 'empty') {
+                    alert('Please provide a valid URL link.');
+                    urlInput?.focus();
+                    return;
+                }
+                if (parsed.error === 'empty' || !parsed.url) {
+                    alert('Paste the spreadsheet or external URL first.');
+                    urlInput?.focus();
+                    return;
+                }
+                window.open(parsed.url, '_blank', 'noopener,noreferrer');
+                return;
+            }
             const teachBtn = target.closest('.add-teacher-segmented-btn');
             if (teachBtn) {
                 const wrap = teachBtn.closest('.add-teacher-segmented');
@@ -15127,6 +15179,21 @@ function setupAddStudentModal() {
         modal.addEventListener('change', (e) => {
             const target = e.target;
             if (!(target instanceof HTMLInputElement)) return;
+            if (target.id === 'addSchoolExternalCheckbox') {
+                const panel = document.getElementById('addSchoolExternalPanel');
+                const urlInput = document.getElementById('addSchoolExternalUrl');
+                const on = !!target.checked;
+                if (panel) {
+                    panel.classList.toggle('is-collapsed', !on);
+                    panel.setAttribute('aria-hidden', on ? 'false' : 'true');
+                }
+                if (on) {
+                    window.setTimeout(() => urlInput?.focus(), 220);
+                } else {
+                    urlInput?.blur();
+                }
+                return;
+            }
             if (target.id !== 'addTeacherPhotoInput') return;
             const main = document.getElementById('addTeacherUploadMain');
             const sub = document.getElementById('addTeacherUploadSub');
@@ -15145,64 +15212,7 @@ function setupAddStudentModal() {
         if (addModalMode !== 'student-global') return;
         syncAddStudentModalThemeFromSchoolTitle(schoolSelectEl.value);
     });
-    const addSchoolExternalCheckbox = document.getElementById('addSchoolExternalCheckbox');
-    const addSchoolExternalPanel = document.getElementById('addSchoolExternalPanel');
-    const addSchoolExternalUrl = document.getElementById('addSchoolExternalUrl');
-    const addSchoolExternalOffsite = document.getElementById('addSchoolExternalOffsite');
-    const addSchoolPrimaryColor = document.getElementById('addSchoolPrimaryColor');
-    const addSchoolSecondaryColor = document.getElementById('addSchoolSecondaryColor');
-    const addSchoolPrimaryColorCheckbox = document.getElementById('addSchoolPrimaryColorCheckbox');
-    const addSchoolSecondaryColorCheckbox = document.getElementById('addSchoolSecondaryColorCheckbox');
-    const addSchoolPrimarySquare = document.querySelector('.add-school-theme-square--primary');
-    const addSchoolSecondarySquare = document.querySelector('.add-school-theme-square--secondary');
-    const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
-    addSchoolExternalCheckbox?.addEventListener('change', () => {
-        const on = !!addSchoolExternalCheckbox.checked;
-        if (addSchoolExternalPanel) {
-            addSchoolExternalPanel.classList.toggle('is-collapsed', !on);
-            addSchoolExternalPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
-        }
-        if (on) {
-            window.setTimeout(() => addSchoolExternalUrl?.focus(), 220);
-        } else {
-            addSchoolExternalUrl?.blur();
-        }
-    });
-    addSchoolExternalOffsite?.addEventListener('click', () => {
-        const parsed = parseHttpUrlInput(addSchoolExternalUrl?.value || '');
-        if (parsed.error && parsed.error !== 'empty') {
-            alert('Please provide a valid URL link.');
-            addSchoolExternalUrl?.focus();
-            return;
-        }
-        if (parsed.error === 'empty' || !parsed.url) {
-            alert('Paste the spreadsheet or external URL first.');
-            addSchoolExternalUrl?.focus();
-            return;
-        }
-        window.open(parsed.url, '_blank', 'noopener,noreferrer');
-    });
-    addSchoolPrimaryColorCheckbox?.addEventListener('change', () => {
-        addSchoolPrimaryColorCheckbox.checked = true;
-        if (addSchoolPrimarySquare) {
-            openAddSchoolColorPopup('primary', addSchoolPrimarySquare);
-        }
-    });
-    addSchoolSecondaryColorCheckbox?.addEventListener('change', () => {
-        addSchoolSecondaryColorCheckbox.checked = true;
-        if (addSchoolSecondarySquare) {
-            openAddSchoolColorPopup('secondary', addSchoolSecondarySquare);
-        }
-    });
-    addSchoolPrimarySquare?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openAddSchoolColorPopup('primary', addSchoolPrimarySquare);
-    });
-    addSchoolSecondarySquare?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openAddSchoolColorPopup('secondary', addSchoolSecondarySquare);
-    });
-    addSchoolColorPopup?.addEventListener('click', (e) => e.stopPropagation());
+    setupAddSchoolColorPickerDelegation();
     document.addEventListener('click', () => {
         if (!modal.classList.contains('is-open')) return;
         closeAddSchoolColorPopup();
@@ -15247,12 +15257,12 @@ function setupAddStudentModal() {
             await addStudentToSchoolFromForm(first, last, schoolName);
             return;
         }
-        const school = document.getElementById('addSchoolNameInput').value;
-        addSchoolFromForm(
+        const school = String(document.getElementById('addSchoolNameInput')?.value || '').trim();
+        await addSchoolFromForm(
             school,
-            addSchoolPrimaryColor?.value || '#5c6bc0',
-            addSchoolSecondaryColor?.value || '#1e88e5',
-            normalizeSchoolBillingModel(addSchoolBillingModel?.value || '')
+            document.getElementById('addSchoolPrimaryColor')?.value || '#5c6bc0',
+            document.getElementById('addSchoolSecondaryColor')?.value || '#1e88e5',
+            normalizeSchoolBillingModel(document.getElementById('addSchoolBillingModel')?.value || '')
         );
     });
 }
