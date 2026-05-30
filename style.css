@@ -2376,10 +2376,6 @@ input.student-reposition-modal-day {
     min-height: 0;
 }
 
-#editStudentModal .student-modal-body {
-    padding-bottom: var(--student-modal-body-pad-actions);
-}
-
 #editStudentModal .student-modal-footer {
     margin: 0;
     padding: 0;
@@ -2392,8 +2388,8 @@ input.student-reposition-modal-day {
 #editStudentModal .student-modal-card .footer-actions,
 #editStudentModal .footer-actions {
     position: fixed;
-    right: -30px;
-    bottom: -30px;
+    right: -20px;
+    bottom: -20px;
     z-index: 2;
     display: inline-flex;
     justify-content: flex-end;
