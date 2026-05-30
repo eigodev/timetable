@@ -12353,10 +12353,11 @@ function buildStudentWhatsappMessage(studentName) {
     ];
     const classLinkLine = classLinkLineOptions[Math.floor(Math.random() * classLinkLineOptions.length)] || "Here's your class link.";
     return `${dateLine}
-${greeting}, ${firstName}. ${followUp}
+    ${greeting}, '@'. ${followUp}
 
-${meetLine}
-${classLinkLine}`;
+    ${meetLine}
+    ${classLinkLine}
+    `;
 }
 
 function refreshEditStudentSchoolSelect(selectedSchool = '') {

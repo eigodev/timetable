@@ -4765,6 +4765,7 @@ tr td.add-teacher-availability-table-day {
 
 .teacher-list-dashboard-btn-label {
     line-height: 1;
+    font-size: 0.85rem;
 }
 
 .teacher-list-management,
@@ -4839,6 +4840,7 @@ tr td.add-teacher-availability-table-day {
 
 .management-nav-btn-label {
     line-height: 1;
+    font-size: 0.85rem;
 }
 
 .teacher-list::-webkit-scrollbar {
