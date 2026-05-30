@@ -42,7 +42,7 @@ body {
 .sidebar {
     display: flex;
     flex-direction: column;
-    background: white;
+    background-color: #334461;
 
     height: 100%;
     width: 27.5%;
@@ -4725,7 +4725,7 @@ tr td.add-teacher-availability-table-day {
     min-height: 0;
     padding: 20px;
 
-    background-color: #f1f1f3;
+    background-color: #334461;
     transition: background-color var(--sidebar-layout-duration, 0.42s) ease;
     /* Hide scrollbar so it doesn’t reserve width and push row content (e.g. toggle buttons) left */
     scrollbar-width: none; /* Firefox */
@@ -4847,7 +4847,7 @@ tr td.add-teacher-availability-table-day {
 
 .sidebar-pane {
     width: 100%;
-    background: #fff;
+    background: #334461;
     /* Use inset shadow for the stroke so content width isn't reduced by a physical border. */
     border: none;
     --sidebar-pane-radius: 12px;

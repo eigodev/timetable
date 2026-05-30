@@ -50,15 +50,24 @@ export async function onRequest(context) {
         if (actor.role === 'student' && actor.profile) {
           const fullRoster = (await kvGetAllRoster(KV_SCHEDULES)) || {};
           const tutor = String(fullRoster?.studentTeachers?.[actor.profile] || '').trim();
-          if (tutor && schedules[tutor] != null) {
-            out = { [tutor]: schedules[tutor] };
-          } else {
-            out = {};
+          const studentOut = {};
+          if (schedules[actor.profile] != null) {
+            studentOut[actor.profile] = schedules[actor.profile];
           }
-        } else {
-          const fullRoster = (await kvGetAllRoster(KV_SCHEDULES)) || {};
-          out = filterSchedulesForActor(schedules, actor, fullRoster);
+          if (tutor && schedules[tutor] != null) {
+            studentOut[tutor] = schedules[tutor];
+          }
+          return new Response(
+            JSON.stringify({
+              success: true,
+              schedules: studentOut,
+              lastUpdated: lastUpdated || null,
+            }),
+            { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
+          );
         }
+        const fullRoster = (await kvGetAllRoster(KV_SCHEDULES)) || {};
+        out = filterSchedulesForActor(schedules, actor, fullRoster);
       }
       return new Response(
         JSON.stringify({
@@ -95,13 +104,13 @@ export async function onRequest(context) {
         }
         if (role === 'teacher' || role === 'gate') {
           const base = (await KV_SCHEDULES.get('all_schedules', 'json')) || {};
+          const rosterFull = (await kvGetAllRoster(KV_SCHEDULES)) || {};
           let merged;
           try {
             if (role === 'gate' && String(auth.payload.gateAppRole || '').trim() === 'class-supervisor') {
-              const rosterFull = (await kvGetAllRoster(KV_SCHEDULES)) || {};
               merged = mergeSchedulesForClassSupervisor(base, schedules, profile, rosterFull);
             } else {
-              merged = mergeSchedulesForTeacher(base, schedules, profile);
+              merged = mergeSchedulesForTeacher(base, schedules, profile, rosterFull);
             }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e || 'Forbidden');

@@ -475,18 +475,27 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
   return out;
 }
 
-export function mergeSchedulesForTeacher(baseSchedules, incomingSchedules, teacherProfile) {
+export function mergeSchedulesForTeacher(baseSchedules, incomingSchedules, teacherProfile, fullRoster) {
   const profile = String(teacherProfile || '').trim();
   if (!profile) throw new Error('Missing teacher profile');
   const base = baseSchedules && typeof baseSchedules === 'object' ? { ...baseSchedules } : {};
   const inc = incomingSchedules && typeof incomingSchedules === 'object' ? incomingSchedules : {};
-  for (const k of Object.keys(inc)) {
-    if (String(k || '').trim() !== profile) {
-      throw new Error('Cannot modify another teacher schedule');
+  const allowed = new Set([profile]);
+  if (fullRoster && typeof fullRoster === 'object') {
+    for (const stu of studentsAssignedToTeacher(fullRoster, profile)) {
+      allowed.add(stu);
+    }
+    for (const stu of rosterStudentNamesWithNoTutor(fullRoster)) {
+      allowed.add(stu);
     }
   }
-  if (Object.prototype.hasOwnProperty.call(inc, profile)) {
-    base[profile] = inc[profile];
+  for (const k of Object.keys(inc)) {
+    const key = String(k || '').trim();
+    if (!key) continue;
+    if (!allowed.has(key)) {
+      throw new Error('Cannot modify this schedule');
+    }
+    base[key] = inc[key];
   }
   return base;
 }

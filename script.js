@@ -5,6 +5,8 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 // LocalStorage key (fallback)
 const STORAGE_KEY = 'timetable_schedules';
+/** ISO timestamp bumped on every local schedule write; used to prefer local over stale cloud on reload. */
+const SCHEDULES_LOCAL_UPDATED_KEY = 'timetable_schedules_local_updated';
 /** Set after local schedule edits until `performSave` confirms KV write (avoids stale cloud wiping a fast refresh). */
 const SCHEDULE_PENDING_CLOUD_UPLOAD_KEY = 'timetable_schedule_pending_cloud_upload';
 const ROSTER_STORAGE_KEY = 'timetable_roster';
@@ -1793,6 +1795,92 @@ function initCrossTabLogoutBroadcastListener() {
         if (e.storageArea !== localStorage) return;
         if (e.key !== LOGOUT_BROADCAST_STORAGE_KEY || e.newValue == null) return;
         handleLogoutBroadcastFromOtherTab();
+    });
+}
+
+function readSchedulesObjectFromLocalStorage() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return {};
+        const parsed = JSON.parse(saved);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function getSchedulesLocalUpdatedAt() {
+    try {
+        return String(localStorage.getItem(SCHEDULES_LOCAL_UPDATED_KEY) || '').trim();
+    } catch {
+        return '';
+    }
+}
+
+function replaceTeacherSchedulesFromObject(next) {
+    Object.keys(teacherSchedules).forEach((k) => {
+        delete teacherSchedules[k];
+    });
+    Object.assign(teacherSchedules, next && typeof next === 'object' ? next : {});
+}
+
+/**
+ * Merge cloud schedules without dropping local-only keys (student grids) or newer local edits.
+ */
+function mergeRemoteSchedulesAfterLoad(remoteSchedules, remoteLastUpdated) {
+    const localParsed = readSchedulesObjectFromLocalStorage();
+    const localTs = getSchedulesLocalUpdatedAt();
+    const remoteTs = remoteLastUpdated ? String(remoteLastUpdated) : '';
+    const preferLocal =
+        isSchedulePendingCloudUpload() || !!(localTs && remoteTs && localTs > remoteTs);
+
+    if (preferLocal) {
+        replaceTeacherSchedulesFromObject(localParsed);
+        return;
+    }
+
+    replaceTeacherSchedulesFromObject(remoteSchedules || {});
+    for (const [k, v] of Object.entries(localParsed)) {
+        if (!remoteSchedules || !Object.prototype.hasOwnProperty.call(remoteSchedules, k)) {
+            teacherSchedules[k] = v;
+        }
+    }
+}
+
+function refreshScheduleViewFromMemory() {
+    if (!isTeacherLoggedIn || !currentTeacher) return;
+    const refreshKey = loggedInStudentFullName
+        ? String(loggedInStudentFullName).trim()
+        : String(currentTeacher || '').trim();
+    if (!refreshKey) return;
+    loadTeacherSchedule(refreshKey);
+    if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+        refreshCalendarDisplay();
+    }
+}
+
+/** Apply schedule blob written by another tab/window (localStorage `storage` event). */
+function applySchedulesFromLocalStorageToMemory(opts = {}) {
+    if (!localStorage.getItem(STORAGE_KEY)) return false;
+    replaceTeacherSchedulesFromObject(readSchedulesObjectFromLocalStorage());
+    applyTeacherDataIsolationInMemory();
+    if (opts.refreshUi !== false) {
+        refreshScheduleViewFromMemory();
+    }
+    return true;
+}
+
+function initCrossTabScheduleSyncListener() {
+    try {
+        if (document.body?.dataset.crossTabScheduleBound === '1') return;
+        if (document.body) document.body.dataset.crossTabScheduleBound = '1';
+    } catch {
+        /* ignore */
+    }
+    window.addEventListener('storage', (e) => {
+        if (e.storageArea !== localStorage) return;
+        if (e.key !== STORAGE_KEY && e.key !== SCHEDULES_LOCAL_UPDATED_KEY) return;
+        applySchedulesFromLocalStorageToMemory({ refreshUi: true });
     });
 }
 
@@ -8427,12 +8515,23 @@ async function loadAllSchedules() {
             return;
         }
 
-        const response = await fetch(schedulesUrl, {
+        let schedulesFetchUrl = schedulesUrl;
+        try {
+            const u = new URL(schedulesUrl);
+            u.searchParams.set('t', String(Date.now()));
+            schedulesFetchUrl = u.href;
+        } catch {
+            schedulesFetchUrl =
+                schedulesUrl + (schedulesUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+        }
+
+        const response = await fetch(schedulesFetchUrl, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 ...authHeaders
             },
+            cache: 'no-cache',
         });
         
         if (response.ok) {
@@ -8447,7 +8546,7 @@ async function loadAllSchedules() {
 
             if (data.success) {
                 if (data.schedules && !skipCloudClobberPendingUpload) {
-                    Object.assign(teacherSchedules, data.schedules);
+                    mergeRemoteSchedulesAfterLoad(data.schedules, data.lastUpdated);
                     applyTeacherDataIsolationInMemory();
                 }
                 lastUpdateTimestamp = data.lastUpdated;
@@ -8517,6 +8616,7 @@ function setupVisibilityCloudRefresh() {
     document.body.dataset.visibilityCloudRefresh = '1';
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
+        applySchedulesFromLocalStorageToMemory({ refreshUi: true });
         void pollClassReportUploadsFromCloud();
         void pollRosterUpdates();
     });
@@ -8611,8 +8711,9 @@ function startPolling() {
                                         void saveAllSchedules();
                                     } else {
                                         console.log('Data changed - updating from cloud');
-                                        Object.assign(teacherSchedules, schedules);
+                                        mergeRemoteSchedulesAfterLoad(schedules, data.lastUpdated);
                                         applyTeacherDataIsolationInMemory();
+                                        refreshScheduleViewFromMemory();
 
                                         updateSyncStatus('synced', '✓ Updated from cloud');
                                         setTimeout(() => {
@@ -8651,9 +8752,8 @@ function startPolling() {
 // Load from localStorage (fallback)
 function loadAllSchedulesLocal() {
     try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            const parsed = JSON.parse(saved);
+        const parsed = readSchedulesObjectFromLocalStorage();
+        if (Object.keys(parsed).length > 0) {
             Object.assign(teacherSchedules, parsed);
         }
     } catch (error) {
@@ -8704,25 +8804,42 @@ function saveAllSchedules() {
     }, 800);
 }
 
-/** Cloud schedule POST: class supervisors may only submit keys the server merge accepts. */
+/** Cloud schedule POST: scoped keys the server accepts (teacher + assigned students). */
 function getSchedulesPayloadForCloudPost() {
-    if (!isGateStaffAccountSession() || getGateSessionAppRole() !== 'class-supervisor') {
+    if (isGateStaffAccountSession() && getGateSessionAppRole() === 'class-supervisor') {
+        const allowed = new Set();
+        const self = String(loggedInTeacherName || '').trim();
+        if (self) {
+            const selfKey = canonicalTeacherNameOnRoster(self);
+            if (selfKey) allowed.add(selfKey);
+        }
+        for (const name of getClassSupervisorActiveSuperviseeTeacherNames()) {
+            if (name) allowed.add(name);
+        }
+        const out = {};
+        for (const k of Object.keys(teacherSchedules)) {
+            if (allowed.has(k)) out[k] = teacherSchedules[k];
+        }
+        return out;
+    }
+    if (isAdminLoggedIn) {
         return teacherSchedules;
     }
-    const allowed = new Set();
-    const self = String(loggedInTeacherName || '').trim();
-    if (self) {
-        const selfKey = canonicalTeacherNameOnRoster(self);
-        if (selfKey) allowed.add(selfKey);
+    if (isTeacherLoggedIn && loggedInTeacherName && !loggedInStudentFullName) {
+        const tutorKey = String(loggedInTeacherName || '').trim();
+        const out = {};
+        if (tutorKey && teacherSchedules[tutorKey] != null) {
+            out[tutorKey] = teacherSchedules[tutorKey];
+        }
+        getStudentNamesVisibleInNavigation().forEach((studentName) => {
+            const k = String(studentName || '').trim();
+            if (k && teacherSchedules[k] != null) {
+                out[k] = teacherSchedules[k];
+            }
+        });
+        return out;
     }
-    for (const name of getClassSupervisorActiveSuperviseeTeacherNames()) {
-        if (name) allowed.add(name);
-    }
-    const out = {};
-    for (const k of Object.keys(teacherSchedules)) {
-        if (allowed.has(k)) out[k] = teacherSchedules[k];
-    }
-    return out;
+    return teacherSchedules;
 }
 
 // Actually perform the save operation
@@ -8842,6 +8959,7 @@ async function performSave() {
 function saveAllSchedulesLocal() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(teacherSchedules));
+        localStorage.setItem(SCHEDULES_LOCAL_UPDATED_KEY, new Date().toISOString());
     } catch (error) {
         console.error('Error saving schedules to localStorage:', error);
     }
@@ -16689,6 +16807,7 @@ function setupAdminControlPanel() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     initCrossTabLogoutBroadcastListener();
+    initCrossTabScheduleSyncListener();
     const isAdminPage = document.body?.dataset.page === 'admin';
     if (isAdminPage) {
         let allow = false;
