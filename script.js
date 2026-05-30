@@ -4157,7 +4157,30 @@ function parseHttpUrlInput(value) {
     }
 }
 
+function studentNameMatches(a, b) {
+    return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+}
+
+/** Which roster list(s) actually contain this student (not school schedule mode). */
+function findStudentRosterListKeys(name) {
+    const keys = [];
+    if (privateStudentsList.some((n) => studentNameMatches(n, name))) keys.push('private');
+    if (speakonStudentsList.some((n) => studentNameMatches(n, name))) keys.push('speakon');
+    if (passportStudentsList.some((n) => studentNameMatches(n, name))) keys.push('passport');
+    return keys;
+}
+
+function deleteStudentEntryFromMap(map, name) {
+    if (!map || typeof map !== 'object') return;
+    Object.keys(map).forEach((k) => {
+        if (studentNameMatches(k, name)) delete map[k];
+    });
+}
+
 function getStudentRosterKind(name) {
+    const keys = findStudentRosterListKeys(name);
+    if (keys.length === 1) return keys[0];
+    if (keys.length > 1) return keys[0];
     return rosterKindFromSchoolName(getStudentSchoolName(name));
 }
 
@@ -8258,6 +8281,23 @@ function queueSaveRosterToCloud(rosterPayload) {
     }, 350);
 }
 
+/** Push roster to cloud immediately (e.g. after delete) instead of waiting for debounce. */
+async function flushRosterSaveToCloud() {
+    if (rosterSaveTimer) {
+        clearTimeout(rosterSaveTimer);
+        rosterSaveTimer = null;
+    }
+    try {
+        const raw = localStorage.getItem(ROSTER_STORAGE_KEY);
+        if (!raw) return;
+        const rosterPayload = JSON.parse(raw);
+        if (!rosterPayload || typeof rosterPayload !== 'object' || Array.isArray(rosterPayload)) return;
+        await saveRosterToCloud(rosterPayload);
+    } catch (e) {
+        console.warn('flushRosterSaveToCloud:', e);
+    }
+}
+
 /**
  * Headers for GET polls that need a Bearer when the worker enforces JWT.
  * Returns null when the request would only yield 401 (except legacy: auth-login returned 503).
@@ -9885,7 +9925,7 @@ function renderSidebar() {
                 editBtn.setAttribute('aria-label', `Edit ${name}`);
                 editBtn.setAttribute('title', `Edit ${name}`);
                 editBtn.setAttribute('data-student-name', name);
-                editBtn.setAttribute('data-roster-kind', category.rosterKey);
+                editBtn.setAttribute('data-roster-kind', getStudentRosterKind(name));
                 editBtn.innerHTML = EDIT_ICON_SVG_SOLID;
                 actionsWrap.appendChild(editBtn);
 
@@ -10820,7 +10860,7 @@ function removeGateStaffAccountByProfile(profileNameRaw, expectedAppRole) {
     );
 }
 
-function removeAccountFromAdmin(role, name) {
+async function removeAccountFromAdmin(role, name) {
     if (!hasEffectiveAdminSession()) {
         denyStudentAction('Permission denied: only admins can remove account records.');
         return;
@@ -10914,9 +10954,7 @@ function removeAccountFromAdmin(role, name) {
         showAppMessage('Teacher removed along with their students and unused school profiles.');
         return;
     } else if (role === 'Student') {
-        const school = getStudentSchoolName(name);
-        const kind = rosterKindFromSchoolName(school);
-        removeStudentFromRoster(name, kind);
+        await removeStudentFromRoster(name);
         showAppMessage('Student account removed.');
         return;
     }
@@ -11257,12 +11295,12 @@ function setupAdminDashboardDeleteModal() {
     modal.dataset.bound = '1';
     cancelBtn?.addEventListener('click', () => closeAdminDashboardDeleteModal());
     backdrop?.addEventListener('click', () => closeAdminDashboardDeleteModal());
-    confirmBtn.addEventListener('click', () => {
+    confirmBtn.addEventListener('click', async () => {
         const p = adminDashboardDeletePending;
         adminDashboardDeletePending = null;
         closeModalWithAnimation(modal);
         if (p && p.role && p.name) {
-            removeAccountFromAdmin(p.role, p.name);
+            await removeAccountFromAdmin(p.role, p.name);
             renderAdminOverviewPanel();
         }
     });
@@ -11274,8 +11312,7 @@ function openAdminDashboardDeleteConfirm(role, name) {
     const bodyEl = document.getElementById('adminDashboardDeleteModalBody');
     if (!modal || !titleEl || !bodyEl) {
         if (window.confirm(buildAdminDashboardDeleteMessage(role, name))) {
-            removeAccountFromAdmin(role, name);
-            renderAdminOverviewPanel();
+            void removeAccountFromAdmin(role, name).then(() => renderAdminOverviewPanel());
         }
         return;
     }
@@ -11925,54 +11962,71 @@ function resyncSelectionAfterSidebarRender() {
     selectTeacher(sidebarName, opts);
 }
 
-function removeStudentFromRoster(name, rosterKey) {
+async function removeStudentFromRoster(name, rosterKey) {
     if (!canManageRoster()) {
         denyStudentAction('Permission denied: students cannot delete student profiles.');
         return;
     }
-    const kind = String(rosterKey || '').trim();
-    const list = kind === 'private'
-        ? privateStudentsList
-        : (kind === 'speakon' ? speakonStudentsList : passportStudentsList);
-    let idx = list.indexOf(name);
-    if (idx === -1) {
-        const trimmed = name.trim();
-        idx = list.findIndex((n) => n.trim() === trimmed);
+    const hintedKind = String(rosterKey || '').trim();
+    let listKeys = findStudentRosterListKeys(name);
+    if (hintedKind && listKeys.includes(hintedKind)) {
+        listKeys = [hintedKind, ...listKeys.filter((k) => k !== hintedKind)];
+    } else if (!listKeys.length && hintedKind) {
+        listKeys = [hintedKind];
     }
-    if (idx === -1) {
-        console.warn('removeStudentFromRoster: name not found in roster', { name, rosterKey: kind });
+
+    let removedName = '';
+    for (const kind of listKeys) {
+        const list =
+            kind === 'private'
+                ? privateStudentsList
+                : kind === 'speakon'
+                  ? speakonStudentsList
+                  : passportStudentsList;
+        const idx = list.findIndex((n) => studentNameMatches(n, name));
+        if (idx === -1) continue;
+        if (!removedName) removedName = list[idx];
+        list.splice(idx, 1);
+    }
+    if (!removedName) {
+        console.warn('removeStudentFromRoster: name not found in roster', { name, rosterKey: hintedKind });
         return;
     }
 
-    const removedName = list[idx];
-    list.splice(idx, 1);
     saveRoster();
 
-    const wasCurrent = currentTeacher === removedName;
+    const wasCurrent = studentNameMatches(currentTeacher, removedName);
     if (wasCurrent) {
         currentTeacher = null;
         slotStates = {};
     }
 
     delete teacherSchedules[removedName];
-    delete speakonStudentWeeklyClass[removedName];
-    delete studentClassReportRows[removedName];
-    delete studentClassReportUploadsByName[removedName];
-    delete passportFollowupLinks[removedName];
-    delete studentExternalFollowUpLinksByName[removedName];
-    delete studentSchoolByName[removedName];
-    delete studentPhonesByName[removedName];
-    delete studentTeacherByName[removedName];
-    delete studentGoogleMeetLinksByName[removedName];
-    delete studentEmailsByName[removedName];
-    delete studentUsernamesByName[removedName];
-    delete studentPasswordsByName[removedName];
-    delete studentCityByName[removedName];
-    delete studentCountryByName[removedName];
+    deleteStudentEntryFromMap(teacherSchedules, removedName);
+    const weeklyKey = getStudentWeeklyClassStorageKey(removedName);
+    if (weeklyKey) delete speakonStudentWeeklyClass[weeklyKey];
+    deleteStudentEntryFromMap(speakonStudentWeeklyClass, removedName);
+    deleteStudentEntryFromMap(studentClassReportRows, removedName);
+    deleteStudentEntryFromMap(studentClassReportUploadsByName, removedName);
+    deleteStudentEntryFromMap(passportFollowupLinks, removedName);
+    deleteStudentEntryFromMap(studentExternalFollowUpLinksByName, removedName);
+    deleteStudentEntryFromMap(studentSchoolByName, removedName);
+    deleteStudentEntryFromMap(studentPhonesByName, removedName);
+    deleteStudentEntryFromMap(studentTeacherByName, removedName);
+    deleteStudentEntryFromMap(studentGoogleMeetLinksByName, removedName);
+    deleteStudentEntryFromMap(studentEmailsByName, removedName);
+    deleteStudentEntryFromMap(studentUsernamesByName, removedName);
+    deleteStudentEntryFromMap(studentPasswordsByName, removedName);
+    deleteStudentEntryFromMap(studentCityByName, removedName);
+    deleteStudentEntryFromMap(studentCountryByName, removedName);
+    deleteStudentEntryFromMap(studentBirthDatesByName, removedName);
+    deleteStudentEntryFromMap(studentAgesByName, removedName);
+    deleteStudentEntryFromMap(studentLevelsByName, removedName);
     saveStudentClassReportRows();
     void flushClassReportReplaceManifestFromMemory();
     saveAllSchedulesLocal();
     saveAllSchedules();
+    await flushRosterSaveToCloud();
 
     renderSidebar();
 
@@ -12517,7 +12571,7 @@ async function upsertStudentFromEditForm(action = 'save') {
     }
 
     if (action === 'delete') {
-        removeStudentFromRoster(originalName, originalKind);
+        await removeStudentFromRoster(originalName, originalKind);
         closeEditStudentModal();
         return;
     }

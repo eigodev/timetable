@@ -1114,28 +1114,54 @@
 
         function deleteStudentFieldRaw(raw, fieldKey, studentName) {
             const o = raw[fieldKey];
-            if (o && typeof o === 'object' && !Array.isArray(o)) delete o[studentName];
+            if (!o || typeof o !== 'object' || Array.isArray(o)) return;
+            const q = String(studentName || '').trim().toLowerCase();
+            Object.keys(o).forEach((k) => {
+                if (String(k || '').trim().toLowerCase() === q) delete o[k];
+            });
         }
 
         function deleteStudentFromRosterAdmin(raw, studentName, listKey) {
             const arr = ensureRosterStudentList(raw, listKey);
-            const i = arr.findIndex((n) => String(n || '').trim() === String(studentName || '').trim());
+            const q = String(studentName || '').trim().toLowerCase();
+            const i = arr.findIndex((n) => String(n || '').trim().toLowerCase() === q);
             if (i === -1) return false;
             arr.splice(i, 1);
-            deleteStudentFieldRaw(raw, 'studentSchools', studentName);
-            deleteStudentFieldRaw(raw, 'studentTeachers', studentName);
-            deleteStudentFieldRaw(raw, 'studentEmails', studentName);
-            deleteStudentFieldRaw(raw, 'studentUsernames', studentName);
-            deleteStudentFieldRaw(raw, 'studentPasswords', studentName);
-            deleteStudentFieldRaw(raw, 'studentCities', studentName);
-            deleteStudentFieldRaw(raw, 'studentCountries', studentName);
-            deleteStudentFieldRaw(raw, 'studentPhones', studentName);
-            deleteStudentFieldRaw(raw, 'studentGoogleMeetLinks', studentName);
-            deleteStudentFieldRaw(raw, 'passportLinks', studentName);
-            deleteStudentFieldRaw(raw, 'studentExternalFollowUpLinks', studentName);
-            deleteStudentFieldRaw(raw, 'studentBirthDates', studentName);
-            deleteStudentFieldRaw(raw, 'studentAges', studentName);
-            deleteStudentFieldRaw(raw, 'studentLevels', studentName);
+            return true;
+        }
+
+        const ADMIN_STUDENT_FIELD_KEYS = [
+            'studentSchools',
+            'studentTeachers',
+            'studentEmails',
+            'studentUsernames',
+            'studentPasswords',
+            'studentCities',
+            'studentCountries',
+            'studentPhones',
+            'studentGoogleMeetLinks',
+            'passportLinks',
+            'studentExternalFollowUpLinks',
+            'studentBirthDates',
+            'studentAges',
+            'studentLevels'
+        ];
+
+        function deleteStudentCompletelyFromRosterAdmin(raw, studentName) {
+            const q = String(studentName || '').trim().toLowerCase();
+            if (!q) return false;
+            let removed = false;
+            ['private', 'speakon', 'passport'].forEach((listKey) => {
+                if (deleteStudentFromRosterAdmin(raw, studentName, listKey)) removed = true;
+            });
+            if (!removed) return false;
+            ADMIN_STUDENT_FIELD_KEYS.forEach((fieldKey) => deleteStudentFieldRaw(raw, fieldKey, studentName));
+            const swc = raw.speakonWeeklyClass;
+            if (swc && typeof swc === 'object' && !Array.isArray(swc)) {
+                Object.keys(swc).forEach((k) => {
+                    if (String(k || '').trim().toLowerCase() === q) delete swc[k];
+                });
+            }
             return true;
         }
 
@@ -1186,21 +1212,22 @@
                     }
                 });
             });
-            toRemove.forEach(({ name, listKey }) => deleteStudentFromRosterAdmin(raw, name, listKey));
+            toRemove.forEach(({ name }) => deleteStudentCompletelyFromRosterAdmin(raw, name));
             stripUnusedCustomSchoolProfilesAdmin(raw);
         }
 
         function deleteSchoolAdmin(raw, displayTitle) {
             const schoolKey = String(displayTitle || '').trim().toLowerCase();
             if (!schoolKey) return;
+            const toRemove = [];
             ['private', 'speakon', 'passport'].forEach((listKey) => {
-                const snapshot = [...ensureRosterStudentList(raw, listKey)];
-                snapshot.forEach((studentName) => {
+                ensureRosterStudentList(raw, listKey).forEach((studentName) => {
                     if (getStudentSchoolKeyFromRaw(raw, studentName, listKey) === schoolKey) {
-                        deleteStudentFromRosterAdmin(raw, studentName, listKey);
+                        toRemove.push(studentName);
                     }
                 });
             });
+            toRemove.forEach((studentName) => deleteStudentCompletelyFromRosterAdmin(raw, studentName));
             raw.customSchools = asArray(raw.customSchools).filter((s) => String(s || '').trim().toLowerCase() !== schoolKey);
             ['schoolExternalLinks', 'schoolThemeColors', 'schoolBillingModels', 'schoolBillingConfigs'].forEach((k) => {
                 deleteStudentFieldRaw(raw, k, schoolKey);
@@ -1235,8 +1262,7 @@
             if (role === 'Teacher') deleteTeacherAdmin(raw, name);
             else if (role === 'School') deleteSchoolAdmin(raw, name);
             else if (role === 'Student') {
-                const st = getAllStudents().find((s) => s.name === name);
-                if (st) deleteStudentFromRosterAdmin(raw, name, st.kind);
+                deleteStudentCompletelyFromRosterAdmin(raw, name);
             } else if (role === 'GateCoordinator') deleteGateStaffRaw(raw, name, 'coordinator');
             else if (role === 'GateClassSupervisor') deleteGateStaffRaw(raw, name, 'class-supervisor');
             else if (role === 'GateTeacherAssistant') deleteGateStaffRaw(raw, name, 'assistant');
