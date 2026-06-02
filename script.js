@@ -9740,6 +9740,7 @@ function renderSidebar() {
             names: group.names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
             rosterKey: group.rosterKey,
             schoolTheme: getSchoolTheme(group.title),
+            usesSchoolLinkHeader: !!getSchoolExternalLinkUrl(group.title),
             itemClass: group.rosterKey === 'passport' ? 'category-passport' : (group.rosterKey === 'speakon' ? 'category-speakon' : 'category-private'),
             deletable: true,
             parent: studentsInner,
