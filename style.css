@@ -7720,6 +7720,21 @@ body.student-school-calendar .time-slot.state-available {
     color: #333;
 }
 
+.calendar-student-names-section-header {
+    margin: 0 0 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    color: #4f5f8d;
+}
+
+.calendar-student-names-divider {
+    height: 1px;
+    margin: 10px 0 8px;
+    background: #d6dcef;
+}
+
 .calendar-school-filter-item + .calendar-school-filter-item {
     margin-top: 6px;
 }
@@ -7763,6 +7778,21 @@ body.student-school-calendar .time-slot.state-available {
 
 .calendar-school-filter-option input[type="checkbox"]:checked::before {
     transform: scale(1);
+}
+
+.calendar-event-filter-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.calendar-event-filter-option input[type="checkbox"] {
+    margin: 0;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    accent-color: #5669d8;
 }
 
 .calendar-link-popover {

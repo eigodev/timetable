@@ -4856,6 +4856,11 @@ let calendarLinkPopoverHideTimer = null;
 let calendarNameVisibleSchoolKeys = new Set();
 let calendarSchoolFilterDefaulted = false;
 let calendarStudentPopoverHideTimer = null;
+let calendarEventTypeVisibility = {
+    class: true,
+    extra: true,
+    reposition: true
+};
 let calendarPromptPopoverOpen = false;
 let calendarPromptSelectedDays = new Set();
 let calendarPromptPopoverHideTimer = null;
@@ -5266,44 +5271,114 @@ function renderCalendarStudentNamesList() {
     const title = document.getElementById('calendarStudentNamesPopoverTitle');
     const ul = document.getElementById('calendarStudentNamesList');
     if (!ul) return;
-    if (title) title.textContent = 'Schools';
+    if (title) title.textContent = 'School options';
     ensureCalendarSchoolFilterSelection();
     ul.innerHTML = '';
+
+    const namesHeader = document.createElement('li');
+    namesHeader.className = 'calendar-student-names-section-header';
+    namesHeader.textContent = 'Hide/Show names';
+    ul.appendChild(namesHeader);
+
     const schools = getAvailableSchoolNames();
     if (schools.length === 0) {
         const li = document.createElement('li');
         li.textContent = 'No schools found.';
         li.style.color = '#666';
         ul.appendChild(li);
-        return;
+    } else {
+        schools.forEach((schoolName) => {
+            const key = schoolThemeKey(schoolName);
+            const checked = calendarNameVisibleSchoolKeys.has(key);
+            const theme = getSchoolTheme(schoolName);
+            const li = document.createElement('li');
+            li.className = 'calendar-school-filter-item';
+            const label = document.createElement('label');
+            label.className = 'calendar-school-filter-option';
+            label.style.setProperty('--menu-option-color', theme.primary);
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.checked = checked;
+            input.dataset.schoolKey = key;
+            input.addEventListener('change', () => {
+                const schoolKey = String(input.dataset.schoolKey || '').trim();
+                if (!schoolKey) return;
+                if (input.checked) calendarNameVisibleSchoolKeys.add(schoolKey);
+                else calendarNameVisibleSchoolKeys.delete(schoolKey);
+                setCalendarStudentNamesInCellsVisible(calendarNameVisibleSchoolKeys.size > 0);
+            });
+            const text = document.createElement('span');
+            text.textContent = schoolName;
+            label.appendChild(input);
+            label.appendChild(text);
+            li.appendChild(label);
+            ul.appendChild(li);
+        });
     }
-    schools.forEach((schoolName) => {
-        const key = schoolThemeKey(schoolName);
-        const checked = calendarNameVisibleSchoolKeys.has(key);
-        const theme = getSchoolTheme(schoolName);
+
+    const divider = document.createElement('li');
+    divider.className = 'calendar-student-names-divider';
+    divider.setAttribute('aria-hidden', 'true');
+    ul.appendChild(divider);
+
+    const classesHeader = document.createElement('li');
+    classesHeader.className = 'calendar-student-names-section-header';
+    classesHeader.textContent = 'Hide/Show classes';
+    ul.appendChild(classesHeader);
+
+    const eventOptions = [
+        { key: 'class', label: 'Classes' },
+        { key: 'extra', label: 'Extra' },
+        { key: 'reposition', label: 'Repositions' }
+    ];
+    eventOptions.forEach((opt) => {
         const li = document.createElement('li');
         li.className = 'calendar-school-filter-item';
         const label = document.createElement('label');
-        label.className = 'calendar-school-filter-option';
-        label.style.setProperty('--menu-option-color', theme.primary);
+        label.className = 'calendar-event-filter-option';
         const input = document.createElement('input');
         input.type = 'checkbox';
-        input.checked = checked;
-        input.dataset.schoolKey = key;
+        input.checked = calendarEventTypeVisibility[opt.key] !== false;
+        input.dataset.eventTypeKey = opt.key;
         input.addEventListener('change', () => {
-            const schoolKey = String(input.dataset.schoolKey || '').trim();
-            if (!schoolKey) return;
-            if (input.checked) calendarNameVisibleSchoolKeys.add(schoolKey);
-            else calendarNameVisibleSchoolKeys.delete(schoolKey);
-            setCalendarStudentNamesInCellsVisible(calendarNameVisibleSchoolKeys.size > 0);
+            const eventTypeKey = String(input.dataset.eventTypeKey || '').trim();
+            if (!eventTypeKey) return;
+            calendarEventTypeVisibility[eventTypeKey] = !!input.checked;
+            refreshCalendarDisplay();
         });
         const text = document.createElement('span');
-        text.textContent = schoolName;
+        text.textContent = opt.label;
         label.appendChild(input);
         label.appendChild(text);
         li.appendChild(label);
         ul.appendChild(li);
     });
+}
+
+function isCalendarEventTypeVisible(displayState) {
+    const normalized = String(displayState || '').trim().toLowerCase();
+    if (!normalized || normalized === 'null' || normalized === 'available') return true;
+    if (normalized === BOOKED_CLASS_SLOT_STATE || normalized === 'rescheduled' || normalized === 'unavailable') {
+        return calendarEventTypeVisibility.reposition !== false;
+    }
+    if (normalized === PEER_STUDENT_CLASS_SLOT_STATE) {
+        return calendarEventTypeVisibility.class !== false;
+    }
+    const parsed = parseSchoolStateToken(normalized);
+    if (parsed) {
+        if (parsed.variant === 'extra') return calendarEventTypeVisibility.extra !== false;
+        if (parsed.variant === 'reposition') return calendarEventTypeVisibility.reposition !== false;
+        return calendarEventTypeVisibility.class !== false;
+    }
+    const resolved = resolveSchoolTokenInfoFromState(normalized);
+    const token = String(resolved?.token || '').trim().toLowerCase();
+    const tokenParsed = parseSchoolStateToken(token);
+    if (tokenParsed) {
+        if (tokenParsed.variant === 'extra') return calendarEventTypeVisibility.extra !== false;
+        if (tokenParsed.variant === 'reposition') return calendarEventTypeVisibility.reposition !== false;
+        return calendarEventTypeVisibility.class !== false;
+    }
+    return true;
 }
 
 function positionCalendarStudentPopover(anchorEl) {
@@ -15435,8 +15510,8 @@ function initCalendarHeaderToolbar() {
     btnStudents.type = 'button';
     btnStudents.className = 'calendar-toolbar-btn calendar-toolbar-btn--students calendar-toolbar-btn--on-blue';
     btnStudents.id = 'calendarToolbarStudentsBtn';
-    btnStudents.title = 'Show student names';
-    btnStudents.setAttribute('aria-label', 'Show student names');
+    btnStudents.title = 'School options';
+    btnStudents.setAttribute('aria-label', 'School options');
     btnStudents.setAttribute('aria-pressed', 'false');
     btnStudents.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="calendar-toolbar-icon" aria-hidden="true">' +
@@ -15964,7 +16039,8 @@ function refreshCalendarDisplay() {
     DAYS.forEach(day => {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
-            const state = getDisplaySlotState(day, hour);
+            const stateRaw = getDisplaySlotState(day, hour);
+            const state = isCalendarEventTypeVisible(stateRaw) ? stateRaw : null;
             const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
             
             if (slot) {
@@ -16090,7 +16166,8 @@ function setSlotState(day, hour, state) {
     } else {
         slotStates[key] = null;
     }
-    const displayForUi = getDisplaySlotState(day, hour);
+    const displayRawForUi = getDisplaySlotState(day, hour);
+    const displayForUi = isCalendarEventTypeVisible(displayRawForUi) ? displayRawForUi : null;
     applyStateVisualToSlot(slot, displayForUi);
     renderStudentNamesInSlot(slot, day, hour, displayForUi);
     
