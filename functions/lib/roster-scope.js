@@ -445,22 +445,32 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
     out.gateStaffAccounts = [...withoutMine, ...mine];
   }
 
-  /** Schools the teacher controls = schools holding any allowed student after the patch. */
+  const csPatch = Array.isArray(patch.customSchools) ? patch.customSchools : null;
+  if (csPatch) {
+    const safeAdds = csPatch
+      .map((s) => String(s || '').trim())
+      .filter((s) => s && customSchoolVisibleToTeacher(base, s, profile));
+    const merged = new Set(
+      [...(Array.isArray(out.customSchools) ? out.customSchools : []), ...safeAdds]
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+    );
+    out.customSchools = [...merged].filter(Boolean).sort(sortNames);
+  }
+
+  /** Schools the teacher controls = schools with allowed students + visible custom schools (including empty/new). */
   const permittedSchoolTitles = new Set();
   for (const n of allowedAfter) {
     const sch = String(out.studentSchools?.[n] || '').trim();
     if (sch) permittedSchoolTitles.add(sch);
   }
-  const permittedSchoolKeys = new Set([...permittedSchoolTitles].map((t) => normSchoolTitleKey(t)));
-
-  const csPatch = Array.isArray(patch.customSchools) ? patch.customSchools : null;
-  if (csPatch) {
-    const safeAdds = csPatch.map(String).filter((s) => s && permittedSchoolTitles.has(String(s).trim()));
-    const merged = new Set(
-      [...(Array.isArray(out.customSchools) ? out.customSchools : []), ...safeAdds].map(String)
-    );
-    out.customSchools = [...merged].filter(Boolean).sort(sortNames);
+  for (const s of Array.isArray(out.customSchools) ? out.customSchools : []) {
+    const title = String(s || '').trim();
+    if (title && customSchoolVisibleToTeacher(base, title, profile)) {
+      permittedSchoolTitles.add(title);
+    }
   }
+  const permittedSchoolKeys = new Set([...permittedSchoolTitles].map((t) => normSchoolTitleKey(t)));
 
   /**
    * Teachers' saved roster includes their permitted schools' metadata (external URL, theme,
