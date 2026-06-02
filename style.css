@@ -7573,9 +7573,10 @@ body.student-school-calendar .time-slot.state-available {
     }
 }
 
-@media (min-width: 1921px) and (min-height: 1081px) {
+@media (min-width: 1920px) and (min-height: 1080px),
+       (min-device-width: 1920px) and (min-device-height: 1080px) {
     .time-slot-student-names {
-        font-size: 1rem;
+        font-size: 1rem !important;
     }
 }
 
