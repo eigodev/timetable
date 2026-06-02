@@ -4874,7 +4874,6 @@ function getStudentSchoolKey(name) {
 }
 
 function isStudentNameVisibleBySchoolFilter(name) {
-    if (isAdminLoggedIn) return true;
     ensureCalendarSchoolFilterSelection();
     if (!calendarStudentNamesInCellsVisible) return false;
     if (calendarNameVisibleSchoolKeys.size === 0) return false;
@@ -4914,8 +4913,10 @@ function isStudentNameVisibleOnCalendarCell(rosterStudent) {
     const r = String(rosterStudent || '').trim();
     if (!r || !currentTeacher) return false;
     if (isActiveTeacherName(currentTeacher)) {
-        // Master schedule: all classes for students on this teacher (not school-filtered for names).
-        return isStudentRosterAssignedToTeacherProfile(r, currentTeacher);
+        return (
+            isStudentRosterAssignedToTeacherProfile(r, currentTeacher) &&
+            isStudentNameVisibleBySchoolFilter(r)
+        );
     }
     if (!isStudentName(currentTeacher)) {
         return isStudentNameVisibleBySchoolFilter(r);
