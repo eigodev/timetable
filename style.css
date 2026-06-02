@@ -7788,11 +7788,37 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 .calendar-event-filter-option input[type="checkbox"] {
-    margin: 0;
+    position: relative;
+    overflow: hidden;
     width: 14px;
     height: 14px;
+    border: none;
+    border-radius: 5px;
+    box-sizing: border-box;
+    background: #dfe3f3;
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
     flex-shrink: 0;
-    accent-color: #5669d8;
+    cursor: pointer;
+}
+
+.calendar-event-filter-option input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #334461;
+    transform: scale(0);
+    transform-origin: center;
+    transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
+}
+
+.calendar-event-filter-option input[type="checkbox"]:checked {
+    background: #dfe3f3;
+}
+
+.calendar-event-filter-option input[type="checkbox"]:checked::before {
+    transform: scale(1);
 }
 
 .calendar-link-popover {
@@ -9785,6 +9811,7 @@ body.student-school-calendar .time-slot.state-available {
     .google-meet-shared-school-checkbox-box::after,
     #addSchoolExternalCheckbox::after,
     .calendar-school-filter-option input[type="checkbox"]::before,
+    .calendar-event-filter-option input[type="checkbox"]::before,
     .calendar-prompt-day-option input[type="checkbox"]::before,
     .context-menu-checkbox::before,
     .add-teacher-availability-table input[type="checkbox"]::before,
