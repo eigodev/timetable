@@ -7573,6 +7573,12 @@ body.student-school-calendar .time-slot.state-available {
     }
 }
 
+@media (min-width: 1921px) and (min-height: 1081px) {
+    .time-slot-student-names {
+        font-size: 1rem;
+    }
+}
+
 .time-slot-toolbar {
     display: flex;
     align-items: stretch;
