@@ -4030,8 +4030,44 @@ async function patchClassReportUploadNameOnServer(studentKey, uploadId, displayN
     }
 }
 
+function classReportRelatedFilesPayloadFromUpload(upload) {
+    return (Array.isArray(upload?.relatedFiles) ? upload.relatedFiles : [])
+        .filter((rf) => rf && rf.id)
+        .map((rf) => ({
+            id: rf.id,
+            name: String(rf.name || 'Related file'),
+            type: String(rf.type || '').toLowerCase()
+        }));
+}
+
+async function patchClassReportUploadRelatedFilesOnServer(studentKey, uploadId, relatedFilesPayload) {
+    try {
+        const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!url) return false;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
+            body: JSON.stringify({
+                action: 'patchUploadMeta',
+                student: String(studentKey || '').trim(),
+                uploadId: String(uploadId || '').trim(),
+                relatedFiles: Array.isArray(relatedFilesPayload) ? relatedFilesPayload : []
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) return false;
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        return true;
+    } catch (e) {
+        console.warn('patchUploadMeta relatedFiles err', e);
+        return false;
+    }
+}
+
 const classReportQuestionPatchDebounceTimers = Object.create(null);
 const classReportNamePatchDebounceTimers = Object.create(null);
+const classReportRelatedFilesPatchDebounceTimers = Object.create(null);
 
 function debouncePatchClassReportQuestions(studentKey, uploadId) {
     if (!canEditFeed()) return;
@@ -4079,6 +4115,33 @@ function debouncePatchClassReportUploadName(studentKey, uploadId) {
     }, 260);
 }
 
+function debouncePatchClassReportRelatedFiles(studentKey, uploadId) {
+    if (!canEditFeed()) return;
+    const sid = String(studentKey || '').trim();
+    const uid = String(uploadId || '').trim();
+    if (!sid || !uid) return;
+    const k = `${sid}::${uid}::related`;
+    window.clearTimeout(classReportRelatedFilesPatchDebounceTimers[k]);
+    classReportRelatedFilesPatchDebounceTimers[k] = window.setTimeout(() => {
+        delete classReportRelatedFilesPatchDebounceTimers[k];
+        const feed = getStudentClassReportUploadFeed(sid);
+        const target = feed.find((x) => x && x.id === uid);
+        if (!target) return;
+        classReportUploadPushInFlight++;
+        void (async () => {
+            try {
+                await patchClassReportUploadRelatedFilesOnServer(
+                    sid,
+                    uid,
+                    classReportRelatedFilesPayloadFromUpload(target)
+                );
+            } finally {
+                classReportUploadPushInFlight--;
+            }
+        })();
+    }, 260);
+}
+
 function applyClassReportUploadDisplayNameChange(studentKey, uploadId, nextNameRaw) {
     const sid = String(studentKey || '').trim();
     const uid = String(uploadId || '').trim();
@@ -4094,13 +4157,34 @@ function applyClassReportUploadDisplayNameChange(studentKey, uploadId, nextNameR
     return nextName;
 }
 
+function applyClassReportRelatedFileDisplayNameChange(studentKey, uploadId, relatedId, nextNameRaw) {
+    const sid = String(studentKey || '').trim();
+    const uid = String(uploadId || '').trim();
+    const rid = String(relatedId || '').trim();
+    if (!sid || !uid || !rid || !canEditFeed()) return null;
+    const feed = getStudentClassReportUploadFeed(sid);
+    const upload = feed.find((x) => x && x.id === uid);
+    if (!upload || !Array.isArray(upload.relatedFiles)) return null;
+    const related = upload.relatedFiles.find((rf) => rf && rf.id === rid);
+    if (!related) return null;
+    const nextName = normalizeClassReportUploadDisplayName(nextNameRaw || 'Related file');
+    related.name = nextName;
+    bumpClassReportUploadsSyncFingerprint();
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportRelatedFiles(sid, uid);
+    return nextName;
+}
+
 function syncClassReportFileCardActionLabels(cardEl, displayName) {
     if (!cardEl) return;
     const label = displayName || 'uploaded file';
-    cardEl.querySelectorAll('.student-class-report-file-add-btn').forEach((btn) => {
+    const mainActions = cardEl.querySelector(
+        '.student-class-report-file-card-meta .student-class-report-file-card-actions'
+    );
+    mainActions?.querySelectorAll('.student-class-report-file-add-btn').forEach((btn) => {
         btn.setAttribute('aria-label', `Add related file to ${label}`);
     });
-    cardEl.querySelectorAll('.student-class-report-file-delete-btn').forEach((btn) => {
+    mainActions?.querySelectorAll('.student-class-report-file-delete-btn').forEach((btn) => {
         btn.setAttribute('aria-label', `Delete ${label}`);
     });
     const previewPdf = cardEl.querySelector(
@@ -4148,6 +4232,88 @@ function bindStudentClassReportFileCardNameEdit(nameSpan, upload, studentName, c
         if (nameSpan.dataset.editing === '1') return;
         if (e) e.preventDefault();
         originalName = normalizeClassReportUploadDisplayName(upload.name);
+        nameSpan.dataset.editing = '1';
+        nameSpan.contentEditable = 'true';
+        nameSpan.classList.add('student-class-report-file-card-name--editing');
+        nameSpan.textContent = originalName;
+        nameSpan.focus();
+        try {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(nameSpan);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch {
+            /* ignore */
+        }
+    };
+
+    nameSpan.addEventListener('dblclick', startEdit);
+    nameSpan.addEventListener('keydown', (e) => {
+        if (nameSpan.dataset.editing !== '1') {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEdit(e);
+            }
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finishEdit(true);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finishEdit(false);
+        }
+    });
+    nameSpan.addEventListener('blur', () => {
+        if (nameSpan.dataset.editing === '1') finishEdit(true);
+    });
+    nameSpan.addEventListener('paste', (e) => e.stopPropagation());
+}
+
+function bindStudentClassReportRelatedFileNameEdit(nameSpan, relatedFile, upload, studentName) {
+    if (!canEditFeed() || !nameSpan || !relatedFile || !upload) return;
+    nameSpan.setAttribute('role', 'button');
+    nameSpan.setAttribute('tabindex', '0');
+    nameSpan.title = 'Double-click to rename';
+    nameSpan.classList.add('student-class-report-file-card-name--editable');
+
+    let originalName = normalizeClassReportUploadDisplayName(relatedFile.name || 'Related file');
+
+    const finishEdit = (save) => {
+        if (nameSpan.dataset.editing !== '1') return;
+        nameSpan.dataset.editing = '0';
+        nameSpan.contentEditable = 'false';
+        nameSpan.classList.remove('student-class-report-file-card-name--editing');
+
+        const draft = normalizeClassReportUploadDisplayName(nameSpan.textContent || 'Related file');
+        if (!save) {
+            nameSpan.textContent = originalName;
+            return;
+        }
+        if (draft === originalName) {
+            nameSpan.textContent = originalName;
+            return;
+        }
+        const applied = applyClassReportRelatedFileDisplayNameChange(
+            studentName,
+            upload.id,
+            relatedFile.id,
+            draft
+        );
+        if (!applied) {
+            nameSpan.textContent = originalName;
+            return;
+        }
+        relatedFile.name = applied;
+        originalName = applied;
+        nameSpan.textContent = applied;
+    };
+
+    const startEdit = (e) => {
+        if (nameSpan.dataset.editing === '1') return;
+        if (e) e.preventDefault();
+        originalName = normalizeClassReportUploadDisplayName(relatedFile.name || 'Related file');
         nameSpan.dataset.editing = '1';
         nameSpan.contentEditable = 'true';
         nameSpan.classList.add('student-class-report-file-card-name--editing');
@@ -6640,6 +6806,43 @@ function getFirstNameLabel(fullName, fallback = '') {
     return firstName || 'Name';
 }
 
+function removeRelatedFileFromStudentClassReportUpload(studentName, uploadId, relatedId) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot delete feed content.');
+        return;
+    }
+    if (typeof ClassReportUploadsStore === 'undefined') return;
+    const key = String(studentName || '').trim();
+    const uid = String(uploadId || '').trim();
+    const rid = String(relatedId || '').trim();
+    if (!key || !uid || !rid) return;
+    const feed = getStudentClassReportUploadFeed(key);
+    const upload = feed.find((item) => item && item.id === uid);
+    if (!upload || !Array.isArray(upload.relatedFiles)) return;
+    const index = upload.relatedFiles.findIndex((rf) => rf && rf.id === rid);
+    if (index === -1) return;
+    const [removed] = upload.relatedFiles.splice(index, 1);
+    revokeIfBlobLikeUrl(removed);
+    void ClassReportUploadsStore.deleteManyBlobs([rid]);
+    bumpClassReportUploadsSyncFingerprint();
+    void persistClassReportOfflineSnapshot();
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+
+    classReportUploadPushInFlight++;
+    void (async () => {
+        try {
+            await patchClassReportUploadRelatedFilesOnServer(
+                key,
+                uid,
+                classReportRelatedFilesPayloadFromUpload(upload)
+            );
+            lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+        } finally {
+            classReportUploadPushInFlight--;
+        }
+    })();
+}
+
 function removeStudentClassReportUpload(studentName, uploadId) {
     if (!canEditFeed()) {
         console.warn('Permission denied: students cannot delete feed content.');
@@ -6660,6 +6863,9 @@ function removeStudentClassReportUpload(studentName, uploadId) {
         });
     }
     void ClassReportUploadsStore.deleteManyBlobs(delIds);
+    bumpClassReportUploadsSyncFingerprint();
+    void persistClassReportOfflineSnapshot();
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
 
     classReportUploadPushInFlight++;
     void (async () => {
@@ -6689,7 +6895,6 @@ function removeStudentClassReportUpload(studentName, uploadId) {
         } finally {
             classReportUploadPushInFlight--;
         }
-        renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
     })();
 }
 
@@ -6730,38 +6935,51 @@ async function addRelatedFileToStudentClassReportUpload(studentName, uploadId, f
         dataUrl: ''
     };
     upload.relatedFiles.push(relatedRow);
+    let syncOk = !apiUrl;
 
     classReportUploadPushInFlight++;
     try {
-        const b64 = await ClassReportUploadsStore.blobToPureBase64(file);
         if (!apiUrl) {
             alert('Serve the app over http(s) to sync related files.');
-            return;
+        } else {
+            const b64 = await ClassReportUploadsStore.blobToPureBase64(file);
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
+                body: JSON.stringify({
+                    action: 'addRelatedUpload',
+                    student: key,
+                    uploadId: String(uploadId || '').trim(),
+                    relatedBase64: b64,
+                    relatedFile: { id: rid, name: relatedRow.name, type: mime }
+                })
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data?.success) {
+                console.error('addRelated failed', data?.error);
+                alert('Could not attach related file to cloud.');
+            } else {
+                syncOk = true;
+                if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+                await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+                lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+            }
         }
-        const res = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
-            body: JSON.stringify({
-                action: 'addRelatedUpload',
-                student: key,
-                uploadId: String(uploadId || '').trim(),
-                relatedBase64: b64,
-                relatedFile: { id: rid, name: relatedRow.name, type: mime }
-            })
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.success) {
-            console.error('addRelated failed', data?.error);
-            alert('Could not attach related file to cloud.');
-            return;
+        if (!syncOk && apiUrl) {
+            const rollbackIdx = upload.relatedFiles.findIndex((rf) => rf && rf.id === rid);
+            if (rollbackIdx !== -1) {
+                const [rolled] = upload.relatedFiles.splice(rollbackIdx, 1);
+                revokeIfBlobLikeUrl(rolled);
+            }
+            void ClassReportUploadsStore.deleteManyBlobs([rid]);
+        } else {
+            bumpClassReportUploadsSyncFingerprint();
+            void persistClassReportOfflineSnapshot();
         }
-        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
-        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
-        lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
     } finally {
         classReportUploadPushInFlight--;
+        renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
     }
-    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
 }
 
 function addQuestionToLatestStudentClassReportUpload(studentName) {
@@ -6943,10 +7161,38 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
         relatedFiles.forEach((relatedFile) => {
             const relatedWrap = document.createElement('div');
             relatedWrap.className = 'student-class-report-card-related-item';
+            relatedWrap.dataset.relatedId = relatedFile.id || '';
+
+            const relatedMeta = document.createElement('div');
+            relatedMeta.className = 'student-class-report-card-related-meta';
+
             const relatedName = document.createElement('span');
             relatedName.className = 'student-class-report-card-related-name';
             relatedName.textContent = relatedFile.name || 'Related file';
-            relatedWrap.appendChild(relatedName);
+
+            relatedMeta.appendChild(relatedName);
+            const inRelatedManifest = (upload.relatedFiles || []).some((rf) => rf && rf.id === relatedFile.id);
+            if (canEditFeed() && relatedFile.id && inRelatedManifest) {
+                bindStudentClassReportRelatedFileNameEdit(relatedName, relatedFile, upload, studentName);
+                const relatedActions = document.createElement('div');
+                relatedActions.className = 'student-class-report-file-card-actions';
+                const relatedDeleteBtn = document.createElement('button');
+                relatedDeleteBtn.type = 'button';
+                relatedDeleteBtn.className = 'student-class-report-file-delete-btn';
+                relatedDeleteBtn.setAttribute(
+                    'aria-label',
+                    `Delete related file ${relatedFile.name || 'Related file'}`
+                );
+                relatedDeleteBtn.title = 'Delete related file';
+                relatedDeleteBtn.innerHTML =
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
+                relatedDeleteBtn.addEventListener('click', () => {
+                    removeRelatedFileFromStudentClassReportUpload(studentName, upload.id, relatedFile.id);
+                });
+                relatedActions.appendChild(relatedDeleteBtn);
+                relatedMeta.appendChild(relatedActions);
+            }
+            relatedWrap.appendChild(relatedMeta);
             appendStudentClassReportFileContent(relatedWrap, relatedFile, true);
             relatedGroup.appendChild(relatedWrap);
         });
@@ -7046,6 +7292,7 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
 
 function ensureStudentClassReportPanelShell(studentName = '') {
     let panel = document.getElementById('studentClassReportPanel');
+    const studentKey = String(studentName || '').trim();
     if (!panel) {
         const mainContent = document.querySelector('.main-content');
         if (!mainContent) return false;
@@ -7060,8 +7307,18 @@ function ensureStudentClassReportPanelShell(studentName = '') {
             mainContent.appendChild(panel);
         }
     }
+    if (
+        panel.dataset.shellReady === '1'
+        && panel.querySelector('.student-class-report-file-preview')
+        && String(panel.dataset.studentName || '').trim() === studentKey
+    ) {
+        panel.dataset.studentName = studentKey;
+        renderStudentClassReportUploadFeed(panel, studentKey);
+        return true;
+    }
     panel.textContent = '';
-    panel.dataset.studentName = String(studentName || '').trim();
+    panel.dataset.studentName = studentKey;
+    panel.dataset.shellReady = '1';
 
     const uploadWrap = document.createElement('div');
     uploadWrap.className = 'student-class-report-upload-wrap';

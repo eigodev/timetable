@@ -6398,6 +6398,9 @@ tr td.add-teacher-availability-table-day {
     border-bottom: 1px solid #e3e6ef;
     background: #ffffff;
     box-sizing: border-box;
+    position: sticky;
+    top: 0;
+    z-index: 3;
 }
 
 .student-class-report-file-card-name {
@@ -6516,7 +6519,19 @@ tr td.add-teacher-availability-table-day {
     gap: 5px;
 }
 
+.student-class-report-card-related-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+}
+
 .student-class-report-card-related-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: #334461;
     font-size: 0.78rem;
     font-weight: 700;

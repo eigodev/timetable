@@ -417,11 +417,25 @@ export async function onRequest(context) {
         }
         if (Array.isArray(body.relatedFiles)) {
           const rfIn = body.relatedFiles.slice(0, MAX_RELATED_FILES);
-          u.relatedFiles = rfIn.map((r) => ({
-            id: sanitizeAssetId(r.id, 'related'),
-            name: String(r.name || 'Related file').slice(0, 380),
-            type: String(r.type || '').toLowerCase().slice(0, 120),
-          }));
+          const nextRfIds = new Set();
+          const relatedMeta = rfIn.map((r) => {
+            const rid = sanitizeAssetId(r.id, 'related');
+            nextRfIds.add(rid);
+            return {
+              id: rid,
+              name: String(r.name || 'Related file').slice(0, 380),
+              type: String(r.type || '').toLowerCase().slice(0, 120),
+            };
+          });
+          if (Array.isArray(u.relatedFiles)) {
+            for (const rf of u.relatedFiles) {
+              if (!nextRfIds.has(rf.id) && rf.id) {
+                const dk = assetKvKey(rf.id);
+                if (dk) await KV.delete(dk).catch(() => {});
+              }
+            }
+          }
+          u.relatedFiles = relatedMeta;
         }
         if (body.name !== undefined && body.name !== null) {
           const trimmed = String(body.name || '').trim();
