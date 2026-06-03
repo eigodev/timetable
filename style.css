@@ -6411,6 +6411,25 @@ tr td.add-teacher-availability-table-day {
     font-weight: 700;
 }
 
+.student-class-report-file-card-name--editable {
+    cursor: text;
+}
+
+.student-class-report-file-card-name--editable:hover {
+    text-decoration: underline;
+    text-decoration-color: rgba(51, 68, 97, 0.35);
+}
+
+.student-class-report-file-card-name--editing {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    outline: 2px solid rgba(48, 63, 159, 0.45);
+    outline-offset: 2px;
+    border-radius: 4px;
+    background: #f7f8fc;
+}
+
 .student-class-report-file-card-actions {
     flex: 0 0 auto;
     display: inline-flex;
@@ -6460,10 +6479,6 @@ tr td.add-teacher-availability-table-day {
     max-height: none;
     object-fit: contain;
     background: #ffffff;
-}
-
-.student-class-report-file-preview-image--related {
-    max-height: 480px;
 }
 
 .student-class-report-file-preview-pdf {

@@ -3997,7 +3997,41 @@ async function patchClassReportUploadQuestionsOnServer(studentKey, uploadId, que
     }
 }
 
+const CLASS_REPORT_UPLOAD_DISPLAY_NAME_MAX = 380;
+
+function normalizeClassReportUploadDisplayName(raw) {
+    const trimmed = String(raw || '').trim();
+    const base = trimmed || 'Uploaded file';
+    return base.slice(0, CLASS_REPORT_UPLOAD_DISPLAY_NAME_MAX);
+}
+
+async function patchClassReportUploadNameOnServer(studentKey, uploadId, displayName) {
+    try {
+        const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!url) return false;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
+            body: JSON.stringify({
+                action: 'patchUploadMeta',
+                student: String(studentKey || '').trim(),
+                uploadId: String(uploadId || '').trim(),
+                name: normalizeClassReportUploadDisplayName(displayName)
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) return false;
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        return true;
+    } catch (e) {
+        console.warn('patchUploadMeta name err', e);
+        return false;
+    }
+}
+
 const classReportQuestionPatchDebounceTimers = Object.create(null);
+const classReportNamePatchDebounceTimers = Object.create(null);
 
 function debouncePatchClassReportQuestions(studentKey, uploadId) {
     if (!canEditFeed()) return;
@@ -4020,6 +4054,137 @@ function debouncePatchClassReportQuestions(studentKey, uploadId) {
             }
         })();
     }, 260);
+}
+
+function debouncePatchClassReportUploadName(studentKey, uploadId) {
+    if (!canEditFeed()) return;
+    const sid = String(studentKey || '').trim();
+    const uid = String(uploadId || '').trim();
+    if (!sid || !uid) return;
+    const k = `${sid}::${uid}::name`;
+    window.clearTimeout(classReportNamePatchDebounceTimers[k]);
+    classReportNamePatchDebounceTimers[k] = window.setTimeout(() => {
+        delete classReportNamePatchDebounceTimers[k];
+        const feed = getStudentClassReportUploadFeed(sid);
+        const target = feed.find((x) => x && x.id === uid);
+        if (!target) return;
+        classReportUploadPushInFlight++;
+        void (async () => {
+            try {
+                await patchClassReportUploadNameOnServer(sid, uid, target.name);
+            } finally {
+                classReportUploadPushInFlight--;
+            }
+        })();
+    }, 260);
+}
+
+function applyClassReportUploadDisplayNameChange(studentKey, uploadId, nextNameRaw) {
+    const sid = String(studentKey || '').trim();
+    const uid = String(uploadId || '').trim();
+    if (!sid || !uid || !canEditFeed()) return null;
+    const feed = getStudentClassReportUploadFeed(sid);
+    const target = feed.find((x) => x && x.id === uid);
+    if (!target) return null;
+    const nextName = normalizeClassReportUploadDisplayName(nextNameRaw);
+    target.name = nextName;
+    bumpClassReportUploadsSyncFingerprint();
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportUploadName(sid, uid);
+    return nextName;
+}
+
+function syncClassReportFileCardActionLabels(cardEl, displayName) {
+    if (!cardEl) return;
+    const label = displayName || 'uploaded file';
+    cardEl.querySelectorAll('.student-class-report-file-add-btn').forEach((btn) => {
+        btn.setAttribute('aria-label', `Add related file to ${label}`);
+    });
+    cardEl.querySelectorAll('.student-class-report-file-delete-btn').forEach((btn) => {
+        btn.setAttribute('aria-label', `Delete ${label}`);
+    });
+    const previewPdf = cardEl.querySelector(
+        '.student-class-report-file-preview-pdf:not(.student-class-report-file-preview-pdf--related)'
+    );
+    if (previewPdf) previewPdf.title = `${displayName || 'Uploaded file'} preview`;
+}
+
+function bindStudentClassReportFileCardNameEdit(nameSpan, upload, studentName, cardEl) {
+    if (!canEditFeed() || !nameSpan || !upload) return;
+    nameSpan.setAttribute('role', 'button');
+    nameSpan.setAttribute('tabindex', '0');
+    nameSpan.title = 'Double-click to rename';
+    nameSpan.classList.add('student-class-report-file-card-name--editable');
+
+    let originalName = normalizeClassReportUploadDisplayName(upload.name);
+
+    const finishEdit = (save) => {
+        if (nameSpan.dataset.editing !== '1') return;
+        nameSpan.dataset.editing = '0';
+        nameSpan.contentEditable = 'false';
+        nameSpan.classList.remove('student-class-report-file-card-name--editing');
+
+        const draft = normalizeClassReportUploadDisplayName(nameSpan.textContent);
+        if (!save) {
+            nameSpan.textContent = originalName;
+            return;
+        }
+        if (draft === originalName) {
+            nameSpan.textContent = originalName;
+            return;
+        }
+        const applied = applyClassReportUploadDisplayNameChange(studentName, upload.id, draft);
+        if (!applied) {
+            nameSpan.textContent = originalName;
+            return;
+        }
+        upload.name = applied;
+        originalName = applied;
+        nameSpan.textContent = applied;
+        syncClassReportFileCardActionLabels(cardEl, applied);
+    };
+
+    const startEdit = (e) => {
+        if (nameSpan.dataset.editing === '1') return;
+        if (e) e.preventDefault();
+        originalName = normalizeClassReportUploadDisplayName(upload.name);
+        nameSpan.dataset.editing = '1';
+        nameSpan.contentEditable = 'true';
+        nameSpan.classList.add('student-class-report-file-card-name--editing');
+        nameSpan.textContent = originalName;
+        nameSpan.focus();
+        try {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(nameSpan);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch {
+            /* ignore */
+        }
+    };
+
+    nameSpan.addEventListener('dblclick', startEdit);
+    nameSpan.addEventListener('keydown', (e) => {
+        if (nameSpan.dataset.editing !== '1') {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEdit(e);
+            }
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finishEdit(true);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finishEdit(false);
+        }
+    });
+    nameSpan.addEventListener('blur', () => {
+        if (nameSpan.dataset.editing === '1') finishEdit(true);
+    });
+    nameSpan.addEventListener('paste', (e) => e.stopPropagation());
 }
 
 async function flushClassReportReplaceManifestFromMemory() {
@@ -6715,6 +6880,7 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
     actions.className = 'student-class-report-file-card-actions';
     meta.appendChild(name);
     if (canEditFeed()) {
+        bindStudentClassReportFileCardNameEdit(name, upload, studentName, card);
         const relatedInput = document.createElement('input');
         relatedInput.type = 'file';
         relatedInput.accept = 'image/*,.pdf,audio/mpeg,.mp3';

@@ -423,6 +423,10 @@ export async function onRequest(context) {
             type: String(r.type || '').toLowerCase().slice(0, 120),
           }));
         }
+        if (body.name !== undefined && body.name !== null) {
+          const trimmed = String(body.name || '').trim();
+          u.name = (trimmed || 'Uploaded file').slice(0, 380);
+        }
         const timestamp = new Date().toISOString();
         await KV.put(CR_MANIFEST_KEY, JSON.stringify(manifest));
         await KV.put(CR_UPDATED_KEY, timestamp);
