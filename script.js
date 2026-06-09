@@ -277,6 +277,30 @@ function canEditFeed(user = getCurrentUser()) {
     return !!user && (user.role === 'admin' || user.role === 'teacher');
 }
 
+function isOwnStudentClassReport(studentName, user = getCurrentUser()) {
+    return (
+        user.role === 'student'
+        && String(user.name || '').trim().toLowerCase() === String(studentName || '').trim().toLowerCase()
+    );
+}
+
+function canSyncClassReportQuestions(studentName, user = getCurrentUser()) {
+    if (canEditFeed(user)) return true;
+    return isOwnStudentClassReport(studentName, user);
+}
+
+function canEditClassReportQuestionLine(question, studentName, user = getCurrentUser()) {
+    const speaker = question?.speaker === 'student' ? 'student' : 'teacher';
+    if (canEditFeed(user)) return true;
+    return speaker === 'student' && isOwnStudentClassReport(studentName, user);
+}
+
+function canDeleteClassReportQuestionLine(question, studentName, user = getCurrentUser()) {
+    if (canEditFeed(user)) return true;
+    const speaker = question?.speaker === 'student' ? 'student' : 'teacher';
+    return speaker === 'student' && isOwnStudentClassReport(studentName, user);
+}
+
 // Role-based sidebar rendering: students get only view-safe navigation and actions.
 function getSidebarRenderMode(user = getCurrentUser()) {
     if (user.role === 'student') return 'student';
@@ -4284,7 +4308,7 @@ const classReportNamePatchDebounceTimers = Object.create(null);
 const classReportRelatedFilesPatchDebounceTimers = Object.create(null);
 
 function debouncePatchClassReportQuestions(studentKey, uploadId) {
-    if (!canEditFeed()) return;
+    if (!canSyncClassReportQuestions(studentKey)) return;
     const sid = String(studentKey || '').trim();
     const uid = String(uploadId || '').trim();
     if (!sid || !uid) return;
@@ -6982,6 +7006,22 @@ function classReportUploadManifestRowFromMemory(upload) {
     };
 }
 
+function classReportUploadAcceptsVideoMimeOrName(file) {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    return (
+        type.startsWith('video/')
+        || name.endsWith('.mp4')
+        || name.endsWith('.webm')
+        || name.endsWith('.mov')
+        || name.endsWith('.m4v')
+        || name.endsWith('.avi')
+        || name.endsWith('.mkv')
+        || name.endsWith('.ogv')
+    );
+}
+
 function classReportUploadAcceptsMimeOrName(file) {
     if (!file) return false;
     const type = String(file.type || '').toLowerCase();
@@ -6990,6 +7030,7 @@ function classReportUploadAcceptsMimeOrName(file) {
         type.startsWith('image/')
         || type === 'application/pdf'
         || name.endsWith('.pdf')
+        || classReportUploadAcceptsVideoMimeOrName(file)
         || type === 'audio/mpeg'
         || type.startsWith('audio/')
         || name.endsWith('.mp3')
@@ -7000,7 +7041,12 @@ function classReportUploadAcceptsImageMimeOrName(file) {
     if (!file) return false;
     const type = String(file.type || '').toLowerCase();
     const name = String(file.name || '').toLowerCase();
-    return type.startsWith('image/') || type === 'application/pdf' || name.endsWith('.pdf');
+    return (
+        type.startsWith('image/')
+        || type === 'application/pdf'
+        || name.endsWith('.pdf')
+        || classReportUploadAcceptsVideoMimeOrName(file)
+    );
 }
 
 function classReportUploadAcceptsAudioMimeOrName(file) {
@@ -7537,6 +7583,27 @@ function addQuestionToLatestStudentClassReportUpload(studentName) {
     });
 }
 
+function removeQuestionFromStudentClassReportUpload(studentName, uploadId, questionId) {
+    const key = String(studentName || '').trim();
+    const uid = String(uploadId || '').trim();
+    const qid = String(questionId || '').trim();
+    if (!key || !uid || !qid) return;
+    const feed = getStudentClassReportUploadFeed(key);
+    const upload = feed.find((item) => item && item.id === uid);
+    if (!upload || !Array.isArray(upload.questions)) return;
+    const index = upload.questions.findIndex((question) => question && question.id === qid);
+    if (index === -1) return;
+    const question = upload.questions[index];
+    if (!canDeleteClassReportQuestionLine(question, key)) {
+        console.warn('Permission denied: cannot delete this question line.');
+        return;
+    }
+    upload.questions.splice(index, 1);
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportQuestions(key, upload.id);
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+}
+
 function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQuestionId) {
     if (!canEditFeed()) {
         console.warn('Permission denied: students cannot edit feed content.');
@@ -7637,7 +7704,7 @@ function moveConversationOrderingLine(activity, lineId, direction) {
 
 const CLASS_REPORT_ACTIVITY_MENU_ICONS = {
     toggle:
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M11.47 2.47a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06l-3.22-3.22V16.5a.75.75 0 0 1-1.5 0V4.81L8.03 8.03a.75.75 0 0 1-1.06-1.06l4.5-4.5ZM3 15.75a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd"/></svg>',
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M11.47 2.47a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06l-3.22-3.22V16.5a.75.75 0 0 1-1.5 0V4.81L8.03 8.03a.75.75 0 0 1-1.06-1.06l4.5-4.5ZM3 15.75a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd"/></svg>',
     qa:
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.125 3C3.089 3 2.25 3.84 2.25 4.875V18a3 3 0 0 0 3 3h15a3 3 0 0 1-3-3V4.875C17.25 3.839 16.41 3 15.375 3H4.125ZM12 9.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5H12Zm-.75-2.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H12a.75.75 0 0 1-.75-.75ZM6 12.75a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5H6Zm-.75 3.75a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75ZM6 6.75a.75.75 0 0 0-.75.75v3c0 .414.336.75.75.75h3a.75.75 0 0 0 .75-.75v-3A.75.75 0 0 0 9 6.75H6Z" clip-rule="evenodd"/><path d="M18.75 6.75h1.875c.621 0 1.125.504 1.125 1.125V18a1.5 1.5 0 0 1-3 0V6.75Z"/></svg>',
     fib:
@@ -7969,6 +8036,16 @@ function appendStudentClassReportFileContent(parentEl, fileData, compact = false
         audio.controls = true;
         audio.preload = 'metadata';
         parentEl.appendChild(audio);
+    } else if (classReportUploadAcceptsVideoMimeOrName(fileData)) {
+        const video = document.createElement('video');
+        video.className = compact
+            ? 'student-class-report-file-preview-video student-class-report-file-preview-video--related'
+            : 'student-class-report-file-preview-video';
+        video.src = getStudentClassReportFileSrc(fileData);
+        video.controls = true;
+        video.preload = 'metadata';
+        video.playsInline = true;
+        parentEl.appendChild(video);
     } else if (type === 'application/pdf' || name.endsWith('.pdf')) {
         const frame = document.createElement('iframe');
         frame.className = compact
@@ -8176,36 +8253,53 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
             input.className = 'student-class-report-question-input';
             input.placeholder = speaker === 'teacher' ? 'Write the question...' : 'Write the answer...';
             input.value = String(question.text || '');
-            input.readOnly = !canEditFeed();
+            input.readOnly = !canEditClassReportQuestionLine(question, studentName);
             input.addEventListener('input', () => {
-                if (!canEditFeed()) {
-                    console.warn('Permission denied: students cannot edit feed content.');
-                    return;
-                }
+                if (!canEditClassReportQuestionLine(question, studentName)) return;
                 question.text = input.value;
+                void persistClassReportOfflineSnapshot();
                 debouncePatchClassReportQuestions(studentName, upload.id);
             });
 
-            const addLineBtn = document.createElement('button');
-            addLineBtn.type = 'button';
-            addLineBtn.className = 'student-class-report-question-add-line-btn';
-            addLineBtn.setAttribute('aria-label', 'Add next question line');
-            addLineBtn.title = 'Add line';
-            addLineBtn.innerHTML =
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
-            addLineBtn.addEventListener('click', () => {
-                addQuestionLineToStudentClassReportUpload(studentName, upload.id, question.id);
-            });
-            addLineBtn.hidden = !canEditFeed();
+            const actions = document.createElement('div');
+            actions.className = 'student-class-report-question-actions';
+
+            if (canDeleteClassReportQuestionLine(question, studentName)) {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = 'button';
+                deleteBtn.className = 'student-class-report-question-delete-btn';
+                deleteBtn.setAttribute('aria-label', 'Delete line');
+                deleteBtn.title = 'Delete line';
+                deleteBtn.innerHTML =
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg>';
+                deleteBtn.addEventListener('click', () => {
+                    removeQuestionFromStudentClassReportUpload(studentName, upload.id, question.id);
+                });
+                actions.appendChild(deleteBtn);
+            }
+
+            if (canEditFeed()) {
+                const addLineBtn = document.createElement('button');
+                addLineBtn.type = 'button';
+                addLineBtn.className = 'student-class-report-question-add-line-btn';
+                addLineBtn.setAttribute('aria-label', 'Add next question line');
+                addLineBtn.title = 'Add line';
+                addLineBtn.innerHTML =
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
+                addLineBtn.addEventListener('click', () => {
+                    addQuestionLineToStudentClassReportUpload(studentName, upload.id, question.id);
+                });
+                actions.appendChild(addLineBtn);
+            }
 
             if (speaker === 'student') {
                 questionRow.appendChild(input);
                 questionRow.appendChild(label);
-                questionRow.appendChild(addLineBtn);
+                questionRow.appendChild(actions);
             } else {
                 questionRow.appendChild(label);
                 questionRow.appendChild(input);
-                questionRow.appendChild(addLineBtn);
+                questionRow.appendChild(actions);
             }
             questionGroup.appendChild(questionRow);
         });
@@ -8295,7 +8389,7 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     const input = document.createElement('input');
     input.type = 'file';
     input.id = 'studentClassReportUploadInput';
-    input.accept = 'image/*,.pdf,audio/mpeg,.mp3';
+    input.accept = 'image/*,video/*,.pdf,audio/mpeg,.mp3,.mp4,.webm,.mov,.m4v';
     input.hidden = true;
 
     const icon = document.createElement('span');
@@ -8345,7 +8439,7 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     const imageInput = document.createElement('input');
     imageInput.type = 'file';
     imageInput.id = 'studentClassReportImageInput';
-    imageInput.accept = 'image/*,.pdf';
+    imageInput.accept = 'image/*,video/*,.pdf,.mp4,.webm,.mov,.m4v';
     imageInput.hidden = true;
 
     const audioInput = document.createElement('input');
@@ -8359,7 +8453,7 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     activityMenu.appendChild(createStudentClassReportActivityOptionButton('fill-in-blank', 'Fill in the Blank', 'fib', 'fib'));
     activityMenu.appendChild(createStudentClassReportActivityOptionButton('multiple-choice', 'Multiple Choice', 'mc', 'mc'));
     activityMenu.appendChild(createStudentClassReportActivityOptionButton('conversation-ordering', 'Conversation Ordering', 'co', 'co'));
-    activityMenu.appendChild(createStudentClassReportActivityOptionButton('image', 'Image Upload', 'image', 'image'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('image', 'Image or Video Upload', 'image', 'image'));
     activityMenu.appendChild(createStudentClassReportActivityOptionButton('audio', 'Audio Upload', 'audio', 'audio'));
     activityMenu.appendChild(createStudentClassReportActivityOptionButton('video-embed', 'Embed Video', 'video', 'video'));
     activityMenu.appendChild(imageInput);

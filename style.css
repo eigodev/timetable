@@ -6561,6 +6561,18 @@ tr td.add-teacher-availability-table-day {
     margin: 18px 15px;
 }
 
+.student-class-report-file-preview-video {
+    display: block;
+    width: 100%;
+    max-height: 520px;
+    background: #0f172a;
+    border-radius: 0;
+}
+
+.student-class-report-file-preview-video--related {
+    max-height: 360px;
+}
+
 .student-class-report-card-related-group {
     display: flex;
     flex-direction: column;
@@ -6645,6 +6657,19 @@ tr td.add-teacher-availability-table-day {
     box-shadow: 0 0 0 2px rgba(51, 68, 97, 0.14);
 }
 
+.student-class-report-question-input:read-only {
+    background: #f1f5f9;
+    color: #64748b;
+    cursor: default;
+}
+
+.student-class-report-question-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.student-class-report-question-delete-btn,
 .student-class-report-question-add-line-btn {
     flex: 0 0 auto;
     width: 28px;
@@ -6660,11 +6685,14 @@ tr td.add-teacher-availability-table-day {
     transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
+.student-class-report-question-delete-btn svg,
 .student-class-report-question-add-line-btn svg {
     width: 16px;
     height: 16px;
 }
 
+.student-class-report-question-delete-btn:hover,
+.student-class-report-question-delete-btn:focus-visible,
 .student-class-report-question-add-line-btn:hover,
 .student-class-report-question-add-line-btn:focus-visible {
     background: #2a3852;
