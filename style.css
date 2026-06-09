@@ -148,7 +148,7 @@ body {
     flex-direction: column;
     align-items: center;
     width: 100%;
-    padding-top: 14px;
+    padding-top: 15px;
     margin-top: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.22);
 }
@@ -196,7 +196,7 @@ body {
 .sidebar.is-admin-session .teacher-list-management,
 .sidebar.is-admin-session .teacher-list-other {
     border-top: 1px solid rgba(255, 255, 255, 0.22);
-    padding-top: 14px;
+    padding-top: 15px;
 }
 
 .sidebar-profile-avatar {
@@ -507,7 +507,7 @@ body {
 }
 
 .google-meet-title {
-    margin: 0 0 14px;
+    margin: 0 0 15px;
     color: #2f3a78;
     font-size: 1.05rem;
 }
@@ -742,7 +742,7 @@ body {
 }
 
 .google-meet-shared-school-actions .google-meet-btn {
-    padding: 7px 14px;
+    padding: 7px 15px;
     font-size: 0.82rem;
 }
 
@@ -885,7 +885,7 @@ body {
 .google-meet-student-row.is-selected {
     background: #e7edff;
     border-color: #95a8e9;
-    box-shadow: 0 4px 14px rgba(63, 81, 181, 0.2);
+    box-shadow: 0 4px 15px rgba(63, 81, 181, 0.2);
 }
 
 .google-meet-student-row.is-selected .google-meet-student-name {
@@ -896,7 +896,7 @@ body {
 .google-meet-student-row.is-selected.has-saved-meet-link {
     background: #dde8ff;
     border-color: #899de4;
-    box-shadow: 0 4px 14px rgba(63, 81, 181, 0.2);
+    box-shadow: 0 4px 15px rgba(63, 81, 181, 0.2);
 }
 
 .google-meet-student-row.is-selected.has-saved-meet-link .google-meet-student-name {
@@ -952,8 +952,8 @@ body {
 }
 
 .google-meet-student-save-indicator-layer svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: block;
 }
 
@@ -1059,7 +1059,7 @@ body {
 .google-meet-modal .google-meet-context-message {
     position: fixed;
     z-index: 2020;
-    max-width: min(240px, calc(100vw - 24px));
+    max-width: min(240px, calc(100vw - 25px));
     padding: 8px 10px;
     border-radius: 10px;
     border: 1px solid #cfd5ec;
@@ -1171,7 +1171,7 @@ body {
 }
 
 .google-meet-student-link-popover-actions .google-meet-btn {
-    padding: 7px 14px;
+    padding: 7px 15px;
     font-size: 0.82rem;
 }
 
@@ -1184,8 +1184,8 @@ body {
     position: absolute;
     left: 10px;
     top: 50%;
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     transform: translateY(-50%) scale(0.55) rotate(-10deg);
     opacity: 0;
     pointer-events: none;
@@ -1503,7 +1503,7 @@ body {
     width: 100%;
     max-width: 520px;
     max-height: min(90vh, 640px);
-    padding: 22px 22px 18px;
+    padding: 20px 20px 18px;
     background: white;
     border-radius: 15px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -1519,7 +1519,7 @@ body {
 }
 
 .class-topic-subtitle {
-    margin: 0 0 14px;
+    margin: 0 0 15px;
     font-size: 0.88rem;
     color: #666;
     line-height: 1.35;
@@ -1538,7 +1538,7 @@ body {
     min-height: 180px;
     flex: 1 1 auto;
     min-width: 0;
-    padding: 12px 14px 64px;
+    padding: 12px 15px 64px;
     border: 1px solid #c5cae9;
     border-radius: 10px;
     font-size: 0.95rem;
@@ -1551,7 +1551,7 @@ body {
 .class-topic-textarea-wrap {
     position: relative;
     min-height: 180px;
-    margin-bottom: 14px;
+    margin-bottom: 15px;
 }
 
 .class-topic-textarea:focus {
@@ -1625,7 +1625,7 @@ body {
 }
 
 .btn-class-topic-exercise-add {
-    padding: 10px 14px;
+    padding: 10px 15px;
     border: none;
     border-radius: 10px;
     background: #e8eaf6;
@@ -1908,8 +1908,8 @@ input.student-reposition-modal-day {
 }
 
 .btn-add-student-password-generate-svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: block;
 }
 
@@ -1931,7 +1931,7 @@ input.student-reposition-modal-day {
 }
 
 .btn-app-message-ok {
-    padding: 10px 14px;
+    padding: 10px 15px;
     border-radius: 10px;
     font-size: 0.92rem;
     font-weight: 600;
@@ -1961,7 +1961,7 @@ input.student-reposition-modal-day {
     z-index: 1;
     width: 100%;
     max-width: 460px;
-    padding: 22px 22px 18px;
+    padding: 20px 20px 18px;
     background: white;
     border-radius: 15px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -2043,6 +2043,14 @@ input.student-reposition-modal-day {
     background: #1e88e5;
 }
 
+button.school-settings-theme-square {
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    appearance: none;
+}
+
 .school-settings-color-popup {
     position: absolute;
     z-index: 20;
@@ -2113,6 +2121,7 @@ input.student-reposition-modal-day {
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 100%;
     font-size: 0.85rem;
     font-weight: 600;
     color: #444;
@@ -2132,6 +2141,10 @@ input.student-reposition-modal-day {
     position: relative;
     display: inline-block;
     vertical-align: middle;
+    overflow: hidden;
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
     background: #fff;
     border: 1px solid #666666;
     border-radius: 5px;
@@ -2141,12 +2154,9 @@ input.student-reposition-modal-day {
 #schoolSettingsExternalCheckbox::after {
     content: "";
     position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 5px;
-    transform: translate(-50%, -50%) scale(0);
+    inset: 0;
+    border-radius: inherit;
+    transform: scale(0);
     transform-origin: center;
     transition: transform 300ms cubic-bezier(0.55, -0.17, 0, 0.51);
     background: #334461;
@@ -2157,7 +2167,7 @@ input.student-reposition-modal-day {
 }
 
 #schoolSettingsExternalCheckbox:checked::after {
-    transform: translate(-50%, -50%) scale(1);
+    transform: scale(1);
 }
 
 #schoolSettingsExternalCheckbox:focus-visible {
@@ -2219,7 +2229,7 @@ input.student-reposition-modal-day {
 .btn-school-settings-delete,
 .btn-school-settings-cancel,
 .btn-school-settings-save {
-    padding: 10px 14px;
+    padding: 10px 15px;
     border-radius: 10px;
     font-size: 0.92rem;
     font-weight: 600;
@@ -2261,7 +2271,7 @@ input.student-reposition-modal-day {
     z-index: 1;
     width: 100%;
     max-width: 420px;
-    padding: 22px 22px 18px;
+    padding: 20px 20px 18px;
     background: white;
     border-radius: 15px;
     box-shadow: 2.5px 2.5px 5px 0px rgba(30, 40, 55, 0.75);
@@ -2336,7 +2346,7 @@ input.student-reposition-modal-day {
     margin: 0;
     border: 0;
     background: #ffffff;
-    border-radius: 14px;
+    border-radius: 15px;
     box-shadow: 0 25px 65px rgba(8, 16, 36, 0.28);
     overflow: hidden;
 }
@@ -2489,7 +2499,7 @@ input.student-reposition-modal-day {
 }
 
 .edit-student-speakon-schedule {
-    padding: 12px 12px 14px;
+    padding: 12px 12px 15px;
     border-radius: 10px;
     border: 1px solid #e1bee7;
     background: #faf5fc;
@@ -2741,7 +2751,7 @@ input.student-reposition-modal-day {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 46px;
+    min-width: 45px;
     height: 30px;
     padding: 0 6px;
     border: 1px solid #d8e0ee;
@@ -3116,8 +3126,8 @@ input[type="checkbox"] {
     position: absolute;
     left: 8px;
     top: 8px;
-    width: 24px;
-    height: 24px;
+    width: 25px;
+    height: 25px;
     background: #36517a;
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z'/%3E%3Cpath fill-rule='evenodd' d='M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Zm3-.75a.75.75 0 0 1 .75.75v6.75a.75.75 0 0 1-1.5 0v-6.75a.75.75 0 0 1 .75-.75ZM9 12.75a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Z' clip-rule='evenodd'/%3E%3Cpath d='M12 7.875a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z'/%3E%3C/svg%3E") center / contain no-repeat;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z'/%3E%3Cpath fill-rule='evenodd' d='M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Zm3-.75a.75.75 0 0 1 .75.75v6.75a.75.75 0 0 1-1.5 0v-6.75a.75.75 0 0 1 .75-.75ZM9 12.75a.75.75 0 0 0-1.5 0v6.75a.75.75 0 0 0 1.5 0v-6.75Z' clip-rule='evenodd'/%3E%3Cpath d='M12 7.875a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z'/%3E%3C/svg%3E") center / contain no-repeat;
@@ -3217,7 +3227,7 @@ input[type="checkbox"] {
     flex: 1 1 auto;
     margin-top: 8px;
     border: 1px solid #d8e0ee;
-    border-radius: 14px;
+    border-radius: 15px;
     background: #fff;
     transition: flex-basis 0.3s ease, width 0.3s ease, grid-template-columns 0.3s ease;
     min-width: 0;
@@ -3230,7 +3240,7 @@ input[type="checkbox"] {
 }
 
 .add-modal.add-modal--school .add-school-billing-option {
-    padding: 12px 14px;
+    padding: 12px 15px;
     border-bottom: 1px solid #eef2f7;
 }
 
@@ -3262,7 +3272,7 @@ input[type="checkbox"] {
     display: none;
     margin-top: 0;
     border: none;
-    border-radius: 14px;
+    border-radius: 15px;
     background: #fff;
     padding: 0;
     overflow: hidden;
@@ -3356,7 +3366,7 @@ input[type="checkbox"] {
 
 .add-modal.add-modal--school .add-school-switch {
     width: 40px;
-    height: 22px;
+    height: 20px;
     border-radius: 999px;
     background: #cbd5e1;
     position: relative;
@@ -3386,7 +3396,7 @@ input[type="checkbox"] {
 
 .add-modal.add-modal--school .add-school-external-wrap {
     border: 1px solid #e2e8f0;
-    border-radius: 14px;
+    border-radius: 15px;
     background: #f8fafc;
     padding: 10px 12px;
 }
@@ -3853,8 +3863,8 @@ input[type="checkbox"] {
 }
 
 .add-teacher-redesign-header-icon svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
 }
 
 .add-teacher-redesign-header-copy {
@@ -4026,7 +4036,7 @@ input[type="checkbox"] {
     position: static;
     inset: auto;
     width: 20px;
-    height: 14px;
+    height: 15px;
     border-radius: 20px;
     object-fit: cover;
     display: block;
@@ -4078,7 +4088,7 @@ input[type="checkbox"] {
 
 .add-teacher-country-picker-option img {
     width: 20px;
-    height: 14px;
+    height: 15px;
     border-radius: 20px;
     object-fit: cover;
 }
@@ -4167,8 +4177,8 @@ input[type="checkbox"] {
 }
 
 .add-teacher-segmented-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     flex-shrink: 0;
 }
 
@@ -4380,8 +4390,8 @@ tr td.add-teacher-availability-table-day {
 }
 
 .add-student-redesign-heading-icon svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     display: block;
 }
 
@@ -6009,14 +6019,15 @@ tr td.add-teacher-availability-table-day {
     position: static !important;
     top: auto !important;
     left: auto !important;
+
     width: 100% !important;
     max-width: none !important;
-    height: auto !important;
     min-height: 0;
     margin: 0;
+    
     box-shadow: none;
     border-radius: 12px;
-    padding: 24px 32px;
+    padding: 25px 32px;
     box-sizing: border-box;
     overflow: visible;
 }
@@ -6045,7 +6056,7 @@ tr td.add-teacher-availability-table-day {
     min-height: 0;
     max-height: none;
     margin: 0;
-    padding: 20px 24px;
+    padding: 20px 25px;
     box-shadow: none;
     border-radius: 12px;
     box-sizing: border-box;
@@ -6092,7 +6103,7 @@ tr td.add-teacher-availability-table-day {
 
     opacity: 0;
     visibility: hidden;
-    transform: translateY(14px) scale(0.988);
+    transform: translateY(15px) scale(0.988);
     pointer-events: none;
 
     transition:
@@ -6186,7 +6197,7 @@ tr td.add-teacher-availability-table-day {
     min-height: 260px;
     margin: 0 auto;
     border: 2px dashed #c9d3e8;
-    border-radius: 24px;
+    border-radius: 25px;
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     color: #334461;
     display: flex;
@@ -6205,7 +6216,7 @@ tr td.add-teacher-availability-table-day {
 .student-class-report-upload-area:focus-visible {
     border-color: #334461;
     background: #f4f7ff;
-    box-shadow: 0 14px 34px rgba(51, 68, 97, 0.12);
+    box-shadow: 0 15px 34px rgba(51, 68, 97, 0.12);
     transform: translateY(-1px);
     outline: none;
 }
@@ -6245,7 +6256,7 @@ tr td.add-teacher-availability-table-day {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 10px 14px;
+    padding: 10px 15px;
     margin-top: 8px;
     border: 1px solid #334461;
     border-radius: 12px;
@@ -6268,7 +6279,7 @@ tr td.add-teacher-availability-table-day {
 .student-class-report-upload-action:hover {
     background: #25334d;
     border-color: #25334d;
-    box-shadow: 0 4px 14px rgba(51, 68, 97, 0.22);
+    box-shadow: 0 4px 15px rgba(51, 68, 97, 0.22);
 }
 
 .student-class-report-upload-selected {
@@ -6283,69 +6294,115 @@ tr td.add-teacher-availability-table-day {
 
 .student-class-report-floating-actions {
     position: absolute;
-    bottom: 14px;
-    right: 14px;
-    z-index: 2;
+    bottom: 40px;
+    right: 40px;
+    z-index: 5;
+    width: 45px;
+    height: 45px;
+}
+
+.student-class-report-floating-actions[hidden] {
+    display: none !important;
+}
+
+.student-class-report-activity-menu {
+    position: relative;
     width: 42px;
     height: 42px;
 }
 
-.student-class-report-change-file-btn,
-.student-class-report-add-question-btn {
+.student-class-report-activity-menu-toggle,
+.student-class-report-activity-option {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 42px;
     height: 42px;
     border: none;
     border-radius: 999px;
     background: #334461;
     color: #ffffff;
-    box-shadow: 0 8px 22px rgba(51, 68, 97, 0.16);
+    box-shadow: 0 8px 20px rgba(51, 68, 97, 0.16);
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-family: inherit;
     cursor: pointer;
-    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+    transition: background 0.18s ease, transform 0.5s ease, box-shadow 0.18s ease, opacity 0.5s ease, visibility 0.5s ease;
 }
 
-.student-class-report-add-question-btn {
-    position: absolute;
-    right: 52px;
-    top: 0;
+.student-class-report-activity-option {
+    width: 32px;
+    height: 32px;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
-    transform: translateX(8px);
+    transform: translate(7px, 7px);
 }
 
-.student-class-report-floating-actions:hover .student-class-report-add-question-btn,
-.student-class-report-floating-actions:focus-within .student-class-report-add-question-btn {
+.student-class-report-activity-menu.is-open .student-class-report-activity-option {
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
-    transform: translateX(0);
 }
 
-.student-class-report-change-file-btn svg,
-.student-class-report-add-question-btn svg {
-    width: 21px;
-    height: 21px;
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--qa {
+    transform: translate(-35px, 15px);
 }
 
-.student-class-report-change-file-btn:hover,
-.student-class-report-change-file-btn:focus-visible,
-.student-class-report-add-question-btn:hover,
-.student-class-report-add-question-btn:focus-visible {
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--fib {
+    transform: translate(-28px, -20px);
+    transition-delay: 0.1s;
+}
+
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--mc {
+    transform: translate(7px, -35px);
+    transition-delay: 0.2s;
+}
+
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--co {
+    transform: translate(42px, -20px);
+    transition-delay: 0.3s;
+}
+
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--image {
+    transform: translate(49px, 15px);
+    transition-delay: 0.4s;
+}
+
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--audio {
+    transform: translate(31px, 45px);
+    transition-delay: 0.5s;
+}
+
+.student-class-report-activity-menu.is-open .student-class-report-activity-option--video {
+    transform: translate(-10px, 45px);
+    transition-delay: 0.6s;
+}
+
+.student-class-report-activity-menu-toggle svg {
+    width: 20px;
+    height: 20px;
+}
+
+.student-class-report-activity-option svg {
+    width: 15px;
+    height: 15px;
+}
+
+.student-class-report-activity-menu-toggle:hover,
+.student-class-report-activity-menu-toggle:focus-visible,
+.student-class-report-activity-option:hover,
+.student-class-report-activity-option:focus-visible {
     background: #2a3852;
     box-shadow: 0 10px 26px rgba(51, 68, 97, 0.22);
     outline: none;
-    transform: translateY(-1px);
 }
 
-.student-class-report-change-file-btn[hidden] {
-    display: none !important;
-}
-
-.student-class-report-floating-actions:has(.student-class-report-change-file-btn[hidden]) {
-    display: none !important;
+.student-class-report-activity-menu-toggle:focus-visible,
+.student-class-report-activity-option:focus-visible {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(51, 68, 97, 0.45);
 }
 
 .student-class-report-file-preview {
@@ -6394,7 +6451,7 @@ tr td.add-teacher-availability-table-day {
     align-items: center;
     gap: 10px;
     min-height: 38px;
-    padding: 8px 14px;
+    padding: 8px 15px;
     border-bottom: 1px solid #e3e6ef;
     background: #ffffff;
     box-sizing: border-box;
@@ -6501,14 +6558,14 @@ tr td.add-teacher-availability-table-day {
 .student-class-report-file-preview-audio {
     display: block;
     width: calc(100% - 28px);
-    margin: 18px 14px;
+    margin: 18px 15px;
 }
 
 .student-class-report-card-related-group {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 12px 14px 16px;
+    padding: 12px 15px 16px;
     border-top: 1px solid #e3e6ef;
     background: #ffffff;
 }
@@ -6616,9 +6673,166 @@ tr td.add-teacher-availability-table-day {
     transform: translateY(-1px);
 }
 
+.student-class-report-video-embed-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    min-height: 220px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #0f172a;
+}
+
+.student-class-report-video-embed-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #0f172a;
+}
+
+.student-class-report-video-embed-source {
+    display: inline-flex;
+    margin-top: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334461;
+    text-decoration: none;
+}
+
+.student-class-report-video-embed-source:hover {
+    text-decoration: underline;
+}
+
+.student-class-report-file-card--video-embed .student-class-report-file-add-btn {
+    display: none;
+}
+
+.student-class-report-video-embed-unsupported {
+    margin: 0 0 8px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.student-class-report-card-activity-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.student-class-report-activity-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 15px;
+    border-radius: 15px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+.student-class-report-activity-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.student-class-report-activity-block-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #334461;
+}
+
+.student-class-report-activity-delete-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 999px;
+    background: #fbe9e7;
+    color: #b71c1c;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.student-class-report-activity-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.student-class-report-activity-input,
+.student-class-report-activity-textarea,
+.student-class-report-activity-select {
+    width: 100%;
+    border: 1px solid #e3e6ef;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #1f2a44;
+    font-family: inherit;
+    font-size: 0.88rem;
+    line-height: 1.35;
+    padding: 8px 12px;
+    box-sizing: border-box;
+}
+
+.student-class-report-activity-textarea {
+    resize: vertical;
+    min-height: 64px;
+}
+
+.student-class-report-activity-mc-options {
+    display: grid;
+    gap: 8px;
+}
+
+.student-class-report-activity-conversation-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.student-class-report-activity-conversation-line {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.student-class-report-activity-conversation-speaker {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #334461;
+}
+
+.student-class-report-activity-reorder-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.student-class-report-activity-reorder-btn {
+    width: 28px;
+    height: 25px;
+    border: none;
+    border-radius: 8px;
+    background: #e8edf2;
+    color: #334461;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
 .student-class-report-file-preview-empty {
     margin: 0;
-    padding: 22px;
+    padding: 20px;
     color: #667085;
     font-size: 0.9rem;
 }
@@ -6671,7 +6885,7 @@ tr td.add-teacher-availability-table-day {
 .admin-dashboard-category-body--two-col {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 14px;
+    gap: 15px;
     align-items: start;
 }
 
@@ -6698,7 +6912,7 @@ tr td.add-teacher-availability-table-day {
     background: #f7f8fc;
     border: 1px solid #d9def5;
     border-radius: 10px;
-    padding: 12px 14px 14px;
+    padding: 12px 15px 15px;
     min-width: 0;
 }
 
@@ -7279,7 +7493,7 @@ header h1 {
 }
 
 .btn {
-    padding: 12px 24px;
+    padding: 12px 25px;
     border: none;
     border-radius: 10px;
     font-size: 1em;
@@ -7680,7 +7894,7 @@ body.student-school-calendar .time-slot.state-available {
     position: fixed;
     z-index: 2000;
     min-width: 200px;
-    max-width: min(320px, calc(100vw - 24px));
+    max-width: min(320px, calc(100vw - 25px));
     max-height: min(50vh, 320px);
     overflow: auto;
     padding: 10px 12px;
@@ -7779,8 +7993,8 @@ body.student-school-calendar .time-slot.state-available {
 .calendar-school-filter-option input[type="checkbox"] {
     position: relative;
     overflow: hidden;
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     border: none;
     border-radius: 5px;
     box-sizing: border-box;
@@ -7820,8 +8034,8 @@ body.student-school-calendar .time-slot.state-available {
 .calendar-event-filter-option input[type="checkbox"] {
     position: relative;
     overflow: hidden;
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     border: none;
     border-radius: 5px;
     box-sizing: border-box;
@@ -7854,7 +8068,7 @@ body.student-school-calendar .time-slot.state-available {
 .calendar-link-popover {
     position: fixed;
     z-index: 2000;
-    width: min(320px, calc(100vw - 24px));
+    width: min(320px, calc(100vw - 25px));
     padding: 12px;
     background: #fff;
     border: 1px solid #c5cae9;
@@ -8037,7 +8251,7 @@ body.student-school-calendar .time-slot.state-available {
     display: flex;
     align-items: center;
     gap: 15px;
-    padding: 24px 28px;
+    padding: 25px 28px;
     border-bottom: 1px solid #eceff7;
 }
 
@@ -8169,7 +8383,7 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 .calendar-prompt-day-block {
-    padding: 22px 28px;
+    padding: 20px 28px;
     border-bottom: 1px solid #eceff7;
 }
 
@@ -8605,8 +8819,8 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 .context-students-submenu-scroll-indicator-icon {
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
 }
 
 .context-students-submenu-list {
@@ -8969,8 +9183,8 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 .google-meet-popup .meet-stat-card-icon svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
 }
 
 .google-meet-popup .meet-stat-card-icon--total {
@@ -9024,7 +9238,7 @@ body.student-school-calendar .time-slot.state-available {
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 14px 16px;
+    padding: 15px 16px;
     border-bottom: 1px solid #eceff7;
     background: #fbfcff;
 }
@@ -9337,7 +9551,7 @@ body.student-school-calendar .time-slot.state-available {
 
 .google-meet-popup .meet-links-add-link-btn {
     height: 32px;
-    padding: 0 14px;
+    padding: 0 15px;
     border: none;
     border-radius: 10px;
     background: linear-gradient(135deg, #334461, #071630);
@@ -9363,7 +9577,7 @@ body.student-school-calendar .time-slot.state-available {
     border-radius: 10px;
     border: 1px solid #dde3f1;
     background: #ffffff;
-    box-shadow: 0 14px 28px rgba(10, 26, 51, 0.2);
+    box-shadow: 0 15px 28px rgba(10, 26, 51, 0.2);
     opacity: 0;
     transform: translateY(6px) scale(0.99);
     transition: opacity 0.16s ease, transform 0.16s ease;
@@ -9913,12 +10127,10 @@ body.student-school-calendar .time-slot.state-available {
 
         height: 590px;
         width: 1045px;
-        padding: 30px;
     }
 
     .add-modal-dialog,
     .add-modal.add-modal--school .add-modal-dialog {
-        height: 530px;
         width: 980px;
     }
 

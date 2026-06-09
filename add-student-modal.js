@@ -280,24 +280,13 @@
         return formatUsLikePhone(rawDigits);
     }
 
-    function calculateAgeFromBirthDate(value) {
-        if (!value) return '';
-        const birth = new Date(value);
-        if (Number.isNaN(birth.getTime())) return '';
-        const today = new Date();
-        let age = today.getFullYear() - birth.getFullYear();
-        const monthDiff = today.getMonth() - birth.getMonth();
-        const dayDiff = today.getDate() - birth.getDate();
-        if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
-            age -= 1;
-        }
-        if (age < 0) return '';
-        return age > 60 ? '60+' : String(age);
-    }
-
     function syncAgeFromBirthDate() {
         if (!fields.age) return;
-        fields.age.value = calculateAgeFromBirthDate(fields.birthDate?.value || '');
+        const calc =
+            typeof window.calculateStudentAgeFromBirthDate === 'function'
+                ? window.calculateStudentAgeFromBirthDate
+                : null;
+        fields.age.value = calc ? calc(fields.birthDate?.value || '') : '';
     }
 
     function buildUsername(firstName, lastName) {
@@ -364,8 +353,17 @@
             hasError = true;
         }
 
-        if (fields.birthDate?.value) {
-            if (!Number.isFinite(numericAge) || numericAge < 18) {
+        const birthRaw = String(fields.birthDate?.value || '').trim();
+        if (birthRaw) {
+            const birthIso =
+                typeof window.normalizeBirthDateForStorage === 'function'
+                    ? window.normalizeBirthDateForStorage(birthRaw)
+                    : birthRaw;
+            if (!birthIso) {
+                fields.birthDate.setAttribute('aria-invalid', 'true');
+                validationErrors.push('Enter a valid birth date (mm/dd/yyyy).');
+                hasError = true;
+            } else if (!Number.isFinite(numericAge) || numericAge < 18) {
                 fields.birthDate.setAttribute('aria-invalid', 'true');
                 validationErrors.push('Student age must be 18 or older.');
                 hasError = true;
@@ -412,7 +410,10 @@
             },
             phoneNumber: fields.phoneNumber.value.trim(),
             school: fields.school.value.trim(),
-            birthDate: fields.birthDate?.value || '',
+            birthDate:
+                typeof window.normalizeBirthDateForStorage === 'function'
+                    ? window.normalizeBirthDateForStorage(fields.birthDate?.value || '')
+                    : (fields.birthDate?.value || ''),
             age: fields.age.value,
             mentorTeacher: fields.teacher instanceof HTMLSelectElement ? fields.teacher.value.trim() : '',
             level: fields.level.value,
@@ -490,7 +491,11 @@
     });
     fields.level.addEventListener('change', () => fields.level.removeAttribute('aria-invalid'));
     fields.teacher?.addEventListener('change', () => fields.teacher?.removeAttribute('aria-invalid'));
-    fields.birthDate?.addEventListener('input', syncAgeFromBirthDate);
+    if (typeof window.setupBirthDateTextInput === 'function') {
+        window.setupBirthDateTextInput(fields.birthDate, syncAgeFromBirthDate);
+    } else {
+        fields.birthDate?.addEventListener('input', syncAgeFromBirthDate);
+    }
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();

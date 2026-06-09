@@ -253,6 +253,9 @@
                 </div>
             </div>
         `;
+        if (typeof window.setupAddSchoolColorPickerDelegation === 'function') {
+            window.setupAddSchoolColorPickerDelegation();
+        }
     }
 
     function openAddSchoolPopup() {

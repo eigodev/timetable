@@ -12,6 +12,77 @@ const CR_UPDATED_KEY = 'cr_upl_last_updated_v2';
 const MAX_ASSET_BYTES = 6 * 1024 * 1024;
 const MAX_UPLOADS_PER_STUDENT = 40;
 const MAX_RELATED_FILES = 20;
+const MAX_ACTIVITIES_PER_UPLOAD = 30;
+
+const VIDEO_EMBED_PROVIDERS = new Set(['youtube', 'vimeo']);
+
+function sanitizeVideoEmbedUpload(uploadRaw, uploadId) {
+  const provider = String(uploadRaw?.provider || '').trim().toLowerCase();
+  if (!VIDEO_EMBED_PROVIDERS.has(provider)) {
+    throw new Error('Unsupported video embed provider');
+  }
+  const embedUrl = String(uploadRaw?.embedUrl || '').trim();
+  const sourceUrl = String(uploadRaw?.sourceUrl || '').trim();
+  if (!embedUrl || !sourceUrl) throw new Error('Embed URLs required');
+  if (!/^https:\/\//i.test(embedUrl) || !/^https:\/\//i.test(sourceUrl)) {
+    throw new Error('Embed URLs must use https');
+  }
+  const row = {
+    id: uploadId,
+    kind: 'video-embed',
+    name: String(uploadRaw?.name || 'Embedded video').slice(0, 380),
+    type: 'video/embed',
+    provider,
+    sourceUrl: sourceUrl.slice(0, 2000),
+    embedUrl: embedUrl.slice(0, 2000),
+    relatedFiles: [],
+    questions: [],
+    activities: sanitizeActivitiesList(uploadRaw?.activities, uploadId),
+  };
+  const videoId = String(uploadRaw?.videoId || '').trim();
+  if (videoId) row.videoId = videoId.slice(0, 64);
+  return row;
+}
+
+function sanitizeActivitiesList(activitiesRaw, uploadId) {
+  const out = [];
+  const src = Array.isArray(activitiesRaw) ? activitiesRaw : [];
+  for (let index = 0; index < src.length && out.length < MAX_ACTIVITIES_PER_UPLOAD; index++) {
+    const raw = src[index];
+    if (!raw || typeof raw !== 'object') continue;
+    const type = String(raw.type || '').trim();
+    const id = String(raw.id || `act_${uploadId}_${index}`).slice(0, 140);
+    if (type === 'fill-in-blank') {
+      out.push({
+        id,
+        type: 'fill-in-blank',
+        prompt: String(raw.prompt || '').slice(0, 8000),
+        answer: String(raw.answer || '').slice(0, 8000),
+      });
+    } else if (type === 'multiple-choice') {
+      const optionsRaw = Array.isArray(raw.options) ? raw.options : [];
+      const options = [0, 1, 2, 3].map((i) => String(optionsRaw[i] || '').slice(0, 2000));
+      let correctIndex = Number(raw.correctIndex);
+      if (!Number.isFinite(correctIndex) || correctIndex < 0 || correctIndex > 3) correctIndex = 0;
+      out.push({
+        id,
+        type: 'multiple-choice',
+        question: String(raw.question || '').slice(0, 8000),
+        options,
+        correctIndex: Math.floor(correctIndex),
+      });
+    } else if (type === 'conversation-ordering') {
+      const linesRaw = Array.isArray(raw.lines) ? raw.lines : [];
+      const lines = linesRaw.slice(0, 40).map((line, li) => ({
+        id: String(line?.id || `line_${id}_${li}`).slice(0, 140),
+        speaker: line?.speaker === 'student' ? 'student' : 'teacher',
+        text: String(line?.text || '').slice(0, 8000),
+      }));
+      out.push({ id, type: 'conversation-ordering', lines });
+    }
+  }
+  return out;
+}
 
 function assetKvKey(assetId) {
   const safe = String(assetId || '').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -56,12 +127,21 @@ function coerceManifest(raw) {
             speaker: q?.speaker === 'student' ? 'student' : 'teacher',
             text: String(q?.text || q?.question || '').slice(0, 8000),
           }));
+          const activities = sanitizeActivitiesList(upload.activities, id);
+          if (String(upload.kind || '').trim() === 'video-embed') {
+            try {
+              return sanitizeVideoEmbedUpload(upload, id);
+            } catch {
+              return null;
+            }
+          }
           return {
             id,
             name: String(upload.name || 'Uploaded file').slice(0, 380),
             type: String(upload.type || '').toLowerCase().slice(0, 120),
             relatedFiles,
             questions,
+            activities,
           };
         } catch {
           return null;
@@ -415,6 +495,9 @@ export async function onRequest(context) {
             text: String(q?.text || q?.question || '').slice(0, 8000),
           }));
         }
+        if (Array.isArray(body.activities)) {
+          u.activities = sanitizeActivitiesList(body.activities, uploadId);
+        }
         if (Array.isArray(body.relatedFiles)) {
           const rfIn = body.relatedFiles.slice(0, MAX_RELATED_FILES);
           const nextRfIds = new Set();
@@ -447,6 +530,49 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ success: true, lastUpdated: timestamp, manifest }), corsJson({ status: 200 }));
       }
 
+      if (action === 'putEmbed') {
+        const student = String(body.student || '').trim();
+        if (!student) {
+          return new Response(JSON.stringify({ success: false, error: 'student required' }), corsJson({ status: 400 }));
+        }
+        if (actor && !isStudentVisibleToActor(fullRoster, student, actor)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), corsJson({ status: 403 }));
+        }
+        const uploadRaw = body.upload;
+        if (!uploadRaw || typeof uploadRaw !== 'object') {
+          return new Response(JSON.stringify({ success: false, error: 'upload object required' }), corsJson({ status: 400 }));
+        }
+        const uploadId = sanitizeAssetId(uploadRaw.id, 'upload');
+        let row;
+        try {
+          row = sanitizeVideoEmbedUpload(uploadRaw, uploadId);
+        } catch (err) {
+          return new Response(
+            JSON.stringify({ success: false, error: String(err?.message || 'Invalid embed') }),
+            corsJson({ status: 400 })
+          );
+        }
+
+        let manifestRaw = await KV.get(CR_MANIFEST_KEY, 'json');
+        if (typeof manifestRaw === 'string') {
+          try {
+            manifestRaw = JSON.parse(manifestRaw);
+          } catch {
+            manifestRaw = null;
+          }
+        }
+        const manifest = coerceManifest(manifestRaw || {});
+        const list = Array.isArray(manifest.students[student]) ? [...manifest.students[student]] : [];
+        const existingIdx = list.findIndex((item) => item && item.id === uploadId);
+        if (existingIdx === -1) list.push(row);
+        else list[existingIdx] = row;
+        manifest.students[student] = list.slice(0, MAX_UPLOADS_PER_STUDENT);
+        const timestamp = new Date().toISOString();
+        await KV.put(CR_MANIFEST_KEY, JSON.stringify(manifest));
+        await KV.put(CR_UPDATED_KEY, timestamp);
+        return new Response(JSON.stringify({ success: true, lastUpdated: timestamp, manifest }), corsJson({ status: 200 }));
+      }
+
       if (action === 'putUpload') {
         const student = String(body.student || '').trim();
         if (!student) {
@@ -460,6 +586,13 @@ export async function onRequest(context) {
           return new Response(JSON.stringify({ success: false, error: 'upload object required' }), corsJson({ status: 400 }));
         }
         const uploadId = sanitizeAssetId(uploadRaw.id, 'upload');
+
+        if (String(uploadRaw.kind || '').trim() === 'video-embed') {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Use putEmbed for embedded videos' }),
+            corsJson({ status: 400 })
+          );
+        }
 
         /** Main blob */
         const mainMime = String(uploadRaw.type || body.mainMime || 'application/octet-stream').toLowerCase().slice(0, 120);
@@ -497,6 +630,7 @@ export async function onRequest(context) {
           speaker: q?.speaker === 'student' ? 'student' : 'teacher',
           text: String(q?.text || q?.question || '').slice(0, 8000),
         }));
+        const activities = sanitizeActivitiesList(uploadRaw.activities, uploadId);
 
         const row = {
           id: uploadId,
@@ -504,6 +638,7 @@ export async function onRequest(context) {
           type: mainMime,
           relatedFiles: relatedMeta,
           questions,
+          activities,
         };
 
         let manifestRaw = await KV.get(CR_MANIFEST_KEY, 'json');

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>TimeTable</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 
@@ -260,7 +261,7 @@
                                         <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
                                     </svg>
                                 </span>
-                                <input id="editStudentBirthDate" name="studentBirthDate" type="date" autocomplete="bday">
+                                <input id="editStudentBirthDate" name="studentBirthDate" type="text" placeholder="mm/dd/yyyy" inputmode="numeric" autocomplete="bday" maxlength="10">
                             </div>
                         </div>
                         <div class="form-field">
@@ -387,18 +388,18 @@
                 <p class="school-settings-theme-title">Color Theme</p>
                 <div class="school-settings-theme-group-container">
                     <div class="school-settings-theme-group">
-                        <label class="school-settings-theme-select-row" for="schoolSettingsPrimaryColor">
+                        <div class="school-settings-theme-select-row">
                             <input type="hidden" id="schoolSettingsPrimaryColor" name="schoolSettingsPrimaryColor" value="#5c6bc0">
-                            <span class="school-settings-theme-square school-settings-theme-square--primary" aria-hidden="true"></span>
+                            <button type="button" class="school-settings-theme-square school-settings-theme-square--primary" aria-label="Pick class color"></button>
                             <span>Class</span>
-                        </label>
+                        </div>
                     </div>
                     <div class="school-settings-theme-group">
-                        <label class="school-settings-theme-select-row" for="schoolSettingsSecondaryColor">
+                        <div class="school-settings-theme-select-row">
                             <input type="hidden" id="schoolSettingsSecondaryColor" name="schoolSettingsSecondaryColor" value="#206dac">
-                            <span class="school-settings-theme-square school-settings-theme-square--secondary" aria-hidden="true"></span>
+                            <button type="button" class="school-settings-theme-square school-settings-theme-square--secondary" aria-label="Pick extra/reposition color"></button>
                             <span>Extra/Reposition</span>
-                        </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -417,7 +418,6 @@
             </div>
             <div class="school-settings-actions">
                 <button type="button" class="btn-school-settings-delete" id="schoolSettingsDelete">Delete school</button>
-                <button type="button" class="btn-school-settings-cancel" id="schoolSettingsCancel">Cancel</button>
                 <button type="button" class="btn-school-settings-save" id="schoolSettingsSave"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM565-275q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"/></svg><span>Save</span></button>
             </div>
         </div>
@@ -808,7 +808,7 @@
                                         <path d="M8 3v4M16 3v4M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
                                     </svg>
                                 </span>
-                                <input id="birthDate" name="birthDate" type="date" autocomplete="bday">
+                                <input id="birthDate" name="birthDate" type="text" placeholder="mm/dd/yyyy" inputmode="numeric" autocomplete="bday" maxlength="10">
                             </div>
                         </div>
                         <div class="form-field">

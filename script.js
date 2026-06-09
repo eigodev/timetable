@@ -198,6 +198,10 @@ let pendingDeleteSchoolTitle = '';
 let pendingSchoolSettingsTitle = '';
 let schoolSettingsColorTarget = '';
 let schoolSettingsColorPopupHideTimer = null;
+/** Appended under `<body>` while open — modal dialog animation/transform can clip absolutely positioned picker. */
+let schoolSettingsColorPopupRestoreParent = null;
+/** @type {ChildNode | null} */
+let schoolSettingsColorPopupRestoreBefore = null;
 let addSchoolColorTarget = '';
 let addSchoolColorPopupHideTimer = null;
 /** Appended under `<body>` while open — add-modal-dialog uses transform (modal animation), which traps `fixed` descendants and `overflow:hidden` clips them. */
@@ -855,6 +859,16 @@ function setupGlobalEscapeToDismissOverlays() {
                 return;
             }
 
+            const openActivityMenu = document.querySelector('.student-class-report-activity-menu.is-open');
+            if (openActivityMenu) {
+                const hostPanel = openActivityMenu.closest('#studentClassReportPanel');
+                if (hostPanel && !hostPanel.hidden) {
+                    e.preventDefault();
+                    closeStudentClassReportActivityMenu(hostPanel);
+                    return;
+                }
+            }
+
             if (contextMenu && contextMenu.classList.contains('show')) {
                 e.preventDefault();
                 hideContextMenu();
@@ -999,11 +1013,15 @@ function setupGlobalPointerDownToDismissOverlays() {
             }
 
             const schoolColorPopup = document.getElementById('schoolSettingsColorPopup');
-            if (schoolColorPopup && !schoolColorPopup.hidden && schoolColorPopup.classList.contains('is-open')) {
-                if (!schoolColorPopup.contains(target)) {
-                    closeSchoolSettingsColorPopup();
+            /** Picker lives under `<body>` while open — bail before `#schoolSettingsModal` outside-click dismiss. */
+            if (schoolColorPopup && !schoolColorPopup.hidden) {
+                if (target instanceof Element && (
+                    schoolColorPopup.contains(target)
+                    || isSchoolSettingsColorPickerTrigger(target)
+                )) {
+                    return;
                 }
-                return;
+                closeSchoolSettingsColorPopup();
             }
 
             const addSchoolColorPopup = document.getElementById('addSchoolColorPopup');
@@ -1075,6 +1093,18 @@ function setupGlobalPointerDownToDismissOverlays() {
             ];
 
             if (isMainFormPanelOpen()) {
+                return;
+            }
+
+            const schoolSettingsModalEl = document.getElementById('schoolSettingsModal');
+            if (
+                schoolSettingsModalEl?.classList.contains('is-open')
+                && target instanceof Element
+                && (
+                    isSchoolSettingsColorPickerTrigger(target)
+                    || target.closest('#schoolSettingsSave, .btn-school-settings-save')
+                )
+            ) {
                 return;
             }
 
@@ -1239,10 +1269,11 @@ function initColorThemeSelect(selectEl) {
 }
 
 function renderSchoolSettingsThemeSquares() {
+    const modal = document.getElementById('schoolSettingsModal');
     const primaryInput = document.getElementById('schoolSettingsPrimaryColor');
     const secondaryInput = document.getElementById('schoolSettingsSecondaryColor');
-    const primarySquare = document.querySelector('.school-settings-theme-square--primary');
-    const secondarySquare = document.querySelector('.school-settings-theme-square--secondary');
+    const primarySquare = modal?.querySelector('.school-settings-theme-square--primary');
+    const secondarySquare = modal?.querySelector('.school-settings-theme-square--secondary');
     const primary = String(primaryInput?.value || '').trim().toLowerCase();
     const secondary = String(secondaryInput?.value || '').trim().toLowerCase();
     if (primarySquare && /^#[0-9a-f]{6}$/i.test(primary)) {
@@ -1253,20 +1284,62 @@ function renderSchoolSettingsThemeSquares() {
     }
 }
 
+function portalSchoolSettingsColorPopupToBody(popup) {
+    if (!(popup instanceof HTMLElement)) return;
+    if (popup.parentNode === document.body) return;
+    schoolSettingsColorPopupRestoreParent = popup.parentNode;
+    schoolSettingsColorPopupRestoreBefore = popup.nextSibling;
+    document.body.appendChild(popup);
+}
+
+function restoreSchoolSettingsColorPopupFromBody(popup) {
+    if (!(popup instanceof HTMLElement)) return;
+    if (!schoolSettingsColorPopupRestoreParent) return;
+    const parent = schoolSettingsColorPopupRestoreParent;
+    const before = schoolSettingsColorPopupRestoreBefore;
+    schoolSettingsColorPopupRestoreParent = null;
+    schoolSettingsColorPopupRestoreBefore = null;
+    try {
+        if (before instanceof Node && before.parentNode === parent) {
+            parent.insertBefore(popup, before);
+        } else {
+            parent.appendChild(popup);
+        }
+    } catch {
+        if (!popup.parentNode) document.body.appendChild(popup);
+    }
+}
+
 function closeSchoolSettingsColorPopup() {
     const popup = document.getElementById('schoolSettingsColorPopup');
+    const options = document.getElementById('schoolSettingsColorPopupOptions');
     if (!popup) return;
     popup.classList.remove('is-open');
     popup.setAttribute('aria-hidden', 'true');
+    options?.style.removeProperty('max-height');
     if (schoolSettingsColorPopupHideTimer) {
         clearTimeout(schoolSettingsColorPopupHideTimer);
         schoolSettingsColorPopupHideTimer = null;
     }
     schoolSettingsColorPopupHideTimer = window.setTimeout(() => {
         popup.hidden = true;
+        popup.style.removeProperty('position');
+        popup.style.removeProperty('left');
+        popup.style.removeProperty('top');
+        popup.style.removeProperty('z-index');
+        restoreSchoolSettingsColorPopupFromBody(popup);
         schoolSettingsColorPopupHideTimer = null;
     }, 200);
     schoolSettingsColorTarget = '';
+}
+
+function isSchoolSettingsColorPickerTrigger(el) {
+    if (!(el instanceof Element)) return false;
+    return !!(
+        el.closest('.school-settings-theme-square--primary')
+        || el.closest('.school-settings-theme-square--secondary')
+        || el.closest('#schoolSettingsColorPopup')
+    );
 }
 
 function openSchoolSettingsColorPopup(target, anchorEl) {
@@ -1274,8 +1347,7 @@ function openSchoolSettingsColorPopup(target, anchorEl) {
     const options = document.getElementById('schoolSettingsColorPopupOptions');
     const primaryInput = document.getElementById('schoolSettingsPrimaryColor');
     const secondaryInput = document.getElementById('schoolSettingsSecondaryColor');
-    const dialog = document.querySelector('.school-settings-dialog');
-    if (!popup || !options || !anchorEl || !dialog || !primaryInput || !secondaryInput) return;
+    if (!popup || !options || !anchorEl || !primaryInput || !secondaryInput) return;
     schoolSettingsColorTarget = target === 'secondary' ? 'secondary' : 'primary';
     options.innerHTML = '';
     SCHOOL_THEME_PALETTE_GROUPS.forEach((group) => {
@@ -1311,25 +1383,28 @@ function openSchoolSettingsColorPopup(target, anchorEl) {
         options.appendChild(section);
     });
 
-    const dialogRect = dialog.getBoundingClientRect();
+    portalSchoolSettingsColorPopupToBody(popup);
+
     const anchorRect = anchorEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     popup.hidden = false;
+    popup.style.position = 'fixed';
+    popup.style.zIndex = '2510';
     if (schoolSettingsColorPopupHideTimer) {
         clearTimeout(schoolSettingsColorPopupHideTimer);
         schoolSettingsColorPopupHideTimer = null;
     }
     options.style.maxHeight = '220px';
-    // Measure after un-hiding so coordinates follow actual popup size.
     const popupWidth = popup.offsetWidth || 220;
     const popupHeight = popup.offsetHeight || 220;
     const horizontalPad = 10;
     const verticalPad = 10;
-    const anchorLeft = anchorRect.left - dialogRect.left;
-    let left = anchorLeft - 4;
-    left = Math.max(horizontalPad, Math.min(left, dialogRect.width - popupWidth - horizontalPad));
-    const anchorBottom = anchorRect.bottom - dialogRect.top;
-    const anchorTop = anchorRect.top - dialogRect.top;
-    const availableBelow = Math.max(0, dialogRect.height - anchorBottom - verticalPad - 8);
+    let left = anchorRect.left - 4;
+    left = Math.max(horizontalPad, Math.min(left, vw - popupWidth - horizontalPad));
+    const anchorBottom = anchorRect.bottom;
+    const anchorTop = anchorRect.top;
+    const availableBelow = Math.max(0, vh - anchorBottom - verticalPad - 8);
     const availableAbove = Math.max(0, anchorTop - verticalPad - 8);
     const minPopupHeight = 140;
     let top = anchorBottom + 8;
@@ -1341,10 +1416,11 @@ function openSchoolSettingsColorPopup(target, anchorEl) {
         options.style.maxHeight = `${Math.round(targetHeight)}px`;
     }
 
-    top = Math.max(verticalPad, Math.min(top, dialogRect.height - popupHeight - verticalPad));
+    const finalH = popup.offsetHeight || popupHeight;
+    top = Math.max(verticalPad, Math.min(top, vh - finalH - verticalPad));
     popup.style.left = `${Math.round(left)}px`;
     popup.style.top = `${Math.round(top)}px`;
-    requestAnimationFrame(() => popup.classList.add('is-open'));
+    popup.classList.add('is-open');
     popup.setAttribute('aria-hidden', 'false');
 }
 
@@ -1547,9 +1623,20 @@ function closeAddSchoolColorPopup() {
     addSchoolColorTarget = '';
 }
 
-/** Stable host survives `renderAddSchoolPopup()` innerHTML refreshes — use delegation, not per-node listeners. */
+function isAddSchoolColorPickerTrigger(el) {
+    if (!(el instanceof Element)) return false;
+    return !!(
+        el.closest('.add-school-theme-square--primary')
+        || el.closest('.add-school-theme-square--secondary')
+        || el.closest('#addSchoolPrimaryColorCode')
+        || el.closest('#addSchoolSecondaryColorCode')
+        || el.closest('#addSchoolColorPopup')
+    );
+}
+
+/** Bind on `#addStudentForm` — `.addschoolpopup` uses `display: contents` and may not receive bubbled clicks. */
 function setupAddSchoolColorPickerDelegation() {
-    const host = document.querySelector('.addschoolpopup');
+    const host = document.getElementById('addStudentForm');
     if (!host || host.dataset.addSchoolColorPickerBound === '1') return;
     host.dataset.addSchoolColorPickerBound = '1';
     host.addEventListener('click', (e) => {
@@ -1560,6 +1647,7 @@ function setupAddSchoolColorPickerDelegation() {
         }
         const openFor = (which, anchor) => {
             if (!anchor) return;
+            e.preventDefault();
             e.stopPropagation();
             openAddSchoolColorPopup(which, anchor);
         };
@@ -1582,6 +1670,19 @@ function setupAddSchoolColorPickerDelegation() {
         }
     });
 }
+
+function bindAddSchoolColorPopupDismiss() {
+    if (document.body.dataset.addSchoolColorDismissBound === '1') return;
+    document.body.dataset.addSchoolColorDismissBound = '1';
+    document.addEventListener('click', (e) => {
+        const modal = document.getElementById('addModal');
+        if (!modal?.classList.contains('is-open')) return;
+        if (isAddSchoolColorPickerTrigger(e.target)) return;
+        closeAddSchoolColorPopup();
+    });
+}
+
+window.setupAddSchoolColorPickerDelegation = setupAddSchoolColorPickerDelegation;
 
 function openAddSchoolColorPopup(target, anchorEl) {
     const popup = document.getElementById('addSchoolColorPopup');
@@ -3606,6 +3707,67 @@ function cloneQuestionListForMemory(qs) {
     }));
 }
 
+function cloneActivityListForMemory(activities) {
+    return (Array.isArray(activities) ? activities : [])
+        .map((raw, index) => {
+            const type = String(raw?.type || '').trim();
+            const id = String(raw?.id || `act_${index}_${Date.now()}`).trim();
+            if (type === 'fill-in-blank') {
+                return {
+                    id,
+                    type: 'fill-in-blank',
+                    prompt: String(raw?.prompt || ''),
+                    answer: String(raw?.answer || '')
+                };
+            }
+            if (type === 'multiple-choice') {
+                const optionsRaw = Array.isArray(raw?.options) ? raw.options : [];
+                const options = [0, 1, 2, 3].map((i) => String(optionsRaw[i] || ''));
+                let correctIndex = Number(raw?.correctIndex);
+                if (!Number.isFinite(correctIndex) || correctIndex < 0 || correctIndex > 3) correctIndex = 0;
+                return {
+                    id,
+                    type: 'multiple-choice',
+                    question: String(raw?.question || ''),
+                    options,
+                    correctIndex: Math.floor(correctIndex)
+                };
+            }
+            if (type === 'conversation-ordering') {
+                const linesRaw = Array.isArray(raw?.lines) ? raw.lines : [];
+                const lines = linesRaw.map((line, li) => ({
+                    id: String(line?.id || `line_${id}_${li}`).trim(),
+                    speaker: line?.speaker === 'student' ? 'student' : 'teacher',
+                    text: String(line?.text || '')
+                }));
+                return { id, type: 'conversation-ordering', lines };
+            }
+            return null;
+        })
+        .filter(Boolean);
+}
+
+function createDefaultClassReportActivity(type) {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    if (type === 'fill-in-blank') {
+        return { id, type: 'fill-in-blank', prompt: '', answer: '' };
+    }
+    if (type === 'multiple-choice') {
+        return { id, type: 'multiple-choice', question: '', options: ['', '', '', ''], correctIndex: 0 };
+    }
+    if (type === 'conversation-ordering') {
+        return {
+            id,
+            type: 'conversation-ordering',
+            lines: [
+                { id: `${id}-t`, speaker: 'teacher', text: '' },
+                { id: `${id}-s`, speaker: 'student', text: '' }
+            ]
+        };
+    }
+    return null;
+}
+
 function manifestStudentRecordToSkeletonFeed(students) {
     const out = {};
     if (!students || typeof students !== 'object') return out;
@@ -3617,6 +3779,26 @@ function manifestStudentRecordToSkeletonFeed(students) {
                 if (!upload || typeof upload !== 'object' || upload.kind === 'question') return null;
                 const id = String(upload.id || '').trim();
                 if (!id) return null;
+                if (upload.kind === 'video-embed') {
+                    const row = {
+                        id,
+                        kind: 'video-embed',
+                        name: String(upload.name || 'Embedded video'),
+                        type: 'video/embed',
+                        provider: String(upload.provider || '').trim().toLowerCase(),
+                        sourceUrl: String(upload.sourceUrl || ''),
+                        embedUrl: String(upload.embedUrl || ''),
+                        dataUrl: '',
+                        blobUrl: '',
+                        url: '',
+                        questions: cloneQuestionListForMemory(upload.questions),
+                        activities: cloneActivityListForMemory(upload.activities),
+                        relatedFiles: []
+                    };
+                    const videoId = sanitizeClassReportVideoId(upload.videoId);
+                    if (videoId) row.videoId = videoId;
+                    return row;
+                }
                 return {
                     id,
                     name: String(upload.name || 'Uploaded file'),
@@ -3625,6 +3807,7 @@ function manifestStudentRecordToSkeletonFeed(students) {
                     blobUrl: '',
                     url: '',
                     questions: cloneQuestionListForMemory(upload.questions),
+                    activities: cloneActivityListForMemory(upload.activities),
                     relatedFiles: (Array.isArray(upload.relatedFiles) ? upload.relatedFiles : [])
                         .filter((rf) => rf && typeof rf === 'object' && rf.id)
                         .map((rf) => ({
@@ -3649,22 +3832,7 @@ function memoryToStudentManifestBuckets() {
         const key = String(studentName || '').trim();
         if (!key || !Array.isArray(uploads)) return;
         const rows = uploads
-            .map((upload) => {
-                if (!upload || typeof upload !== 'object') return null;
-                const id = String(upload.id || '').trim();
-                if (!id) return null;
-                return {
-                    id,
-                    name: String(upload.name || 'Uploaded file'),
-                    type: String(upload.type || '').toLowerCase(),
-                    questions: cloneQuestionListForMemory(upload.questions),
-                    relatedFiles: (Array.isArray(upload.relatedFiles) ? upload.relatedFiles : []).map((rf) => ({
-                        id: String(rf.id || '').trim(),
-                        name: String(rf.name || 'Related file'),
-                        type: String(rf.type || '').toLowerCase()
-                    }))
-                };
-            })
+            .map((upload) => classReportUploadManifestRowFromMemory(upload))
             .filter(Boolean);
         if (rows.length) students[key] = rows;
     });
@@ -3714,6 +3882,23 @@ function normalizeManifestBucketsForFingerprint(studentsRecord) {
                     if (!upload || typeof upload !== 'object' || upload.kind === 'question') return null;
                     const id = String(upload.id || '').trim();
                     if (!id) return null;
+                    if (upload.kind === 'video-embed') {
+                        const row = {
+                            id,
+                            kind: 'video-embed',
+                            name: String(upload.name || 'Embedded video').slice(0, 380),
+                            type: 'video/embed',
+                            provider: String(upload.provider || '').slice(0, 40),
+                            sourceUrl: String(upload.sourceUrl || '').slice(0, 2000),
+                            embedUrl: String(upload.embedUrl || '').slice(0, 2000),
+                            relatedFiles: [],
+                            questions: [],
+                            activities: cloneActivityListForMemory(upload.activities),
+                        };
+                        const videoId = sanitizeClassReportVideoId(upload.videoId);
+                        if (videoId) row.videoId = videoId;
+                        return row;
+                    }
                     const rfIn = Array.isArray(upload.relatedFiles) ? upload.relatedFiles : [];
                     const relatedFiles = rfIn.slice(0, MANIFEST_FP_MAX_RELATED).map((r) => {
                         if (!r || typeof r !== 'object') return null;
@@ -3731,12 +3916,15 @@ function normalizeManifestBucketsForFingerprint(studentsRecord) {
                         speaker: q?.speaker === 'student' ? 'student' : 'teacher',
                         text: String(q?.text || q?.question || '').slice(0, 8000),
                     }));
+                    const activitiesRaw = Array.isArray(upload.activities) ? upload.activities : [];
+                    const activities = cloneActivityListForMemory(activitiesRaw).slice(0, 30);
                     return {
                         id,
                         name: String(upload.name || 'Uploaded file').slice(0, 380),
                         type: String(upload.type || '').toLowerCase().slice(0, 120),
                         relatedFiles,
                         questions,
+                        activities,
                     };
                 })
                 .filter(Boolean);
@@ -3966,6 +4154,31 @@ async function renameClassReportStudentBucketOnServer(fromStudent, toStudent) {
     }
 }
 
+async function patchClassReportUploadActivitiesOnServer(studentKey, uploadId, activitiesPayload) {
+    try {
+        const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (!url) return false;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
+            body: JSON.stringify({
+                action: 'patchUploadMeta',
+                student: String(studentKey || '').trim(),
+                uploadId: String(uploadId || '').trim(),
+                activities: Array.isArray(activitiesPayload) ? activitiesPayload : []
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) return false;
+        if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+        await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+        return true;
+    } catch (e) {
+        console.warn('patchUploadMeta activities err', e);
+        return false;
+    }
+}
+
 async function patchClassReportUploadQuestionsOnServer(studentKey, uploadId, questionsPayload) {
     try {
         const url = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
@@ -4066,6 +4279,7 @@ async function patchClassReportUploadRelatedFilesOnServer(studentKey, uploadId, 
 }
 
 const classReportQuestionPatchDebounceTimers = Object.create(null);
+const classReportActivityPatchDebounceTimers = Object.create(null);
 const classReportNamePatchDebounceTimers = Object.create(null);
 const classReportRelatedFilesPatchDebounceTimers = Object.create(null);
 
@@ -4085,6 +4299,29 @@ function debouncePatchClassReportQuestions(studentKey, uploadId) {
         void (async () => {
             try {
                 await patchClassReportUploadQuestionsOnServer(sid, uid, target.questions || []);
+            } finally {
+                classReportUploadPushInFlight--;
+            }
+        })();
+    }, 260);
+}
+
+function debouncePatchClassReportActivities(studentKey, uploadId) {
+    if (!canEditFeed()) return;
+    const sid = String(studentKey || '').trim();
+    const uid = String(uploadId || '').trim();
+    if (!sid || !uid) return;
+    const k = `${sid}::${uid}::activities`;
+    window.clearTimeout(classReportActivityPatchDebounceTimers[k]);
+    classReportActivityPatchDebounceTimers[k] = window.setTimeout(() => {
+        delete classReportActivityPatchDebounceTimers[k];
+        const feed = getStudentClassReportUploadFeed(sid);
+        const target = feed.find((x) => x && x.id === uid);
+        if (!target) return;
+        classReportUploadPushInFlight++;
+        void (async () => {
+            try {
+                await patchClassReportUploadActivitiesOnServer(sid, uid, target.activities || []);
             } finally {
                 classReportUploadPushInFlight--;
             }
@@ -6710,6 +6947,41 @@ function pickFirstUsableFileFromClipboardData(clipboardData) {
     return null;
 }
 
+function classReportUploadManifestRowFromMemory(upload) {
+    if (!upload || typeof upload !== 'object') return null;
+    const id = String(upload.id || '').trim();
+    if (!id) return null;
+    if (upload.kind === 'video-embed') {
+        const row = {
+            id,
+            kind: 'video-embed',
+            name: String(upload.name || 'Embedded video'),
+            type: 'video/embed',
+            provider: String(upload.provider || '').trim().toLowerCase(),
+            sourceUrl: String(upload.sourceUrl || ''),
+            embedUrl: String(upload.embedUrl || ''),
+            questions: cloneQuestionListForMemory(upload.questions),
+            activities: cloneActivityListForMemory(upload.activities),
+            relatedFiles: []
+        };
+        const videoId = sanitizeClassReportVideoId(upload.videoId);
+        if (videoId) row.videoId = videoId;
+        return row;
+    }
+    return {
+        id,
+        name: String(upload.name || 'Uploaded file'),
+        type: String(upload.type || '').toLowerCase(),
+        questions: cloneQuestionListForMemory(upload.questions),
+        activities: cloneActivityListForMemory(upload.activities),
+        relatedFiles: (Array.isArray(upload.relatedFiles) ? upload.relatedFiles : []).map((rf) => ({
+            id: String(rf.id || '').trim(),
+            name: String(rf.name || 'Related file'),
+            type: String(rf.type || '').toLowerCase()
+        }))
+    };
+}
+
 function classReportUploadAcceptsMimeOrName(file) {
     if (!file) return false;
     const type = String(file.type || '').toLowerCase();
@@ -6719,8 +6991,258 @@ function classReportUploadAcceptsMimeOrName(file) {
         || type === 'application/pdf'
         || name.endsWith('.pdf')
         || type === 'audio/mpeg'
+        || type.startsWith('audio/')
         || name.endsWith('.mp3')
     );
+}
+
+function classReportUploadAcceptsImageMimeOrName(file) {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    return type.startsWith('image/') || type === 'application/pdf' || name.endsWith('.pdf');
+}
+
+function classReportUploadAcceptsAudioMimeOrName(file) {
+    if (!file) return false;
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    return type.startsWith('audio/') || type === 'audio/mpeg' || name.endsWith('.mp3');
+}
+
+function sanitizeClassReportVideoId(raw) {
+    const id = String(raw || '').trim();
+    if (!id) return '';
+    if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) return '';
+    return id;
+}
+
+function buildYoutubeClassReportEmbedUrl(videoId) {
+    const id = sanitizeClassReportVideoId(videoId);
+    if (!id) return '';
+    const params = new URLSearchParams({
+        rel: '0',
+        modestbranding: '1',
+        playsinline: '1'
+    });
+    if (typeof window !== 'undefined' && window.location?.origin) {
+        params.set('origin', window.location.origin);
+    }
+    return `https://www.youtube.com/embed/${id}?${params.toString()}`;
+}
+
+function buildVimeoClassReportEmbedUrl(videoId) {
+    const id = String(videoId || '').trim().replace(/\D/g, '');
+    if (!id) return '';
+    return `https://player.vimeo.com/video/${id}?dnt=1`;
+}
+
+function extractClassReportVideoEmbedId(upload) {
+    const stored = sanitizeClassReportVideoId(upload?.videoId);
+    if (stored) return stored;
+    const provider = String(upload?.provider || '').trim().toLowerCase();
+    const sourceUrl = String(upload?.sourceUrl || '').trim();
+    if (sourceUrl) {
+        const reparsed = parseClassReportVideoEmbedUrl(sourceUrl);
+        if (!reparsed.error && reparsed.videoId) return reparsed.videoId;
+    }
+    const embedUrl = String(upload?.embedUrl || '').trim();
+    if (provider === 'youtube') {
+        const match = embedUrl.match(/\/embed\/([^?&]+)/);
+        if (match) return sanitizeClassReportVideoId(decodeURIComponent(match[1]));
+    }
+    if (provider === 'vimeo') {
+        const match = embedUrl.match(/\/video\/(\d+)/);
+        if (match) return match[1];
+    }
+    return '';
+}
+
+function buildClassReportVideoEmbedIframeSrc(upload) {
+    const provider = String(upload?.provider || '').trim().toLowerCase();
+    if (provider !== 'youtube' && provider !== 'vimeo') return '';
+    const videoId = extractClassReportVideoEmbedId(upload);
+    if (provider === 'youtube' && videoId) {
+        return buildYoutubeClassReportEmbedUrl(videoId);
+    }
+    if (provider === 'vimeo' && videoId) {
+        return buildVimeoClassReportEmbedUrl(videoId);
+    }
+    return '';
+}
+
+function parseClassReportVideoEmbedUrl(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return { error: 'empty' };
+    let url;
+    try {
+        url = new URL(trimmed.startsWith('http://') || trimmed.startsWith('https://') ? trimmed : `https://${trimmed}`);
+    } catch {
+        return { error: 'invalid' };
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return { error: 'protocol' };
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const httpsSource = url.protocol === 'https:' ? url.href : url.href.replace(/^http:/, 'https:');
+
+    if (host === 'youtu.be') {
+        const videoId = sanitizeClassReportVideoId(url.pathname.replace(/^\//, '').split('/')[0]);
+        if (videoId) {
+            return {
+                provider: 'youtube',
+                videoId,
+                sourceUrl: httpsSource,
+                embedUrl: `https://www.youtube.com/embed/${videoId}`,
+                name: 'YouTube video'
+            };
+        }
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+        const fromQuery = sanitizeClassReportVideoId(url.searchParams.get('v'));
+        if (fromQuery) {
+            return {
+                provider: 'youtube',
+                videoId: fromQuery,
+                sourceUrl: httpsSource,
+                embedUrl: `https://www.youtube.com/embed/${fromQuery}`,
+                name: 'YouTube video'
+            };
+        }
+        const embedMatch = url.pathname.match(/^\/embed\/([^/?]+)/);
+        if (embedMatch) {
+            const videoId = sanitizeClassReportVideoId(decodeURIComponent(embedMatch[1]));
+            if (videoId) {
+                return {
+                    provider: 'youtube',
+                    videoId,
+                    sourceUrl: httpsSource,
+                    embedUrl: `https://www.youtube.com/embed/${videoId}`,
+                    name: 'YouTube video'
+                };
+            }
+        }
+        const shortsMatch = url.pathname.match(/^\/shorts\/([^/?]+)/);
+        if (shortsMatch) {
+            const videoId = sanitizeClassReportVideoId(shortsMatch[1]);
+            if (videoId) {
+                return {
+                    provider: 'youtube',
+                    videoId,
+                    sourceUrl: httpsSource,
+                    embedUrl: `https://www.youtube.com/embed/${videoId}`,
+                    name: 'YouTube video'
+                };
+            }
+        }
+    }
+    if (host === 'vimeo.com') {
+        const vimeoMatch = url.pathname.match(/^\/(\d+)/);
+        if (vimeoMatch) {
+            const videoId = vimeoMatch[1];
+            return {
+                provider: 'vimeo',
+                videoId,
+                sourceUrl: httpsSource,
+                embedUrl: `https://player.vimeo.com/video/${videoId}`,
+                name: 'Vimeo video'
+            };
+        }
+    }
+    if (host === 'player.vimeo.com') {
+        const playerMatch = url.pathname.match(/^\/video\/(\d+)/);
+        if (playerMatch) {
+            const videoId = playerMatch[1];
+            return {
+                provider: 'vimeo',
+                videoId,
+                sourceUrl: httpsSource,
+                embedUrl: `https://player.vimeo.com/video/${videoId}`,
+                name: 'Vimeo video'
+            };
+        }
+    }
+    return { error: 'unsupported' };
+}
+
+async function appendClassReportVideoEmbed(panel, studentNameKey, rawUrl) {
+    const key = String(studentNameKey || '').trim();
+    if (!panel || !key) return false;
+    const parsed = parseClassReportVideoEmbedUrl(rawUrl);
+    if (parsed.error) {
+        if (parsed.error === 'empty') showAppMessage('Paste a video link first.');
+        else if (parsed.error === 'unsupported') {
+            showAppMessage('Unsupported link. Paste a YouTube or Vimeo video URL.');
+        } else {
+            showAppMessage('Please provide a valid video link.');
+        }
+        return false;
+    }
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const feed = getStudentClassReportUploadFeed(key);
+    feed.push({
+        id,
+        kind: 'video-embed',
+        name: parsed.name,
+        type: 'video/embed',
+        provider: parsed.provider,
+        videoId: parsed.videoId || '',
+        sourceUrl: parsed.sourceUrl,
+        embedUrl: parsed.embedUrl,
+        questions: [],
+        activities: [],
+        relatedFiles: []
+    });
+
+    classReportUploadPushInFlight++;
+    try {
+        const apiUrl = absoluteHttpApiUrl(CLASS_REPORT_UPLOADS_API_ENDPOINT);
+        if (apiUrl) {
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getTimetableApiAuthHeaders() },
+                body: JSON.stringify({
+                    action: 'putEmbed',
+                    student: key,
+                    upload: {
+                        id,
+                        kind: 'video-embed',
+                        name: parsed.name,
+                        type: 'video/embed',
+                        provider: parsed.provider,
+                        videoId: parsed.videoId || '',
+                        sourceUrl: parsed.sourceUrl,
+                        embedUrl: parsed.embedUrl,
+                        questions: [],
+                        activities: [],
+                        relatedFiles: []
+                    }
+                })
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok || !data?.success) {
+                feed.pop();
+                console.error('Video embed sync failed:', data?.error || res.status);
+                showAppMessage(data?.error || 'Could not save embedded video.');
+                return false;
+            }
+            if (data.lastUpdated) setClassReportUploadsCloudTimestamp(data.lastUpdated);
+            await persistClassReportOfflineSnapshot({ remoteLastUpdated: data.lastUpdated });
+            lastRemoteManifestFingerprint = stableStringifyManifestStudents(memoryToStudentManifestBuckets());
+        } else {
+            await persistClassReportOfflineSnapshot();
+        }
+    } finally {
+        classReportUploadPushInFlight--;
+    }
+
+    renderStudentClassReportUploadFeed(panel, key);
+    return true;
+}
+
+function promptClassReportVideoEmbedUrl(panel, studentKey) {
+    const url = window.prompt('Paste a YouTube or Vimeo video link:');
+    if (url === null) return;
+    void appendClassReportVideoEmbed(panel, studentKey, url);
 }
 
 async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
@@ -6753,6 +7275,7 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
         url: blobUrl,
         dataUrl: '',
         questions: [],
+        activities: [],
         relatedFiles: []
     });
 
@@ -6774,6 +7297,7 @@ async function appendClassReportUploadFromFile(panel, studentNameKey, file) {
                         name: file.name || 'Uploaded file',
                         type: mime,
                         questions: [],
+                        activities: [],
                         relatedFiles: []
                     }
                 })
@@ -6989,8 +7513,7 @@ function addQuestionToLatestStudentClassReportUpload(studentName) {
     }
     const key = String(studentName || '').trim();
     if (!key) return;
-    const feed = getStudentClassReportUploadFeed(key);
-    const latestUpload = [...feed].reverse().find((item) => item && item.kind !== 'question');
+    const latestUpload = getLatestStudentClassReportFileUpload(key);
     if (!latestUpload) return;
     if (!Array.isArray(latestUpload.questions)) {
         latestUpload.questions = [];
@@ -7048,6 +7571,385 @@ function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQ
     });
 }
 
+function getLatestStudentClassReportFileUpload(studentName) {
+    const key = String(studentName || '').trim();
+    if (!key) return null;
+    const feed = getStudentClassReportUploadFeed(key);
+    return [...feed].reverse().find((item) => item && item.kind !== 'question' && item.kind !== 'video-embed') || null;
+}
+
+function closeStudentClassReportActivityMenu(panel) {
+    const menu = panel?.querySelector('.student-class-report-activity-menu');
+    const toggle = panel?.querySelector('.student-class-report-activity-menu-toggle');
+    if (!menu) return;
+    menu.classList.remove('is-open');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+}
+
+function addActivityToLatestStudentClassReportUpload(studentName, activityType) {
+    if (!canEditFeed()) {
+        console.warn('Permission denied: students cannot edit feed content.');
+        return false;
+    }
+    const key = String(studentName || '').trim();
+    const latestUpload = getLatestStudentClassReportFileUpload(key);
+    if (!latestUpload) return false;
+    const activity = createDefaultClassReportActivity(activityType);
+    if (!activity) return false;
+    if (!Array.isArray(latestUpload.activities)) latestUpload.activities = [];
+    latestUpload.activities.push(activity);
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportActivities(key, latestUpload.id);
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+    requestAnimationFrame(() => {
+        const panel = document.getElementById('studentClassReportPanel');
+        const block = panel?.querySelector(
+            `.student-class-report-file-card[data-upload-id="${latestUpload.id}"] .student-class-report-activity-block[data-activity-id="${activity.id}"] input, .student-class-report-file-card[data-upload-id="${latestUpload.id}"] .student-class-report-activity-block[data-activity-id="${activity.id}"] textarea`
+        );
+        block?.focus();
+    });
+    return true;
+}
+
+function removeActivityFromStudentClassReportUpload(studentName, uploadId, activityId) {
+    if (!canEditFeed()) return;
+    const key = String(studentName || '').trim();
+    const feed = getStudentClassReportUploadFeed(key);
+    const upload = feed.find((item) => item && item.id === uploadId);
+    if (!upload || !Array.isArray(upload.activities)) return;
+    const idx = upload.activities.findIndex((a) => a && a.id === activityId);
+    if (idx === -1) return;
+    upload.activities.splice(idx, 1);
+    void persistClassReportOfflineSnapshot();
+    debouncePatchClassReportActivities(key, uploadId);
+    renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), key);
+}
+
+function moveConversationOrderingLine(activity, lineId, direction) {
+    if (!activity || activity.type !== 'conversation-ordering' || !Array.isArray(activity.lines)) return;
+    const idx = activity.lines.findIndex((line) => line && line.id === lineId);
+    if (idx < 0) return;
+    const nextIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (nextIdx < 0 || nextIdx >= activity.lines.length) return;
+    const [moved] = activity.lines.splice(idx, 1);
+    activity.lines.splice(nextIdx, 0, moved);
+}
+
+const CLASS_REPORT_ACTIVITY_MENU_ICONS = {
+    toggle:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M11.47 2.47a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1-1.06 1.06l-3.22-3.22V16.5a.75.75 0 0 1-1.5 0V4.81L8.03 8.03a.75.75 0 0 1-1.06-1.06l4.5-4.5ZM3 15.75a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd"/></svg>',
+    qa:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.125 3C3.089 3 2.25 3.84 2.25 4.875V18a3 3 0 0 0 3 3h15a3 3 0 0 1-3-3V4.875C17.25 3.839 16.41 3 15.375 3H4.125ZM12 9.75a.75.75 0 0 0 0 1.5h1.5a.75.75 0 0 0 0-1.5H12Zm-.75-2.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H12a.75.75 0 0 1-.75-.75ZM6 12.75a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5H6Zm-.75 3.75a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6a.75.75 0 0 1-.75-.75ZM6 6.75a.75.75 0 0 0-.75.75v3c0 .414.336.75.75.75h3a.75.75 0 0 0 .75-.75v-3A.75.75 0 0 0 9 6.75H6Z" clip-rule="evenodd"/><path d="M18.75 6.75h1.875c.621 0 1.125.504 1.125 1.125V18a1.5 1.5 0 0 1-3 0V6.75Z"/></svg>',
+    fib:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2.25 6a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V6Zm3.97.97a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 0 1-1.06-1.06l1.72-1.72-1.72-1.72a.75.75 0 0 1 0-1.06Zm4.28 4.28a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd"/></svg>',
+    mc:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1.5 7.125c0-1.036.84-1.875 1.875-1.875h6c1.036 0 1.875.84 1.875 1.875v3.75c0 1.036-.84 1.875-1.875 1.875h-6A1.875 1.875 0 0 1 1.5 10.875v-3.75Zm12 1.5c0-1.036.84-1.875 1.875-1.875h5.25c1.035 0 1.875.84 1.875 1.875v8.25c0 1.035-.84 1.875-1.875 1.875h-5.25a1.875 1.875 0 0 1-1.875-1.875v-8.25ZM3 16.125c0-1.036.84-1.875 1.875-1.875h5.25c1.036 0 1.875.84 1.875 1.875v2.25c0 1.035-.84 1.875-1.875 1.875h-5.25A1.875 1.875 0 0 1 3 18.375v-2.25Z" clip-rule="evenodd"/></svg>',
+    co:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="currentColor" aria-hidden="true"><path d="M5.625 3.75a2.625 2.625 0 1 0 0 5.25h12.75a2.625 2.625 0 0 0 0-5.25H5.625ZM3.75 11.25a.75.75 0 0 0 0 1.5h16.5a.75.75 0 0 0 0-1.5H3.75ZM3 15.75a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75ZM3.75 18.75a.75.75 0 0 0 0 1.5h16.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>',
+    image:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0 0 21 18v-1.94l-2.69-2.689a1.5 1.5 0 0 0-2.12 0l-.88.879.97.97a.75.75 0 1 1-1.06 1.06l-5.16-5.159a1.5 1.5 0 0 0-2.12 0L3 16.061Zm10.125-7.81a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z" clip-rule="evenodd"/></svg>',
+    audio:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M19.952 1.651a.75.75 0 0 1 .298.599V16.303a3 3 0 0 1-2.176 2.884l-1.32.377a2.553 2.553 0 1 1-1.403-4.909l2.311-.66a1.5 1.5 0 0 0 1.088-1.442V6.994l-9 2.572v9.737a3 3 0 0 1-2.176 2.884l-1.32.377a2.553 2.553 0 1 1-1.402-4.909l2.31-.66a1.5 1.5 0 0 0 1.088-1.442V5.25a.75.75 0 0 1 .544-.721l10.5-3a.75.75 0 0 1 .658.122Z" clip-rule="evenodd"/></svg>',
+    video:
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M14.447 3.026a.75.75 0 0 1 .527.921l-4.5 16.5a.75.75 0 0 1-1.448-.394l4.5-16.5a.75.75 0 0 1 .921-.527ZM16.72 6.22a.75.75 0 0 1 1.06 0l5.25 5.25a.75.75 0 0 1 0 1.06l-5.25 5.25a.75.75 0 1 1-1.06-1.06L21.44 12l-4.72-4.72a.75.75 0 0 1 0-1.06Zm-9.44 0a.75.75 0 0 1 0 1.06L2.56 12l4.72 4.72a.75.75 0 0 1-1.06 1.06L.97 12.53a.75.75 0 0 1 0-1.06l5.25-5.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/></svg>'
+};
+
+function createStudentClassReportActivityOptionButton(action, label, modifierClass, iconKey) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `student-class-report-activity-option student-class-report-activity-option--${modifierClass}`;
+    btn.dataset.activityAction = action;
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    btn.innerHTML = CLASS_REPORT_ACTIVITY_MENU_ICONS[iconKey] || '';
+    return btn;
+}
+
+function setupStudentClassReportActivityMenu(panel, studentName) {
+    if (!panel || panel.dataset.activityMenuBound === '1') return;
+    panel.dataset.activityMenuBound = '1';
+
+    const menu = panel.querySelector('.student-class-report-activity-menu');
+    const toggle = panel.querySelector('.student-class-report-activity-menu-toggle');
+    const imageInput = panel.querySelector('#studentClassReportImageInput');
+    const audioInput = panel.querySelector('#studentClassReportAudioInput');
+    if (!menu || !toggle) return;
+
+    const getStudentKey = () => String(panel.dataset.studentName || studentName || '').trim();
+
+    toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isOpen = menu.classList.toggle('is-open');
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    menu.addEventListener('click', async (e) => {
+        const target = e.target instanceof Element ? e.target.closest('[data-activity-action]') : null;
+        if (!target || !menu.contains(target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!canEditFeed()) return;
+
+        const action = String(target.dataset.activityAction || '').trim();
+        const studentKey = getStudentKey();
+        if (!studentKey) return;
+
+        const needsLatestUpload = ['qa', 'fill-in-blank', 'multiple-choice', 'conversation-ordering'].includes(action);
+        if (needsLatestUpload && !getLatestStudentClassReportFileUpload(studentKey)) {
+            showAppMessage('Upload a file first.');
+            return;
+        }
+
+        let handled = false;
+        if (action === 'qa') {
+            addQuestionToLatestStudentClassReportUpload(studentKey);
+            handled = true;
+        } else if (action === 'fill-in-blank') {
+            handled = addActivityToLatestStudentClassReportUpload(studentKey, 'fill-in-blank');
+        } else if (action === 'multiple-choice') {
+            handled = addActivityToLatestStudentClassReportUpload(studentKey, 'multiple-choice');
+        } else if (action === 'conversation-ordering') {
+            handled = addActivityToLatestStudentClassReportUpload(studentKey, 'conversation-ordering');
+        } else if (action === 'image') {
+            imageInput?.click();
+            return;
+        } else if (action === 'audio') {
+            audioInput?.click();
+            return;
+        } else if (action === 'video-embed') {
+            closeStudentClassReportActivityMenu(panel);
+            promptClassReportVideoEmbedUrl(panel, studentKey);
+            return;
+        }
+
+        if (handled) closeStudentClassReportActivityMenu(panel);
+    });
+
+    const bindTypedUpload = (inputEl, acceptFn) => {
+        if (!inputEl) return;
+        inputEl.addEventListener('change', async () => {
+            if (!canEditFeed()) {
+                inputEl.value = '';
+                return;
+            }
+            const file = inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
+            const studentKey = getStudentKey();
+            try {
+                if (file && acceptFn(file) && studentKey) {
+                    const ok = await appendClassReportUploadFromFile(panel, studentKey, file);
+                    if (ok) closeStudentClassReportActivityMenu(panel);
+                }
+            } finally {
+                inputEl.value = '';
+            }
+        });
+    };
+
+    bindTypedUpload(imageInput, classReportUploadAcceptsImageMimeOrName);
+    bindTypedUpload(audioInput, classReportUploadAcceptsAudioMimeOrName);
+
+    if (document.body.dataset.classReportActivityMenuDismissBound !== '1') {
+        document.body.dataset.classReportActivityMenuDismissBound = '1';
+        document.addEventListener('click', (e) => {
+            const openMenu = document.querySelector('.student-class-report-activity-menu.is-open');
+            if (!openMenu) return;
+            const hostPanel = openMenu.closest('#studentClassReportPanel');
+            if (!hostPanel || hostPanel.hidden) return;
+            if (e.target instanceof Element && openMenu.contains(e.target)) return;
+            closeStudentClassReportActivityMenu(hostPanel);
+        });
+    }
+}
+
+function appendStudentClassReportActivityBlocks(card, upload, studentName) {
+    if (!card || !upload || !Array.isArray(upload.activities) || upload.activities.length === 0) return;
+    const teacherLabel = getFirstNameLabel(getActiveTeacherProfileName() || loggedInTeacherName || currentTeacher, 'Teacher');
+    const studentLabel = getFirstNameLabel(studentName, 'Student');
+    const group = document.createElement('div');
+    group.className = 'student-class-report-card-activity-group';
+
+    upload.activities.forEach((activity) => {
+        if (!activity || !activity.id) return;
+        const block = document.createElement('div');
+        block.className = 'student-class-report-activity-block';
+        block.dataset.activityId = activity.id;
+        block.dataset.activityType = String(activity.type || '');
+
+        const header = document.createElement('div');
+        header.className = 'student-class-report-activity-block-header';
+        const title = document.createElement('span');
+        title.className = 'student-class-report-activity-block-title';
+        if (activity.type === 'fill-in-blank') title.textContent = 'Fill in the blank';
+        else if (activity.type === 'multiple-choice') title.textContent = 'Multiple choice';
+        else if (activity.type === 'conversation-ordering') title.textContent = 'Conversation ordering';
+        else title.textContent = 'Activity';
+        header.appendChild(title);
+
+        if (canEditFeed()) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'student-class-report-activity-delete-btn';
+            deleteBtn.setAttribute('aria-label', 'Remove activity');
+            deleteBtn.title = 'Remove activity';
+            deleteBtn.textContent = '\u00D7';
+            deleteBtn.addEventListener('click', () => {
+                removeActivityFromStudentClassReportUpload(studentName, upload.id, activity.id);
+            });
+            header.appendChild(deleteBtn);
+        }
+        block.appendChild(header);
+
+        if (activity.type === 'fill-in-blank') {
+            const promptLabel = document.createElement('label');
+            promptLabel.className = 'student-class-report-activity-label';
+            promptLabel.textContent = 'Prompt';
+            const promptInput = document.createElement('textarea');
+            promptInput.className = 'student-class-report-activity-textarea';
+            promptInput.rows = 2;
+            promptInput.placeholder = 'Sentence with a blank for the student…';
+            promptInput.value = String(activity.prompt || '');
+            promptInput.readOnly = !canEditFeed();
+            promptInput.addEventListener('input', () => {
+                activity.prompt = promptInput.value;
+                debouncePatchClassReportActivities(studentName, upload.id);
+            });
+            const answerLabel = document.createElement('label');
+            answerLabel.className = 'student-class-report-activity-label';
+            answerLabel.textContent = 'Answer';
+            const answerInput = document.createElement('input');
+            answerInput.type = 'text';
+            answerInput.className = 'student-class-report-activity-input';
+            answerInput.placeholder = 'Correct answer';
+            answerInput.value = String(activity.answer || '');
+            answerInput.readOnly = !canEditFeed();
+            answerInput.addEventListener('input', () => {
+                activity.answer = answerInput.value;
+                debouncePatchClassReportActivities(studentName, upload.id);
+            });
+            block.appendChild(promptLabel);
+            block.appendChild(promptInput);
+            block.appendChild(answerLabel);
+            block.appendChild(answerInput);
+        } else if (activity.type === 'multiple-choice') {
+            const questionLabel = document.createElement('label');
+            questionLabel.className = 'student-class-report-activity-label';
+            questionLabel.textContent = 'Question';
+            const questionInput = document.createElement('input');
+            questionInput.type = 'text';
+            questionInput.className = 'student-class-report-activity-input';
+            questionInput.placeholder = 'Write the question…';
+            questionInput.value = String(activity.question || '');
+            questionInput.readOnly = !canEditFeed();
+            questionInput.addEventListener('input', () => {
+                activity.question = questionInput.value;
+                debouncePatchClassReportActivities(studentName, upload.id);
+            });
+            block.appendChild(questionLabel);
+            block.appendChild(questionInput);
+            if (!Array.isArray(activity.options)) activity.options = ['', '', '', ''];
+            const optionsWrap = document.createElement('div');
+            optionsWrap.className = 'student-class-report-activity-mc-options';
+            activity.options.forEach((optVal, optIndex) => {
+                const optLabel = document.createElement('label');
+                optLabel.className = 'student-class-report-activity-label';
+                optLabel.textContent = `Option ${optIndex + 1}`;
+                const optInput = document.createElement('input');
+                optInput.type = 'text';
+                optInput.className = 'student-class-report-activity-input';
+                optInput.value = String(optVal || '');
+                optInput.readOnly = !canEditFeed();
+                optInput.addEventListener('input', () => {
+                    activity.options[optIndex] = optInput.value;
+                    debouncePatchClassReportActivities(studentName, upload.id);
+                });
+                optionsWrap.appendChild(optLabel);
+                optionsWrap.appendChild(optInput);
+            });
+            block.appendChild(optionsWrap);
+            const correctLabel = document.createElement('label');
+            correctLabel.className = 'student-class-report-activity-label';
+            correctLabel.textContent = 'Correct answer';
+            const correctSelect = document.createElement('select');
+            correctSelect.className = 'student-class-report-activity-select';
+            [0, 1, 2, 3].forEach((i) => {
+                const opt = document.createElement('option');
+                opt.value = String(i);
+                opt.textContent = `Option ${i + 1}`;
+                correctSelect.appendChild(opt);
+            });
+            correctSelect.value = String(Number.isFinite(activity.correctIndex) ? activity.correctIndex : 0);
+            correctSelect.disabled = !canEditFeed();
+            correctSelect.addEventListener('change', () => {
+                activity.correctIndex = Number(correctSelect.value) || 0;
+                debouncePatchClassReportActivities(studentName, upload.id);
+            });
+            block.appendChild(correctLabel);
+            block.appendChild(correctSelect);
+        } else if (activity.type === 'conversation-ordering') {
+            if (!Array.isArray(activity.lines)) activity.lines = [];
+            const linesWrap = document.createElement('div');
+            linesWrap.className = 'student-class-report-activity-conversation-lines';
+            activity.lines.forEach((line) => {
+                const speaker = line?.speaker === 'student' ? 'student' : 'teacher';
+                const lineRow = document.createElement('div');
+                lineRow.className = 'student-class-report-activity-conversation-line';
+                lineRow.dataset.lineId = line.id || '';
+                const speakerLabel = document.createElement('span');
+                speakerLabel.className = 'student-class-report-activity-conversation-speaker';
+                speakerLabel.textContent = speaker === 'teacher' ? teacherLabel : studentLabel;
+                const lineInput = document.createElement('input');
+                lineInput.type = 'text';
+                lineInput.className = 'student-class-report-activity-input';
+                lineInput.placeholder = 'Line text…';
+                lineInput.value = String(line.text || '');
+                lineInput.readOnly = !canEditFeed();
+                lineInput.addEventListener('input', () => {
+                    line.text = lineInput.value;
+                    debouncePatchClassReportActivities(studentName, upload.id);
+                });
+                const reorderWrap = document.createElement('div');
+                reorderWrap.className = 'student-class-report-activity-reorder-wrap';
+                if (canEditFeed()) {
+                    const upBtn = document.createElement('button');
+                    upBtn.type = 'button';
+                    upBtn.className = 'student-class-report-activity-reorder-btn';
+                    upBtn.setAttribute('aria-label', 'Move line up');
+                    upBtn.textContent = '\u2191';
+                    upBtn.addEventListener('click', () => {
+                        moveConversationOrderingLine(activity, line.id, 'up');
+                        void persistClassReportOfflineSnapshot();
+                        debouncePatchClassReportActivities(studentName, upload.id);
+                        renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), studentName);
+                    });
+                    const downBtn = document.createElement('button');
+                    downBtn.type = 'button';
+                    downBtn.className = 'student-class-report-activity-reorder-btn';
+                    downBtn.setAttribute('aria-label', 'Move line down');
+                    downBtn.textContent = '\u2193';
+                    downBtn.addEventListener('click', () => {
+                        moveConversationOrderingLine(activity, line.id, 'down');
+                        void persistClassReportOfflineSnapshot();
+                        debouncePatchClassReportActivities(studentName, upload.id);
+                        renderStudentClassReportUploadFeed(document.getElementById('studentClassReportPanel'), studentName);
+                    });
+                    reorderWrap.appendChild(upBtn);
+                    reorderWrap.appendChild(downBtn);
+                }
+                lineRow.appendChild(speakerLabel);
+                lineRow.appendChild(lineInput);
+                lineRow.appendChild(reorderWrap);
+                linesWrap.appendChild(lineRow);
+            });
+            block.appendChild(linesWrap);
+        }
+
+        group.appendChild(block);
+    });
+
+    card.appendChild(group);
+}
+
 function appendStudentClassReportFileContent(parentEl, fileData, compact = false) {
     if (!parentEl || !fileData) return;
     const type = String(fileData.type || '').toLowerCase();
@@ -7083,34 +7985,81 @@ function appendStudentClassReportFileContent(parentEl, fileData, compact = false
     }
 }
 
+function appendStudentClassReportVideoEmbedContent(parentEl, upload) {
+    if (!parentEl || !upload) return;
+    const iframeSrc = buildClassReportVideoEmbedIframeSrc(upload);
+    const sourceUrl = String(upload.sourceUrl || upload.embedUrl || '').trim();
+    if (!iframeSrc && !sourceUrl) return;
+
+    if (iframeSrc) {
+        const wrap = document.createElement('div');
+        wrap.className = 'student-class-report-video-embed-wrap';
+        const iframe = document.createElement('iframe');
+        iframe.className = 'student-class-report-video-embed-frame';
+        iframe.src = iframeSrc;
+        iframe.title = upload.name || 'Embedded video';
+        iframe.setAttribute('loading', 'lazy');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        iframe.setAttribute('allowfullscreen', '');
+        iframe.setAttribute(
+            'allow',
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+        );
+        wrap.appendChild(iframe);
+        parentEl.appendChild(wrap);
+    } else {
+        const notice = document.createElement('p');
+        notice.className = 'student-class-report-video-embed-unsupported';
+        notice.textContent = 'This embed is no longer supported here. Open the original link below.';
+        parentEl.appendChild(notice);
+    }
+
+    if (sourceUrl) {
+        const link = document.createElement('a');
+        link.className = 'student-class-report-video-embed-source';
+        link.href = sourceUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Open original';
+        parentEl.appendChild(link);
+    }
+}
+
 function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
     if (!feedEl || !upload) return;
+    const isVideoEmbed = upload.kind === 'video-embed';
     const card = document.createElement('article');
     card.className = 'student-class-report-file-card';
+    if (isVideoEmbed) {
+        card.classList.add('student-class-report-file-card--video-embed');
+        if (upload.provider) card.dataset.embedProvider = String(upload.provider);
+    }
     card.dataset.uploadId = upload.id || '';
 
     const meta = document.createElement('div');
     meta.className = 'student-class-report-file-card-meta';
     const name = document.createElement('span');
     name.className = 'student-class-report-file-card-name';
-    name.textContent = upload.name || 'Uploaded file';
+    name.textContent = upload.name || (isVideoEmbed ? 'Embedded video' : 'Uploaded file');
     const actions = document.createElement('div');
     actions.className = 'student-class-report-file-card-actions';
     meta.appendChild(name);
     if (canEditFeed()) {
-        bindStudentClassReportFileCardNameEdit(name, upload, studentName, card);
+        if (!isVideoEmbed) bindStudentClassReportFileCardNameEdit(name, upload, studentName, card);
         const relatedInput = document.createElement('input');
         relatedInput.type = 'file';
         relatedInput.accept = 'image/*,.pdf,audio/mpeg,.mp3';
         relatedInput.hidden = true;
-        relatedInput.addEventListener('change', async () => {
-            const file = relatedInput.files && relatedInput.files[0] ? relatedInput.files[0] : null;
-            try {
-                await addRelatedFileToStudentClassReportUpload(studentName, upload.id, file);
-            } finally {
-                relatedInput.value = '';
-            }
-        });
+        if (!isVideoEmbed) {
+            relatedInput.addEventListener('change', async () => {
+                const file = relatedInput.files && relatedInput.files[0] ? relatedInput.files[0] : null;
+                try {
+                    await addRelatedFileToStudentClassReportUpload(studentName, upload.id, file);
+                } finally {
+                    relatedInput.value = '';
+                }
+            });
+        }
         const addRelatedBtn = document.createElement('button');
         addRelatedBtn.type = 'button';
         addRelatedBtn.className = 'student-class-report-file-add-btn';
@@ -7118,9 +8067,13 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
         addRelatedBtn.title = 'Add related file';
         addRelatedBtn.innerHTML =
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
-        addRelatedBtn.addEventListener('click', () => {
-            relatedInput.click();
-        });
+        if (!isVideoEmbed) {
+            addRelatedBtn.addEventListener('click', () => {
+                relatedInput.click();
+            });
+        } else {
+            addRelatedBtn.hidden = true;
+        }
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'student-class-report-file-delete-btn';
@@ -7131,14 +8084,14 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
         deleteBtn.addEventListener('click', () => {
             removeStudentClassReportUpload(studentName, upload.id);
         });
-        actions.appendChild(relatedInput);
+        if (!isVideoEmbed) actions.appendChild(relatedInput);
         actions.appendChild(addRelatedBtn);
         actions.appendChild(deleteBtn);
         meta.appendChild(actions);
     }
     card.appendChild(meta);
 
-    if (canEditFeed()) {
+    if (canEditFeed() && !isVideoEmbed) {
         card.addEventListener('paste', async (e) => {
             const target = e.target;
             if (target && card.contains(target) && isTextEditingElement(target)) return;
@@ -7149,7 +8102,11 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
         });
     }
 
-    appendStudentClassReportFileContent(card, upload);
+    if (isVideoEmbed) {
+        appendStudentClassReportVideoEmbedContent(card, upload);
+    } else {
+        appendStudentClassReportFileContent(card, upload);
+    }
 
     const relatedFiles = [
         ...(Array.isArray(upload.audioFiles) ? upload.audioFiles : []),
@@ -7255,6 +8212,8 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
         card.appendChild(questionGroup);
     }
 
+    appendStudentClassReportActivityBlocks(card, upload, studentName);
+
     feedEl.appendChild(card);
 }
 
@@ -7262,7 +8221,7 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
     if (!panel) return;
     const uploadWrap = panel.querySelector('.student-class-report-upload-wrap');
     const uploadTrigger = panel.querySelector('.student-class-report-upload-area');
-    const changeFileBtn = panel.querySelector('.student-class-report-change-file-btn');
+    const floatingActions = panel.querySelector('.student-class-report-floating-actions');
     const feedEl = panel.querySelector('.student-class-report-file-preview');
     const feed = getStudentClassReportUploadFeed(studentName);
 
@@ -7285,7 +8244,10 @@ function renderStudentClassReportUploadFeed(panel, studentName) {
     const feedEditable = canEditFeed();
     if (uploadWrap) uploadWrap.hidden = !feedEditable || feed.length > 0;
     if (uploadTrigger) uploadTrigger.tabIndex = uploadWrap && !uploadWrap.hidden ? 0 : -1;
-    if (changeFileBtn) changeFileBtn.hidden = !feedEditable || feed.length === 0;
+    if (floatingActions) {
+        floatingActions.hidden = !feedEditable || feed.length === 0;
+        if (floatingActions.hidden) closeStudentClassReportActivityMenu(panel);
+    }
     panel.classList.toggle('student-class-report-panel--with-file', feed.length > 0);
     bumpClassReportUploadsSyncFingerprint();
 }
@@ -7317,6 +8279,7 @@ function ensureStudentClassReportPanelShell(studentName = '') {
         return true;
     }
     panel.textContent = '';
+    delete panel.dataset.activityMenuBound;
     panel.dataset.studentName = studentKey;
     panel.dataset.shellReady = '1';
 
@@ -7363,47 +8326,48 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     preview.className = 'student-class-report-file-preview';
     preview.hidden = true;
 
-    const changeFileBtn = document.createElement('button');
-    changeFileBtn.type = 'button';
-    changeFileBtn.className = 'student-class-report-change-file-btn';
-    changeFileBtn.setAttribute('aria-label', 'Add file');
-    changeFileBtn.title = 'Add file';
-    changeFileBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7.5 8.5 4.5-4.5 4.5 4.5"></path><path d="M20 16v2.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5V16"></path></svg>';
-    changeFileBtn.hidden = true;
-
     const floatingActions = document.createElement('div');
     floatingActions.className = 'student-class-report-floating-actions';
+    floatingActions.hidden = true;
 
-    const addQuestionBtn = document.createElement('button');
-    addQuestionBtn.type = 'button';
-    addQuestionBtn.className = 'student-class-report-add-question-btn';
-    addQuestionBtn.setAttribute('aria-label', 'Add question');
-    addQuestionBtn.title = 'Add question';
-    addQuestionBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>';
-    addQuestionBtn.addEventListener('click', () => {
-        if (!canEditFeed()) {
-            console.warn('Permission denied: students cannot edit feed content.');
-            return;
-        }
-        const selectedStudent = String(panel.dataset.studentName || studentName || '').trim();
-        addQuestionToLatestStudentClassReportUpload(selectedStudent);
-    });
-    addQuestionBtn.hidden = !canEditFeed();
+    const activityMenu = document.createElement('div');
+    activityMenu.className = 'student-class-report-activity-menu';
+
+    const menuToggle = document.createElement('button');
+    menuToggle.type = 'button';
+    menuToggle.className = 'student-class-report-activity-menu-toggle';
+    menuToggle.setAttribute('aria-label', 'Activity menu');
+    menuToggle.setAttribute('aria-expanded', 'false');
+    menuToggle.setAttribute('aria-haspopup', 'true');
+    menuToggle.title = 'Add activity';
+    menuToggle.innerHTML = CLASS_REPORT_ACTIVITY_MENU_ICONS.toggle;
+
+    const imageInput = document.createElement('input');
+    imageInput.type = 'file';
+    imageInput.id = 'studentClassReportImageInput';
+    imageInput.accept = 'image/*,.pdf';
+    imageInput.hidden = true;
+
+    const audioInput = document.createElement('input');
+    audioInput.type = 'file';
+    audioInput.id = 'studentClassReportAudioInput';
+    audioInput.accept = 'audio/mpeg,.mp3,audio/*';
+    audioInput.hidden = true;
+
+    activityMenu.appendChild(menuToggle);
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('qa', 'Question and Answer', 'qa', 'qa'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('fill-in-blank', 'Fill in the Blank', 'fib', 'fib'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('multiple-choice', 'Multiple Choice', 'mc', 'mc'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('conversation-ordering', 'Conversation Ordering', 'co', 'co'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('image', 'Image Upload', 'image', 'image'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('audio', 'Audio Upload', 'audio', 'audio'));
+    activityMenu.appendChild(createStudentClassReportActivityOptionButton('video-embed', 'Embed Video', 'video', 'video'));
+    activityMenu.appendChild(imageInput);
+    activityMenu.appendChild(audioInput);
+    floatingActions.appendChild(activityMenu);
 
     uploadBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        if (!canEditFeed()) {
-            console.warn('Permission denied: students cannot publish feed content.');
-            return;
-        }
-        input.click();
-    });
-
-    changeFileBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
         if (!canEditFeed()) {
             console.warn('Permission denied: students cannot publish feed content.');
             return;
@@ -7447,11 +8411,10 @@ function ensureStudentClassReportPanelShell(studentName = '') {
     uploadBtn.appendChild(selected);
     uploadWrap.appendChild(uploadBtn);
     uploadWrap.appendChild(input);
-    floatingActions.appendChild(addQuestionBtn);
-    floatingActions.appendChild(changeFileBtn);
     panel.appendChild(uploadWrap);
     panel.appendChild(floatingActions);
     panel.appendChild(preview);
+    setupStudentClassReportActivityMenu(panel, studentName);
     renderStudentClassReportUploadFeed(panel, studentName);
     return true;
 }
@@ -11857,6 +12820,13 @@ function openAdminDashboardDeleteConfirm(role, name) {
     openModalWithAnimation(modal);
 }
 
+function getSchoolSettingsDeleteTitle(modalEl) {
+    const modal = modalEl || document.getElementById('schoolSettingsModal');
+    return String(
+        pendingSchoolSettingsTitle || modal?.dataset?.schoolSettingsOriginalTitle || ''
+    ).trim();
+}
+
 function openSchoolSettingsModal(schoolTitle) {
     if (!canManageRoster()) {
         denyStudentAction('Permission denied: students cannot change school settings.');
@@ -11870,11 +12840,14 @@ function openSchoolSettingsModal(schoolTitle) {
     const primaryColorSelect = document.getElementById('schoolSettingsPrimaryColor');
     const secondaryColorSelect = document.getElementById('schoolSettingsSecondaryColor');
     if (!modal || !nameEl || !externalCheckbox || !externalPanel || !externalUrl || !primaryColorSelect || !secondaryColorSelect) return;
+    setupSchoolSettingsColorPickerDelegation();
+    bindSchoolSettingsColorPopupDismiss();
     initColorThemeSelect(primaryColorSelect);
     initColorThemeSelect(secondaryColorSelect);
 
     pendingSchoolSettingsTitle = String(schoolTitle || '').trim();
     if (!pendingSchoolSettingsTitle) return;
+    modal.dataset.schoolSettingsOriginalTitle = pendingSchoolSettingsTitle;
 
     const existingUrl = getSchoolSpreadsheetUrl(pendingSchoolSettingsTitle);
     const enabled = !!existingUrl;
@@ -11905,6 +12878,7 @@ function closeSchoolSettingsModal() {
     closeModalWithAnimation(modal);
     closeSchoolSettingsColorPopup();
     pendingSchoolSettingsTitle = '';
+    delete modal.dataset.schoolSettingsOriginalTitle;
 }
 
 function saveSchoolSettingsFromModal() {
@@ -11912,7 +12886,7 @@ function saveSchoolSettingsFromModal() {
         denyStudentAction('Permission denied: students cannot change school settings.');
         return;
     }
-    const schoolTitle = String(pendingSchoolSettingsTitle || '').trim();
+    const schoolTitle = getSchoolSettingsDeleteTitle();
     const schoolNameInput = document.getElementById('schoolSettingsModalSchoolName');
     const nextSchoolTitle = String(schoolNameInput?.value || '').trim();
     const schoolKey = schoolTitle.toLowerCase();
@@ -11921,7 +12895,11 @@ function saveSchoolSettingsFromModal() {
     const externalUrlInput = document.getElementById('schoolSettingsExternalUrl');
     const primaryColorSelect = document.getElementById('schoolSettingsPrimaryColor');
     const secondaryColorSelect = document.getElementById('schoolSettingsSecondaryColor');
-    if (!schoolTitle || !schoolKey || !externalCheckbox || !externalUrlInput || !primaryColorSelect || !secondaryColorSelect) return;
+    if (!externalCheckbox || !externalUrlInput || !primaryColorSelect || !secondaryColorSelect) return;
+    if (!schoolTitle || !schoolKey) {
+        showAppMessage('Could not determine which school to save. Close and reopen school settings.');
+        return;
+    }
     if (!nextSchoolTitle) {
         showAppMessage("Please enter the school's name.");
         schoolNameInput?.focus();
@@ -12019,20 +12997,95 @@ function saveSchoolSettingsFromModal() {
     pendingSchoolSettingsTitle = nextSchoolTitle;
 
     saveRoster();
-    refreshContextMenuTheme();
-    renderSidebar();
-    if (currentTeacher || loggedInStudentFullName) {
-        resyncSelectionAfterSidebarRender();
-    } else if (teachersList[0]) {
-        selectTeacher(teachersList[0]);
-    }
+    closeSchoolSettingsColorPopup();
     closeSchoolSettingsModal();
+    try {
+        refreshContextMenuTheme();
+        renderSidebar();
+        if (currentTeacher || loggedInStudentFullName) {
+            resyncSelectionAfterSidebarRender();
+        } else if (teachersList[0]) {
+            selectTeacher(teachersList[0]);
+        }
+    } catch (error) {
+        console.error('Error refreshing UI after school settings save:', error);
+    }
+}
+
+function beginSchoolSettingsDeleteFlow(modalEl) {
+    const modal = modalEl || document.getElementById('schoolSettingsModal');
+    const title = getSchoolSettingsDeleteTitle(modal);
+    if (!title) {
+        showAppMessage('Could not determine which school to delete. Close and reopen school settings.');
+        return;
+    }
+    const titleKey = title.toLowerCase();
+    const studentsInSchool = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter(
+        (name) => (getStudentSchoolName(name) || '').trim().toLowerCase() === titleKey
+    );
+    closeSchoolSettingsModal();
+    window.requestAnimationFrame(() => {
+        openDeleteSchoolModal(title, studentsInSchool.length);
+    });
+}
+
+function setupSchoolSettingsColorPickerDelegation() {
+    const host = document.getElementById('schoolSettingsModal');
+    if (!host || host.dataset.schoolSettingsColorPickerBound === '1') return;
+    host.dataset.schoolSettingsColorPickerBound = '1';
+    host.addEventListener('click', (e) => {
+        if (!(e.target instanceof Element)) return;
+        if (e.target.closest('#schoolSettingsColorPopup')) {
+            e.stopPropagation();
+            return;
+        }
+        if (e.target.closest('#schoolSettingsSave, .btn-school-settings-save')) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeSchoolSettingsColorPopup();
+            saveSchoolSettingsFromModal();
+            return;
+        }
+        const openFor = (which, anchor) => {
+            if (!anchor) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openSchoolSettingsColorPopup(which, anchor);
+        };
+        const primarySquare = e.target.closest('.school-settings-theme-square--primary');
+        if (primarySquare) {
+            openFor('primary', primarySquare);
+            return;
+        }
+        const secondarySquare = e.target.closest('.school-settings-theme-square--secondary');
+        if (secondarySquare) {
+            openFor('secondary', secondarySquare);
+        }
+    });
+    const colorPopup = document.getElementById('schoolSettingsColorPopup');
+    colorPopup?.addEventListener('click', (e) => e.stopPropagation());
+}
+
+window.setupSchoolSettingsColorPickerDelegation = setupSchoolSettingsColorPickerDelegation;
+
+function bindSchoolSettingsColorPopupDismiss() {
+    if (document.body.dataset.schoolSettingsColorDismissBound === '1') return;
+    document.body.dataset.schoolSettingsColorDismissBound = '1';
+    document.addEventListener('click', (e) => {
+        const modal = document.getElementById('schoolSettingsModal');
+        if (!modal?.classList.contains('is-open')) return;
+        if (!(e.target instanceof Element)) return;
+        if (
+            isSchoolSettingsColorPickerTrigger(e.target)
+            || e.target.closest('#schoolSettingsSave, .btn-school-settings-save')
+        ) return;
+        closeSchoolSettingsColorPopup();
+    });
 }
 
 function setupSchoolSettingsModal() {
     const modal = document.getElementById('schoolSettingsModal');
     const cancelBtn = document.getElementById('schoolSettingsCancel');
-    const saveBtn = document.getElementById('schoolSettingsSave');
     const deleteBtn = document.getElementById('schoolSettingsDelete');
     const backdrop = document.getElementById('schoolSettingsModalBackdrop');
     const externalCheckbox = document.getElementById('schoolSettingsExternalCheckbox');
@@ -12040,46 +13093,36 @@ function setupSchoolSettingsModal() {
     const externalUrl = document.getElementById('schoolSettingsExternalUrl');
     const primaryColorSelect = document.getElementById('schoolSettingsPrimaryColor');
     const secondaryColorSelect = document.getElementById('schoolSettingsSecondaryColor');
-    const primarySquare = document.querySelector('.school-settings-theme-square--primary');
-    const secondarySquare = document.querySelector('.school-settings-theme-square--secondary');
-    const colorPopup = document.getElementById('schoolSettingsColorPopup');
-    if (!modal || !saveBtn || !externalCheckbox || !externalPanel) return;
+    if (!modal || !deleteBtn) return;
+
+    setupSchoolSettingsColorPickerDelegation();
+    bindSchoolSettingsColorPopupDismiss();
+
+    if (deleteBtn.dataset.bound !== '1') {
+        deleteBtn.dataset.bound = '1';
+        deleteBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            beginSchoolSettingsDeleteFlow(modal);
+        });
+    }
+    cancelBtn?.addEventListener('click', () => closeSchoolSettingsModal());
+    backdrop?.addEventListener('click', () => closeSchoolSettingsModal());
+    if (!externalCheckbox || !externalPanel) return;
     initColorThemeSelect(primaryColorSelect);
     initColorThemeSelect(secondaryColorSelect);
 
-    cancelBtn?.addEventListener('click', () => closeSchoolSettingsModal());
-    backdrop?.addEventListener('click', () => closeSchoolSettingsModal());
-    saveBtn.addEventListener('click', () => saveSchoolSettingsFromModal());
-    deleteBtn?.addEventListener('click', () => {
-        const title = String(pendingSchoolSettingsTitle || '').trim();
-        if (!title) return;
-        closeSchoolSettingsModal();
-        const studentsInSchool = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].filter((name) => {
-            return (getStudentSchoolName(name) || '').trim().toLowerCase() === title.toLowerCase();
+    if (externalCheckbox.dataset.bound !== '1') {
+        externalCheckbox.dataset.bound = '1';
+        externalCheckbox.addEventListener('change', () => {
+            const on = !!externalCheckbox.checked;
+            externalPanel.classList.toggle('is-collapsed', !on);
+            externalPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
+            if (on) {
+                window.setTimeout(() => externalUrl?.focus(), 220);
+            }
         });
-        openDeleteSchoolModal(title, studentsInSchool.length);
-    });
-    primarySquare?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openSchoolSettingsColorPopup('primary', primarySquare);
-    });
-    secondarySquare?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openSchoolSettingsColorPopup('secondary', secondarySquare);
-    });
-    colorPopup?.addEventListener('click', (e) => e.stopPropagation());
-    document.addEventListener('click', () => {
-        if (!modal.classList.contains('is-open')) return;
-        closeSchoolSettingsColorPopup();
-    });
-    externalCheckbox.addEventListener('change', () => {
-        const on = !!externalCheckbox.checked;
-        externalPanel.classList.toggle('is-collapsed', !on);
-        externalPanel.setAttribute('aria-hidden', on ? 'false' : 'true');
-        if (on) {
-            window.setTimeout(() => externalUrl?.focus(), 220);
-        }
-    });
+    }
 }
 
 function openAppMessageModal(title, message) {
@@ -13017,7 +14060,9 @@ function openEditStudentModal(studentName, rosterKey) {
         countryInput.dataset.phoneDialIsoForCountry = String(phoneCountrySelect.value || '').trim().toUpperCase();
     }
     if (emailInput) emailInput.value = String(studentEmailsByName[studentName] || '');
-    if (birthDateInput) birthDateInput.value = String(studentBirthDatesByName[studentName] || '');
+    if (birthDateInput) {
+        setBirthDateInputDisplayValue(birthDateInput, studentBirthDatesByName[studentName] || '');
+    }
     if (ageInput) ageInput.value = String(studentAgesByName[studentName] || '');
     syncEditStudentAgeFromBirthDate();
     if (levelInput) levelInput.value = String(studentLevelsByName[studentName] || '');
@@ -13045,9 +14090,114 @@ function closeEditStudentModal() {
     hideMainFormPanel();
 }
 
+const BIRTH_DATE_US_PLACEHOLDER = 'mm/dd/yyyy';
+
+function isIsoBirthDateString(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+}
+
+function isValidIsoBirthDate(iso) {
+    if (!isIsoBirthDateString(iso)) return false;
+    const [year, month, day] = iso.split('-').map((part) => Number(part));
+    const probe = new Date(year, month - 1, day);
+    return (
+        probe.getFullYear() === year
+        && probe.getMonth() === month - 1
+        && probe.getDate() === day
+    );
+}
+
+function formatBirthDateIsoToUsDisplay(iso) {
+    const trimmed = String(iso || '').trim();
+    if (!isValidIsoBirthDate(trimmed)) return '';
+    const [year, month, day] = trimmed.split('-');
+    return `${month}/${day}/${year}`;
+}
+
+function formatUsBirthDateTyping(raw) {
+    const digits = String(raw || '').replace(/\D/g, '').slice(0, 8);
+    if (!digits) return '';
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function parseUsBirthDateDisplayToIso(display) {
+    const match = String(display || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return '';
+    const month = String(Number(match[1])).padStart(2, '0');
+    const day = String(Number(match[2])).padStart(2, '0');
+    const year = match[3];
+    const iso = `${year}-${month}-${day}`;
+    return isValidIsoBirthDate(iso) ? iso : '';
+}
+
+function birthDateValueToIso(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return '';
+    if (isIsoBirthDateString(trimmed)) {
+        return isValidIsoBirthDate(trimmed) ? trimmed : '';
+    }
+    return parseUsBirthDateDisplayToIso(trimmed);
+}
+
+function normalizeBirthDateForStorage(value) {
+    return birthDateValueToIso(value);
+}
+
+function formatBirthDateStorageToUsDisplay(storedValue) {
+    const trimmed = String(storedValue || '').trim();
+    if (!trimmed) return '';
+    if (isIsoBirthDateString(trimmed)) {
+        return formatBirthDateIsoToUsDisplay(trimmed);
+    }
+    const iso = parseUsBirthDateDisplayToIso(trimmed);
+    return iso ? formatBirthDateIsoToUsDisplay(iso) : trimmed;
+}
+
+function normalizeUsBirthDateDisplayOnBlur(display) {
+    const trimmed = String(display || '').trim();
+    if (!trimmed) return '';
+    const iso = birthDateValueToIso(trimmed);
+    return iso ? formatBirthDateIsoToUsDisplay(iso) : trimmed;
+}
+
+function setBirthDateInputDisplayValue(input, storedValue) {
+    if (!input) return;
+    input.value = formatBirthDateStorageToUsDisplay(storedValue);
+}
+
+function setupBirthDateTextInput(input, onChange) {
+    if (!input || input.dataset.birthDateUsBound === '1') return;
+    input.dataset.birthDateUsBound = '1';
+    input.type = 'text';
+    input.placeholder = BIRTH_DATE_US_PLACEHOLDER;
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('autocomplete', 'bday');
+    input.maxLength = 10;
+
+    input.addEventListener('input', () => {
+        const formatted = formatUsBirthDateTyping(input.value);
+        if (formatted !== input.value) {
+            input.value = formatted;
+        }
+        input.removeAttribute('aria-invalid');
+        if (typeof onChange === 'function') onChange();
+    });
+    input.addEventListener('blur', () => {
+        const normalized = normalizeUsBirthDateDisplayOnBlur(input.value);
+        if (normalized !== input.value) {
+            input.value = normalized;
+        }
+        if (typeof onChange === 'function') onChange();
+    });
+}
+
 function calculateStudentAgeFromBirthDate(value) {
-    if (!value) return '';
-    const birth = new Date(value);
+    const iso = birthDateValueToIso(value);
+    if (!iso) return '';
+    const [year, month, day] = iso.split('-').map((part) => Number(part));
+    const birth = new Date(year, month - 1, day);
     if (Number.isNaN(birth.getTime())) return '';
     const today = new Date();
     let age = today.getFullYear() - birth.getFullYear();
@@ -13059,6 +14209,11 @@ function calculateStudentAgeFromBirthDate(value) {
     if (age < 0) return '';
     return age > 60 ? '60+' : String(age);
 }
+
+window.setupBirthDateTextInput = setupBirthDateTextInput;
+window.setBirthDateInputDisplayValue = setBirthDateInputDisplayValue;
+window.normalizeBirthDateForStorage = normalizeBirthDateForStorage;
+window.calculateStudentAgeFromBirthDate = calculateStudentAgeFromBirthDate;
 
 function syncEditStudentAgeFromBirthDate() {
     const birthDateInput = document.getElementById('editStudentBirthDate');
@@ -13093,7 +14248,8 @@ async function upsertStudentFromEditForm(action = 'save') {
     const nextPasswordRaw = String(document.getElementById('editStudentPassword')?.value || '').trim();
     const nextSchool = String(schoolName || '').trim();
     const nextKind = rosterKindFromSchoolName(nextSchool);
-    const birthDateValue = String(document.getElementById('editStudentBirthDate')?.value || '').trim();
+    const birthDateRaw = String(document.getElementById('editStudentBirthDate')?.value || '').trim();
+    const birthDateValue = normalizeBirthDateForStorage(birthDateRaw);
     const ageRaw = String(document.getElementById('editStudentAge')?.value || '').trim();
     const levelValue = String(document.getElementById('editStudentLevel')?.value || '').trim();
     // Ensure calculated age is current before validation and save.
@@ -13141,7 +14297,12 @@ async function upsertStudentFromEditForm(action = 'save') {
         return;
     }
 
-    if (birthDateValue) {
+    if (birthDateRaw) {
+        if (!birthDateValue) {
+            alert('Enter a valid birth date (mm/dd/yyyy).');
+            document.getElementById('editStudentBirthDate')?.focus();
+            return;
+        }
         const numericAge = calculatedAgeRaw === '60+' ? 61 : Number(calculatedAgeRaw);
         if (!Number.isFinite(numericAge) || numericAge < 18) {
             alert('Student age must be 18 or older.');
@@ -13437,7 +14598,7 @@ function setupEditStudentModal() {
     if (passwordGenerateBtn && passwordInput && passwordGenerateBtn.dataset.bound !== '1') {
         bindPlatePasswordGenerateButton(passwordGenerateBtn, passwordInput);
     }
-    birthDateInput?.addEventListener('input', syncEditStudentAgeFromBirthDate);
+    setupBirthDateTextInput(birthDateInput, syncEditStudentAgeFromBirthDate);
     syncEditStudentAgeFromBirthDate();
 
     form.addEventListener('submit', async (e) => {
@@ -15569,7 +16730,6 @@ function setupAddStudentModal() {
     const modal = document.getElementById('addModal');
     const form = document.getElementById('addStudentForm');
     const cancelBtn = document.getElementById('addStudentCancel');
-    const teacherHeaderCancelBtn = document.getElementById('addTeacherHeaderCancel');
     const backdrop = document.getElementById('addModalBackdrop');
     const schoolInput = document.getElementById('addSchoolNameInput');
     const studentFirstInput = document.getElementById('addStudentFirst');
@@ -15713,10 +16873,7 @@ function setupAddStudentModal() {
         syncAddStudentModalThemeFromSchoolTitle(schoolSelectEl.value);
     });
     setupAddSchoolColorPickerDelegation();
-    document.addEventListener('click', () => {
-        if (!modal.classList.contains('is-open')) return;
-        closeAddSchoolColorPopup();
-    });
+    bindAddSchoolColorPopupDismiss();
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
