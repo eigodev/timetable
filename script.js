@@ -7,8 +7,11 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const STORAGE_KEY = 'timetable_schedules';
 /** ISO timestamp bumped on every local schedule write; used to prefer local over stale cloud on reload. */
 const SCHEDULES_LOCAL_UPDATED_KEY = 'timetable_schedules_local_updated';
-/** Set after local schedule edits until `performSave` confirms KV write (avoids stale cloud wiping a fast refresh). */
+/** Session-only: local edits not yet confirmed by KV (avoids stale cloud wiping a fast refresh). */
 const SCHEDULE_PENDING_CLOUD_UPLOAD_KEY = 'timetable_schedule_pending_cloud_upload';
+const SCHEDULE_PENDING_CLOUD_UPLOAD_AT_KEY = 'timetable_schedule_pending_cloud_upload_at';
+/** Pending upload older than this is treated as stale so browsers can pull cloud again. */
+const SCHEDULE_PENDING_CLOUD_UPLOAD_MAX_MS = 120000;
 const ROSTER_STORAGE_KEY = 'timetable_roster';
 const CLASS_REPORT_ROWS_KEY = 'timetable_student_class_report_rows';
 const LEGACY_CLASS_REPORT_UPLOADS_LS_KEY = 'timetable_student_class_report_uploads';
@@ -10524,14 +10527,11 @@ async function fetchSchedulesFromCloudAndMerge() {
     const data = await response.json().catch(() => null);
     if (!data?.success || !data.schedules) return false;
 
-    const skipCloudClobberPendingUpload =
-        isSchedulePendingCloudUpload() && Object.keys(teacherSchedules || {}).length > 0;
-    if (!skipCloudClobberPendingUpload) {
-        mergeRemoteSchedulesAfterLoad(data.schedules, data.lastUpdated);
-        applyTeacherDataIsolationInMemory();
-        syncWeeklyClassToAllTeacherSchedules();
-        saveAllSchedulesLocal();
-        refreshScheduleViewFromMemory();
+    const remoteIsNewer = isScheduleRemoteNewerThanTracked(data.lastUpdated);
+    const skipCloudClobberPendingUpload = shouldSkipCloudMergeForPendingUpload();
+    if (!skipCloudClobberPendingUpload || (remoteIsNewer && !hasInFlightScheduleCloudSave())) {
+        applyCloudSchedulesToMemoryAndView(data.schedules, data.lastUpdated);
+        if (remoteIsNewer) clearSchedulePendingCloudUpload();
     }
     lastUpdateTimestamp = data.lastUpdated;
     return true;
@@ -10541,8 +10541,7 @@ async function fetchSchedulesFromCloudAndMerge() {
 async function loadAllSchedules() {
     try {
         updateSyncStatus('syncing', 'Syncing with cloud...');
-        const skipCloudClobberPendingUpload =
-            isSchedulePendingCloudUpload() && Object.keys(teacherSchedules || {}).length > 0;
+        const skipCloudClobberPendingUpload = shouldSkipCloudMergeForPendingUpload();
 
         const schedulesUrl = absoluteHttpApiUrl(API_ENDPOINT);
         if (!schedulesUrl) {
@@ -10604,18 +10603,14 @@ async function loadAllSchedules() {
             }
 
             if (data.success) {
-                if (data.schedules && !skipCloudClobberPendingUpload) {
-                    mergeRemoteSchedulesAfterLoad(data.schedules, data.lastUpdated);
-                    applyTeacherDataIsolationInMemory();
-                    syncWeeklyClassToAllTeacherSchedules();
-                    saveAllSchedulesLocal();
-                    if (data.lastUpdated) {
-                        try {
-                            localStorage.setItem(SCHEDULES_LOCAL_UPDATED_KEY, String(data.lastUpdated));
-                        } catch {
-                            /* ignore */
-                        }
-                    }
+                const remoteIsNewer = isScheduleRemoteNewerThanTracked(data.lastUpdated);
+                if (
+                    data.schedules &&
+                    (!skipCloudClobberPendingUpload ||
+                        (remoteIsNewer && !hasInFlightScheduleCloudSave()))
+                ) {
+                    applyCloudSchedulesToMemoryAndView(data.schedules, data.lastUpdated);
+                    if (remoteIsNewer) clearSchedulePendingCloudUpload();
                 }
                 lastUpdateTimestamp = data.lastUpdated;
 
@@ -10777,40 +10772,32 @@ function startPolling() {
                                 comparable && localSchedulesStr !== remoteSchedulesStr;
 
                             if (timestampChanged || dataChanged) {
+                                const remoteIsNewer = isScheduleRemoteNewerThanTracked(data.lastUpdated);
+                                const inFlight = hasInFlightScheduleCloudSave();
+                                const pending = isSchedulePendingCloudUpload();
+
                                 if (timestampChanged) {
                                     console.log('Timestamp changed - checking for updates');
                                 }
 
-                                if (dataChanged) {
-                                    if (isSchedulePendingCloudUpload()) {
-                                        void saveAllSchedules();
-                                    } else {
-                                        console.log('Data changed - updating from cloud');
-                                        mergeRemoteSchedulesAfterLoad(schedules, data.lastUpdated);
-                                        applyTeacherDataIsolationInMemory();
-                                        syncWeeklyClassToAllTeacherSchedules();
-                                        saveAllSchedulesLocal();
-                                        if (data.lastUpdated) {
-                                            try {
-                                                localStorage.setItem(
-                                                    SCHEDULES_LOCAL_UPDATED_KEY,
-                                                    String(data.lastUpdated)
-                                                );
-                                            } catch {
-                                                /* ignore */
-                                            }
-                                        }
-                                        refreshScheduleViewFromMemory();
+                                if (timestampChanged && remoteIsNewer && !inFlight) {
+                                    logScheduleSyncDebug('poll: pulling newer cloud schedules', {
+                                        teacher: loggedInTeacherName || '',
+                                        remoteLastUpdated: data.lastUpdated || null,
+                                        trackedLastUpdated: lastUpdateTimestamp
+                                    });
+                                    applyCloudSchedulesToMemoryAndView(schedules, data.lastUpdated);
+                                    clearSchedulePendingCloudUpload();
+                                    updateSyncStatus('synced', '✓ Updated from cloud');
+                                    setTimeout(() => {
+                                        updateSyncStatus('synced', 'Cloud sync active');
+                                    }, 2000);
+                                } else if (dataChanged && pending && !inFlight && !remoteIsNewer) {
+                                    void saveAllSchedules();
+                                }
 
-                                        updateSyncStatus('synced', '✓ Updated from cloud');
-                                        setTimeout(() => {
-                                            updateSyncStatus('synced', 'Cloud sync active');
-                                        }, 2000);
-                                    }
+                                if (data.lastUpdated) {
                                     lastUpdateTimestamp = data.lastUpdated;
-                                } else if (timestampChanged) {
-                                    lastUpdateTimestamp = data.lastUpdated;
-                                    console.log('Timestamp updated, data unchanged');
                                 }
                             }
                         } else if (data.lastUpdated) {
@@ -10850,7 +10837,9 @@ function loadAllSchedulesLocal() {
 
 function markSchedulePendingCloudUpload() {
     try {
-        localStorage.setItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY, '1');
+        sessionStorage.setItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY, '1');
+        sessionStorage.setItem(SCHEDULE_PENDING_CLOUD_UPLOAD_AT_KEY, String(Date.now()));
+        localStorage.removeItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY);
     } catch (_) {
         /* quota / private mode */
     }
@@ -10858,6 +10847,8 @@ function markSchedulePendingCloudUpload() {
 
 function clearSchedulePendingCloudUpload() {
     try {
+        sessionStorage.removeItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY);
+        sessionStorage.removeItem(SCHEDULE_PENDING_CLOUD_UPLOAD_AT_KEY);
         localStorage.removeItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY);
     } catch (_) {
         /* ignore */
@@ -10866,10 +10857,52 @@ function clearSchedulePendingCloudUpload() {
 
 function isSchedulePendingCloudUpload() {
     try {
-        return localStorage.getItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY) === '1';
+        if (localStorage.getItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY) === '1') {
+            localStorage.removeItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY);
+        }
+        if (sessionStorage.getItem(SCHEDULE_PENDING_CLOUD_UPLOAD_KEY) !== '1') return false;
+        const at = Number(sessionStorage.getItem(SCHEDULE_PENDING_CLOUD_UPLOAD_AT_KEY) || '0');
+        if (!at || Date.now() - at > SCHEDULE_PENDING_CLOUD_UPLOAD_MAX_MS) {
+            clearSchedulePendingCloudUpload();
+            return false;
+        }
+        return true;
     } catch {
         return false;
     }
+}
+
+function hasInFlightScheduleCloudSave() {
+    return !!(isSaving || schedulesCloudSavePending || saveTimer);
+}
+
+function isScheduleRemoteNewerThanTracked(remoteLastUpdated) {
+    const remote = remoteLastUpdated ? String(remoteLastUpdated) : '';
+    const tracked = lastUpdateTimestamp ? String(lastUpdateTimestamp) : '';
+    if (!remote) return false;
+    if (!tracked) return true;
+    return remote > tracked;
+}
+
+function shouldSkipCloudMergeForPendingUpload() {
+    if (!isSchedulePendingCloudUpload()) return false;
+    if (hasInFlightScheduleCloudSave()) return true;
+    return Object.keys(teacherSchedules || {}).length > 0;
+}
+
+function applyCloudSchedulesToMemoryAndView(schedules, remoteLastUpdated) {
+    mergeRemoteSchedulesAfterLoad(schedules, remoteLastUpdated);
+    applyTeacherDataIsolationInMemory();
+    syncWeeklyClassToAllTeacherSchedules();
+    saveAllSchedulesLocal();
+    if (remoteLastUpdated) {
+        try {
+            localStorage.setItem(SCHEDULES_LOCAL_UPDATED_KEY, String(remoteLastUpdated));
+        } catch {
+            /* ignore */
+        }
+    }
+    refreshScheduleViewFromMemory();
 }
 
 // Save all schedules to Cloudflare KV or localStorage (with debouncing)
