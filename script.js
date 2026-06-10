@@ -10193,12 +10193,190 @@ function maybeAdvanceClassReportUploadsCloudTsFromPoll(remoteTs) {
     }
 }
 
+/** Students a teacher may include in a scoped roster merge patch. */
+function getStudentNamesVisibleForScopedRosterPatch(rosterPayload, teacherProfile) {
+    const profile = canonicalTeacherNameOnRoster(teacherProfile);
+    if (!profile || !rosterPayload || typeof rosterPayload !== 'object') return [];
+
+    if (
+        isGateStaffAccountSession() &&
+        getGateSessionAppRole() === 'class-supervisor' &&
+        String(loggedInTeacherName || '').trim().toLowerCase() === profile.toLowerCase()
+    ) {
+        return getStudentNamesVisibleInNavigation()
+            .map((n) => String(n || '').trim())
+            .filter(Boolean);
+    }
+
+    const allStudents = [
+        ...(Array.isArray(rosterPayload.private) ? rosterPayload.private : []),
+        ...(Array.isArray(rosterPayload.speakon) ? rosterPayload.speakon : []),
+        ...(Array.isArray(rosterPayload.passport) ? rosterPayload.passport : []),
+    ]
+        .map((n) => String(n || '').trim())
+        .filter(Boolean);
+
+    const teachers = Array.isArray(rosterPayload.teachers) ? rosterPayload.teachers : [];
+    const onlyTeacher = teachers.length === 1 ? canonicalTeacherNameOnRoster(teachers[0]) : '';
+    const isSingleTeacherSession =
+        Boolean(onlyTeacher) && onlyTeacher.toLowerCase() === profile.toLowerCase();
+    const st =
+        rosterPayload.studentTeachers && typeof rosterPayload.studentTeachers === 'object'
+            ? rosterPayload.studentTeachers
+            : {};
+
+    return allStudents.filter((name) => {
+        if (isSingleTeacherSession) return true;
+        const assigned = String(st[name] || '').trim();
+        if (!assigned) return true;
+        return canonicalTeacherNameOnRoster(assigned).toLowerCase() === profile.toLowerCase();
+    });
+}
+
+/**
+ * Teacher/gate roster POST must be a scoped patch (server rejects full multi-teacher rosters).
+ * @param {object} rosterPayload full in-memory roster snapshot
+ * @returns {object|null}
+ */
+function buildTeacherScopedRosterPatchForCloud(rosterPayload) {
+    const profile = canonicalTeacherNameOnRoster(loggedInTeacherName);
+    if (!profile || !rosterPayload || typeof rosterPayload !== 'object') return null;
+
+    const visibleStudents = new Set(
+        getStudentNamesVisibleForScopedRosterPatch(rosterPayload, profile)
+    );
+
+    const patch = { teachers: [profile] };
+
+    for (const kind of ['private', 'speakon', 'passport']) {
+        const arr = Array.isArray(rosterPayload[kind]) ? rosterPayload[kind] : [];
+        patch[kind] = arr
+            .map((n) => String(n || '').trim())
+            .filter((n) => n && visibleStudents.has(n));
+    }
+
+    const studentMapPaths = [
+        'studentSchools',
+        'studentPhones',
+        'studentTeachers',
+        'studentEmails',
+        'studentUsernames',
+        'studentPasswords',
+        'studentCities',
+        'studentCountries',
+        'studentBirthDates',
+        'studentAges',
+        'studentLevels',
+        'studentExternalFollowUpLinks',
+        'studentGoogleMeetLinks',
+    ];
+    for (const path of studentMapPaths) {
+        const src = rosterPayload[path];
+        if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
+        const scoped = {};
+        for (const [name, value] of Object.entries(src)) {
+            const n = String(name || '').trim();
+            if (!n || !visibleStudents.has(n)) continue;
+            scoped[n] = value;
+        }
+        if (Object.keys(scoped).length > 0) patch[path] = scoped;
+    }
+
+    const te = rosterPayload.teacherEmails;
+    if (te && typeof te === 'object' && te[profile] !== undefined) {
+        patch.teacherEmails = { [profile]: te[profile] };
+    }
+    const tp = rosterPayload.teacherPasswords;
+    if (tp && typeof tp === 'object' && tp[profile] !== undefined) {
+        patch.teacherPasswords = { [profile]: tp[profile] };
+    }
+    const tar = rosterPayload.teacherAppRoles;
+    if (tar && typeof tar === 'object' && tar[profile] !== undefined) {
+        patch.teacherAppRoles = { [profile]: tar[profile] };
+    }
+
+    if (isGateStaffAccountSession()) {
+        const gs = Array.isArray(rosterPayload.gateStaffAccounts) ? rosterPayload.gateStaffAccounts : [];
+        const mine = gs.filter(
+            (e) => String(e?.profileName || '').trim().toLowerCase() === profile.toLowerCase()
+        );
+        if (mine.length > 0) patch.gateStaffAccounts = mine;
+    }
+
+    const schoolScopedPaths = [
+        'schoolExternalLinks',
+        'schoolThemeColors',
+        'schoolBillingModels',
+        'schoolBillingConfigs',
+        'googleMeetSharedLinkModeBySchool',
+    ];
+    for (const path of schoolScopedPaths) {
+        const src = rosterPayload[path];
+        if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
+        if (Object.keys(src).length > 0) patch[path] = { ...src };
+    }
+
+    if (Array.isArray(rosterPayload.customSchools) && rosterPayload.customSchools.length > 0) {
+        patch.customSchools = [...rosterPayload.customSchools];
+    }
+
+    return patch;
+}
+
+/** Plain JSON clone for roster POST bodies. */
+function cloneRosterPayloadForCloudPost(payload) {
+    try {
+        return JSON.parse(JSON.stringify(payload && typeof payload === 'object' ? payload : {}));
+    } catch (e) {
+        console.error('Error cloning roster payload for cloud:', e);
+        return null;
+    }
+}
+
+/**
+ * POST `/api/roster` with refreshed Bearer auth and one 401 retry.
+ * @returns {Promise<Response|null>}
+ */
+async function postRosterToCloudApi(rosterUrl, requestPayload) {
+    const cloned = cloneRosterPayloadForCloudPost(requestPayload);
+    if (!cloned || typeof cloned !== 'object') return null;
+
+    let authHeaders = await timetableAuthHeadersForProtectedPostOrNull();
+    if (!authHeaders) return null;
+
+    let body;
+    try {
+        body = JSON.stringify(cloned);
+    } catch (e) {
+        console.error('Error serializing roster for cloud:', e);
+        return null;
+    }
+
+    const requestInit = (headers) => ({
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...headers,
+        },
+        body,
+        cache: 'no-store',
+    });
+
+    let response = await fetch(rosterUrl, requestInit(authHeaders));
+    if (response.status === 401) {
+        await refreshTimetableApiBearerTokenIfPossible();
+        authHeaders = timetableCloudPollAuthHeadersOrNull();
+        if (authHeaders) {
+            response = await fetch(rosterUrl, requestInit(authHeaders));
+        }
+    }
+    return response;
+}
+
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object' || Array.isArray(rosterPayload)) return;
     const rosterUrl = absoluteHttpApiUrl('/api/roster');
     if (!rosterUrl) return;
-    const authHeaders = timetableCloudPollAuthHeadersOrNull();
-    if (!authHeaders) return;
     if (isSavingRoster) {
         pendingRosterPayload = rosterPayload;
         return;
@@ -10210,31 +10388,41 @@ async function saveRosterToCloud(rosterPayload) {
             isTeacherLoggedIn &&
             !loggedInStudentFullName &&
             String(loggedInTeacherName || '').trim();
-        let rosterForRequest = rosterPayload;
-        if (isScopedTeacher && isGateStaffAccountSession() && String(loggedInTeacherName || '').trim()) {
-            rosterForRequest = { ...rosterPayload, teachers: [String(loggedInTeacherName || '').trim()] };
+
+        let requestPayload;
+        if (isScopedTeacher) {
+            const scopedPatch = buildTeacherScopedRosterPatchForCloud(rosterPayload);
+            if (!scopedPatch) return;
+            requestPayload = { roster: scopedPatch, merge: true };
+        } else {
+            requestPayload = { roster: rosterPayload };
         }
-        const payload = isScopedTeacher ? { roster: rosterForRequest, merge: true } : { roster: rosterPayload };
-        let body;
-        try {
-            body = JSON.stringify(payload);
-        } catch (e) {
-            console.error('Error serializing roster for cloud:', e);
+
+        const response = await postRosterToCloudApi(rosterUrl, requestPayload);
+        if (!response) {
+            console.warn('Roster cloud save skipped — sign in required for Bearer auth');
             return;
         }
-        const response = await fetch(rosterUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...authHeaders
-            },
-            body,
-        });
+
         if (response.ok) {
             const data = await response.json().catch(() => null);
             if (data?.lastUpdated) {
                 rosterLastUpdateTimestamp = data.lastUpdated;
             }
+            if (data && data.success === false) {
+                console.error('Roster API error:', data.error || 'Save failed');
+            }
+        } else {
+            let errorDetails = `HTTP ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData?.error) {
+                    errorDetails = errorData.error;
+                }
+            } catch {
+                /* ignore */
+            }
+            console.error('Error saving roster to cloud:', errorDetails);
         }
     } catch (error) {
         console.error('Error saving roster to cloud:', error);
@@ -17366,9 +17554,6 @@ function setupAddStudentModal() {
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
-    }
-    if (teacherHeaderCancelBtn) {
-        teacherHeaderCancelBtn.addEventListener('click', () => closeAddStudentModal());
     }
     if (backdrop) {
         backdrop.addEventListener('click', () => closeAddStudentModal());
