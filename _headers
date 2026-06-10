@@ -1,0 +1,12 @@
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate
+  Pragma: no-cache
+
+/script.js
+  Cache-Control: no-cache, must-revalidate
+
+/auth-verify-gate.js
+  Cache-Control: no-cache, must-revalidate
+
+/auth-login-migrate.js
+  Cache-Control: no-cache, must-revalidate
