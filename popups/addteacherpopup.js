@@ -35,7 +35,8 @@
                         <h4 class="add-teacher-subtitle">Create a new teacher profile and configure availability.</h4>
                     </div>
                     <div class="add-teacher-header-actions">
-                        <button type="submit" class="btn-add-student-submit" id="addTeacherHeaderSubmit">Add Teacher</button>
+                        <button type="button" class="btn-add-student-cancel" id="addTeacherHeaderCancel">Cancel</button>
+                        <button type="button" class="btn-add-student-submit" id="addTeacherHeaderSubmit">Add Teacher</button>
                     </div>
                 </div>
             </div>

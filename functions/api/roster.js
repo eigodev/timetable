@@ -1,7 +1,8 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
 import { kvGetAllRoster, kvGetRosterLastUpdated } from '../lib/kv-all-roster.js';
-import { migrateAndPersistRosterKv, migrateRosterAuthInPlace } from '../lib/roster-auth-migrate.js';
+import { migrateRosterAuthInPlace } from '../lib/roster-auth-migrate.js';
+import { isKvQuotaExceededError, kvPutJsonIfChanged, kvPutTextIfChanged, kvQuotaExceededResponse } from '../lib/kv-safe.js';
 import { pruneAndPersistSchedulesForRosterKv, sanitizeRosterForAdminPersist } from '../lib/roster-admin-sanitize.js';
 import { filterRosterForActor, mergeTeacherRosterPatch } from '../lib/roster-scope.js';
 
@@ -14,6 +15,24 @@ const corsHeaders = (extra = {}) =>
     Pragma: 'no-cache',
     ...extra,
   });
+
+async function migrateRosterInMemoryOnly(roster) {
+  if (!roster || typeof roster !== 'object' || Array.isArray(roster)) return roster;
+  try {
+    await migrateRosterAuthInPlace(roster);
+  } catch (e) {
+    console.error('[roster migrate in memory]', e?.message || String(e));
+  }
+  return roster;
+}
+
+async function persistRosterIfChanged(KV, roster, timestamp) {
+  const rosterChanged = await kvPutJsonIfChanged(KV, 'all_roster', roster);
+  if (rosterChanged) {
+    await kvPutTextIfChanged(KV, 'roster_last_updated', timestamp);
+  }
+  return rosterChanged;
+}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -50,7 +69,7 @@ export async function onRequest(context) {
       if (!auth.legacy) {
         let rosterFull = await kvGetAllRoster(KV);
         if (rosterFull && typeof rosterFull === 'object') {
-          rosterFull = await migrateAndPersistRosterKv(KV, rosterFull);
+          rosterFull = await migrateRosterInMemoryOnly(rosterFull);
         }
         const lastUpdated = await kvGetRosterLastUpdated(KV);
         const actor = { role: auth.payload.role, profile: auth.payload.profile };
@@ -66,7 +85,7 @@ export async function onRequest(context) {
       }
       let roster = await kvGetAllRoster(KV);
       if (roster && typeof roster === 'object') {
-        roster = await migrateAndPersistRosterKv(KV, roster);
+        roster = await migrateRosterInMemoryOnly(roster);
       }
       const lastUpdated = await kvGetRosterLastUpdated(KV);
       return new Response(
@@ -98,8 +117,7 @@ export async function onRequest(context) {
         if (role === 'admin') {
           await migrateRosterAuthInPlace(incoming);
           sanitizeRosterForAdminPersist(incoming);
-          await KV.put('all_roster', JSON.stringify(incoming));
-          await KV.put('roster_last_updated', timestamp);
+          await persistRosterIfChanged(KV, incoming, timestamp);
           await pruneAndPersistSchedulesForRosterKv(KV, incoming);
           return new Response(
             JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Roster saved successfully' }),
@@ -119,7 +137,7 @@ export async function onRequest(context) {
           }
           const baseRaw = await kvGetAllRoster(KV);
           const base = baseRaw && typeof baseRaw === 'object' ? baseRaw : {};
-          await migrateAndPersistRosterKv(KV, base);
+          await migrateRosterInMemoryOnly(base);
           let merged;
           try {
             merged = mergeTeacherRosterPatch(base, incoming, profile);
@@ -130,9 +148,10 @@ export async function onRequest(context) {
             });
           }
           sanitizeRosterForAdminPersist(merged);
-          await KV.put('all_roster', JSON.stringify(merged));
-          await KV.put('roster_last_updated', timestamp);
-          await pruneAndPersistSchedulesForRosterKv(KV, merged);
+          const rosterChanged = await persistRosterIfChanged(KV, merged, timestamp);
+          if (rosterChanged) {
+            await pruneAndPersistSchedulesForRosterKv(KV, merged);
+          }
           return new Response(
             JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Roster merged successfully' }),
             { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
@@ -147,8 +166,7 @@ export async function onRequest(context) {
 
       await migrateRosterAuthInPlace(incoming);
       sanitizeRosterForAdminPersist(incoming);
-      await KV.put('all_roster', JSON.stringify(incoming));
-      await KV.put('roster_last_updated', timestamp);
+      await persistRosterIfChanged(KV, incoming, timestamp);
       await pruneAndPersistSchedulesForRosterKv(KV, incoming);
       return new Response(
         JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Roster saved successfully' }),
@@ -158,6 +176,10 @@ export async function onRequest(context) {
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders() });
   } catch (error) {
+    if (isKvQuotaExceededError(error)) {
+      const kind = String(error?.message || '').toLowerCase().includes('get') ? 'get' : 'put';
+      return kvQuotaExceededResponse(corsHeaders, kind);
+    }
     const msg = error instanceof Error ? error.message : String(error || 'Internal server error');
     return new Response(JSON.stringify({ success: false, error: msg || 'Internal server error' }), {
       status: 500,

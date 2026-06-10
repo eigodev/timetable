@@ -3339,7 +3339,7 @@ async function initRoster(preloadedRoster = null) {
         adminAccount = savedAdminAccount;
         saveAdminAccountToStorage(adminAccount);
     }
-    if (!preloadedRoster && !cloudRoster && saved) {
+    if (!preloadedRoster && !cloudRoster && saved && !isKvQuotaExceededSession()) {
         queueSaveRosterToCloud(saved);
     }
     if (!saved) {
@@ -10129,14 +10129,17 @@ function absoluteHttpApiUrl(pathnameAndSearch) {
 }
 
 /**
- * Cloudflare KV free tier has a low daily read cap (~100k/day). Each poll hits `/api/schedules` (3 KV reads)
- * and we poll roster separately. Keep intervals conservative to avoid "KV get() limit exceeded for the day."
+ * Cloudflare KV free tier has low daily read/write caps. Each poll hits `/api/schedules` (KV reads)
+ * and roster is polled separately. Keep intervals conservative to avoid quota exhaustion.
  */
-const POLL_INTERVAL = 10000;
-/** Roster changes less often than schedule cells; polling it every schedule tick doubled KV reads. */
-const ROSTER_POLL_INTERVAL_MS = 20000;
-/** Class-report uploads KV sync runs on its own interval so feed updates feel snappier than schedule polling. */
-const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 8000;
+const POLL_INTERVAL = 60000;
+/** Roster changes less often than schedule cells. */
+const ROSTER_POLL_INTERVAL_MS = 120000;
+/** Class-report uploads KV sync — slower than before to preserve KV write quota. */
+const CLASS_REPORT_UPLOAD_CLOUD_POLL_MS = 30000;
+/** When KV quota is hit, pause cloud writes/polls until the next UTC day. */
+const KV_QUOTA_EXCEEDED_SESSION_KEY = 'timetable_kv_quota_exceeded_until';
+const KV_QUOTA_POLL_BACKOFF_MS = 300000;
 
 // Track if we're currently saving
 let isSaving = false;
@@ -10148,6 +10151,9 @@ let lastUpdateTimestamp = null;
 let saveTimer = null;
 /** Schedules skipped `saveAllSchedules` calls while KV POST runs; flushed after `performSave` finishes. */
 let schedulesCloudSavePending = false;
+/** Skip duplicate identical schedule POST bodies within a session. */
+let lastSchedulesCloudPostBody = '';
+let kvQuotaPollBackoffUntil = 0;
 
 // Polling timer for checking updates
 let pollTimer = null;
@@ -10375,6 +10381,7 @@ async function postRosterToCloudApi(rosterUrl, requestPayload) {
 
 async function saveRosterToCloud(rosterPayload) {
     if (!rosterPayload || typeof rosterPayload !== 'object' || Array.isArray(rosterPayload)) return;
+    if (isKvQuotaExceededSession()) return;
     const rosterUrl = absoluteHttpApiUrl('/api/roster');
     if (!rosterUrl) return;
     if (isSavingRoster) {
@@ -10422,9 +10429,12 @@ async function saveRosterToCloud(rosterPayload) {
             } catch {
                 /* ignore */
             }
+            noteCloudApiResponseForKvQuota(response, errorDetails);
             console.error('Error saving roster to cloud:', errorDetails);
         }
     } catch (error) {
+        const errMsg = timetableCaughtErrorMessage(error);
+        if (isKvQuotaExceededMessage(errMsg)) markKvQuotaExceededSession(errMsg);
         console.error('Error saving roster to cloud:', error);
     } finally {
         isSavingRoster = false;
@@ -10505,7 +10515,7 @@ async function timetableAuthHeadersForProtectedPostOrNull() {
 }
 
 async function pollRosterUpdates() {
-    if (isSavingRoster) return;
+    if (isSavingRoster || shouldPauseCloudKvTraffic()) return;
     const rosterPollBase = absoluteHttpApiUrl('/api/roster');
     if (!rosterPollBase) return;
     const authHeaders = timetableCloudPollAuthHeadersOrNull();
@@ -10525,9 +10535,19 @@ async function pollRosterUpdates() {
                 'Content-Type': 'application/json',
                 ...authHeaders
             },
-            cache: 'no-cache',
+            cache: 'no-store',
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+            let pollErr = `HTTP ${response.status}`;
+            try {
+                const errData = await response.json();
+                if (errData?.error) pollErr = errData.error;
+            } catch {
+                /* ignore */
+            }
+            noteCloudApiResponseForKvQuota(response, pollErr);
+            return;
+        }
         const data = await response.json().catch(() => null);
         if (!data?.success) return;
 
@@ -10847,6 +10867,9 @@ async function loadAllSchedules() {
             statusMessage = '⚠ API not found - check function path';
         } else if (errMsg.includes('HTTP 503')) {
             statusMessage = '⚠ KV not bound - check binding name is "schedules_kv"';
+        } else if (isKvQuotaExceededMessage(errMsg)) {
+            markKvQuotaExceededSession(errMsg);
+            statusMessage = '⚠ Cloud KV daily limit reached — using local storage';
         }
         
         updateSyncStatus('local-only', statusMessage);
@@ -10864,6 +10887,7 @@ function setupVisibilityCloudRefresh() {
     document.body.dataset.visibilityCloudRefresh = '1';
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
+        if (shouldPauseCloudKvTraffic()) return;
         void (async () => {
             await refreshTimetableApiBearerTokenIfPossible();
             const loaded = await fetchSchedulesFromCloudAndMerge();
@@ -10906,6 +10930,7 @@ function startPolling() {
 
     // Poll every few seconds for updates
     pollTimer = setInterval(async () => {
+        if (shouldPauseCloudKvTraffic()) return;
         if (!isSaving) {
             try {
                 const schedBase = absoluteHttpApiUrl(API_ENDPOINT);
@@ -10993,7 +11018,15 @@ function startPolling() {
                         }
                     }
                 } else if (response.status !== 401 && response.status !== 403) {
-                    console.warn('Schedule polling failed:', response.status);
+                    let pollErr = `HTTP ${response.status}`;
+                    try {
+                        const errData = await response.json();
+                        if (errData?.error) pollErr = errData.error;
+                    } catch {
+                        /* ignore */
+                    }
+                    noteCloudApiResponseForKvQuota(response, pollErr);
+                    console.warn('Schedule polling failed:', pollErr);
                 }
             } catch (error) {
                 // Silent error - don't show error for polling failures
@@ -11003,10 +11036,12 @@ function startPolling() {
     }, POLL_INTERVAL);
 
     rosterPollTimer = window.setInterval(() => {
+        if (shouldPauseCloudKvTraffic()) return;
         void pollRosterUpdates();
     }, ROSTER_POLL_INTERVAL_MS);
 
     classReportUploadCloudPollTimer = window.setInterval(() => {
+        if (shouldPauseCloudKvTraffic()) return;
         void pollClassReportUploadsFromCloud();
     }, CLASS_REPORT_UPLOAD_CLOUD_POLL_MS);
 }
@@ -11078,6 +11113,52 @@ function shouldSkipCloudMergeForPendingUpload() {
     return Object.keys(teacherSchedules || {}).length > 0;
 }
 
+function isKvQuotaExceededMessage(messageRaw) {
+    const msg = String(messageRaw || '').toLowerCase();
+    return msg.includes('limit exceeded') || msg.includes('kv quota');
+}
+
+function markKvQuotaExceededSession(reason) {
+    try {
+        const tomorrowUtc = new Date();
+        tomorrowUtc.setUTCHours(24, 0, 0, 0);
+        sessionStorage.setItem(KV_QUOTA_EXCEEDED_SESSION_KEY, String(tomorrowUtc.getTime()));
+    } catch {
+        /* ignore */
+    }
+    kvQuotaPollBackoffUntil = Date.now() + KV_QUOTA_POLL_BACKOFF_MS;
+    console.warn('Cloud KV quota reached — pausing cloud sync until quota resets.', reason || '');
+    updateSyncStatus(
+        'local-only',
+        '⚠ Cloud KV daily limit reached — saved locally; sync resumes after quota resets'
+    );
+}
+
+function isKvQuotaExceededSession() {
+    try {
+        const until = Number(sessionStorage.getItem(KV_QUOTA_EXCEEDED_SESSION_KEY) || '0');
+        if (!until) return false;
+        if (Date.now() < until) return true;
+        sessionStorage.removeItem(KV_QUOTA_EXCEEDED_SESSION_KEY);
+    } catch {
+        /* ignore */
+    }
+    return false;
+}
+
+function shouldPauseCloudKvTraffic() {
+    if (isKvQuotaExceededSession()) return true;
+    return Date.now() < kvQuotaPollBackoffUntil;
+}
+
+function noteCloudApiResponseForKvQuota(response, errorMessage) {
+    if (response?.status === 429 || isKvQuotaExceededMessage(errorMessage)) {
+        markKvQuotaExceededSession(errorMessage || `HTTP ${response?.status || ''}`);
+        return true;
+    }
+    return false;
+}
+
 function applyCloudSchedulesToMemoryAndView(schedules, remoteLastUpdated) {
     mergeRemoteSchedulesAfterLoad(schedules, remoteLastUpdated);
     applyTeacherDataIsolationInMemory();
@@ -11095,6 +11176,10 @@ function applyCloudSchedulesToMemoryAndView(schedules, remoteLastUpdated) {
 
 // Save all schedules to Cloudflare KV or localStorage (with debouncing)
 function saveAllSchedules() {
+    if (isKvQuotaExceededSession()) {
+        saveAllSchedulesLocal();
+        return;
+    }
     if (isSaving) {
         schedulesCloudSavePending = true;
         return;
@@ -11237,6 +11322,32 @@ async function performSave() {
             return;
         }
 
+        if (isKvQuotaExceededSession()) {
+            saveAllSchedulesLocal();
+            updateSyncStatus(
+                'local-only',
+                '⚠ Cloud KV daily limit reached — saved locally; sync resumes after quota resets'
+            );
+            return;
+        }
+
+        const schedulesClone = cloneSchedulesPayloadForCloudPost(payload);
+        let postBody = '';
+        try {
+            postBody = JSON.stringify({ schedules: schedulesClone });
+        } catch (e) {
+            console.error('Error serializing schedules for cloud:', e);
+            saveAllSchedulesLocal();
+            updateSyncStatus('local-only', '⚠ Save failed — using local storage');
+            return;
+        }
+        if (postBody && postBody === lastSchedulesCloudPostBody) {
+            clearSchedulePendingCloudUpload();
+            saveAllSchedulesLocal();
+            updateSyncStatus('synced', 'Cloud sync active');
+            return;
+        }
+
         const response = await postSchedulesToCloudApi(postUrl, payload);
         if (!response) {
             saveAllSchedulesLocal();
@@ -11249,6 +11360,7 @@ async function performSave() {
 
             if (data && data.success) {
                 lastUpdateTimestamp = data.lastUpdated;
+                lastSchedulesCloudPostBody = postBody;
                 console.log('Successfully saved to cloud. Timestamp:', data.lastUpdated);
 
                 clearSchedulePendingCloudUpload();
@@ -11276,6 +11388,7 @@ async function performSave() {
             } catch (e) {
                 // Couldn't parse error response
             }
+            noteCloudApiResponseForKvQuota(response, errorDetails);
             throw new Error(errorDetails);
         }
     } catch (error) {
@@ -11284,7 +11397,11 @@ async function performSave() {
         console.error('Error details:', errMsg || '(no message)');
 
         let errorMessage = 'Save failed';
-        if (
+        if (isKvQuotaExceededMessage(errMsg)) {
+            markKvQuotaExceededSession(errMsg);
+            clearSchedulePendingCloudUpload();
+            errorMessage = 'Cloud KV daily limit reached — saved locally';
+        } else if (
             errMsg.includes('schedules_kv not configured') ||
             errMsg.includes('KV_SCHEDULES not configured') ||
             errMsg.includes('503')
@@ -11305,9 +11422,11 @@ async function performSave() {
         saveAllSchedulesLocal();
     } finally {
         isSaving = false;
-        if (schedulesCloudSavePending) {
+        if (schedulesCloudSavePending && !isKvQuotaExceededSession()) {
             schedulesCloudSavePending = false;
             saveAllSchedules();
+        } else {
+            schedulesCloudSavePending = false;
         }
     }
 }
@@ -17554,6 +17673,18 @@ function setupAddStudentModal() {
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAddStudentModal());
+    }
+    const teacherHeaderCancelBtn = document.getElementById('addTeacherHeaderCancel');
+    const teacherHeaderSubmitBtn = document.getElementById('addTeacherHeaderSubmit');
+    if (teacherHeaderCancelBtn) {
+        teacherHeaderCancelBtn.addEventListener('click', () => closeAddStudentModal());
+    }
+    if (teacherHeaderSubmitBtn) {
+        teacherHeaderSubmitBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (addModalMode !== 'teacher') return;
+            form.requestSubmit();
+        });
     }
     if (backdrop) {
         backdrop.addEventListener('click', () => closeAddStudentModal());

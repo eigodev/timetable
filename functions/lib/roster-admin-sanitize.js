@@ -1,4 +1,5 @@
 import { coerceSupervisionLink } from './supervision-links.js';
+import { kvPutJsonIfChanged, kvPutTextIfChanged } from './kv-safe.js';
 
 /** @typedef {Record<string, unknown>} RosterLike */
 
@@ -248,6 +249,8 @@ export async function pruneAndPersistSchedulesForRosterKv(KV, roster) {
 
   const pruned = sanitizeSchedulesObjectForRoster(cur, roster);
 
-  await KV.put('all_schedules', JSON.stringify(pruned));
-  await KV.put('last_updated', new Date().toISOString());
+  const schedulesChanged = await kvPutJsonIfChanged(KV, 'all_schedules', pruned);
+  if (schedulesChanged) {
+    await kvPutTextIfChanged(KV, 'last_updated', new Date().toISOString());
+  }
 }

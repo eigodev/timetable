@@ -1,6 +1,7 @@
 import { rejectIfStrictAuthUnconfigured } from '../lib/auth-policy.js';
 import { resolveRequestAuth } from '../lib/auth-token.js';
 import { kvGetAllRoster } from '../lib/kv-all-roster.js';
+import { isKvQuotaExceededError, kvPutJsonIfChanged, kvPutTextIfChanged, kvQuotaExceededResponse } from '../lib/kv-safe.js';
 import { filterSchedulesForActor, mergeSchedulesForTeacher, mergeSchedulesForClassSupervisor } from '../lib/roster-scope.js';
 
 const corsHeaders = (extra = {}) => ({
@@ -11,6 +12,14 @@ const corsHeaders = (extra = {}) => ({
   Pragma: 'no-cache',
   ...extra,
 });
+
+async function persistSchedulesIfChanged(KV, schedules, timestamp) {
+  const changed = await kvPutJsonIfChanged(KV, 'all_schedules', schedules);
+  if (changed) {
+    await kvPutTextIfChanged(KV, 'last_updated', timestamp);
+  }
+  return changed;
+}
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -97,8 +106,7 @@ export async function onRequest(context) {
         const role = auth.payload.role;
         const profile = auth.payload.profile;
         if (role === 'admin') {
-          await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
-          await KV_SCHEDULES.put('last_updated', timestamp);
+          await persistSchedulesIfChanged(KV_SCHEDULES, schedules, timestamp);
           return new Response(
             JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Schedules saved successfully' }),
             { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
@@ -126,8 +134,7 @@ export async function onRequest(context) {
               headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
             });
           }
-          await KV_SCHEDULES.put('all_schedules', JSON.stringify(merged));
-          await KV_SCHEDULES.put('last_updated', timestamp);
+          await persistSchedulesIfChanged(KV_SCHEDULES, merged, timestamp);
           return new Response(
             JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Schedules saved successfully' }),
             { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
@@ -139,8 +146,7 @@ export async function onRequest(context) {
         });
       }
 
-      await KV_SCHEDULES.put('all_schedules', JSON.stringify(schedules));
-      await KV_SCHEDULES.put('last_updated', timestamp);
+      await persistSchedulesIfChanged(KV_SCHEDULES, schedules, timestamp);
       return new Response(
         JSON.stringify({ success: true, lastUpdated: timestamp, message: 'Schedules saved successfully' }),
         { headers: { ...corsHeaders(), 'Content-Type': 'application/json' } }
@@ -149,6 +155,10 @@ export async function onRequest(context) {
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders() });
   } catch (error) {
+    if (isKvQuotaExceededError(error)) {
+      const kind = String(error?.message || '').toLowerCase().includes('get') ? 'get' : 'put';
+      return kvQuotaExceededResponse(corsHeaders, kind);
+    }
     return new Response(
       JSON.stringify({
         success: false,
