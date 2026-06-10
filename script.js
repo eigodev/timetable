@@ -5986,7 +5986,7 @@ function removeStudentScheduledClassContributions(studentName, day, hour, teache
     if (atKey != null && String(atKey).trim() !== '') {
         const atTok = teacherSlotStateToComparableToken(atKey);
         if (atTok === classToken || (extraToken && atTok === extraToken)) {
-            delete slots[key];
+            slots[key] = null;
             touched = true;
         }
     }
@@ -10496,45 +10496,6 @@ function updateSyncStatus(status, message) {
     }
 }
 
-/**
- * One-time heal: if this browser has fuller student grids locally than KV (e.g. Opera never uploaded),
- * push the richer copy to cloud so other browsers can load it on refresh.
- */
-async function maybePushRicherLocalSchedulesToCloudIfNeeded(cloudSchedules) {
-    if (!isTeacherLoggedIn || loggedInStudentFullName || isAdminLoggedIn) return;
-    if (!timetableCloudPollAuthHeadersOrNull()) return;
-    if (isSchedulePendingCloudUpload()) return;
-
-    const cloud = cloudSchedules && typeof cloudSchedules === 'object' ? cloudSchedules : {};
-    const localParsed = readSchedulesObjectFromLocalStorage();
-    let needsPush = false;
-
-    const considerKey = (keyRaw) => {
-        const key = String(keyRaw || '').trim();
-        if (!key) return;
-        const localSlots = Object.keys(getScheduleSlotMapWithoutMeta(localParsed[key] || {})).length;
-        const cloudSlots = Object.keys(getScheduleSlotMapWithoutMeta(cloud[key] || {})).length;
-        if (localSlots > cloudSlots) {
-            teacherSchedules[key] = localParsed[key];
-            needsPush = true;
-        }
-    };
-
-    const tutorKey = canonicalTeacherNameOnRoster(loggedInTeacherName);
-    if (tutorKey) considerKey(tutorKey);
-    getStudentNamesVisibleInNavigation().forEach((name) => considerKey(name));
-
-    if (!needsPush) return;
-
-    applyTeacherDataIsolationInMemory();
-    syncWeeklyClassToAllTeacherSchedules();
-    logScheduleSyncDebug('pushing richer local schedules to cloud', {
-        teacher: loggedInTeacherName || '',
-        keys: Object.keys(teacherSchedules).length
-    });
-    await performSave();
-}
-
 async function fetchSchedulesFromCloudAndMerge() {
     const schedulesUrl = absoluteHttpApiUrl(API_ENDPOINT);
     if (!schedulesUrl) return false;
@@ -10655,7 +10616,6 @@ async function loadAllSchedules() {
                             /* ignore */
                         }
                     }
-                    await maybePushRicherLocalSchedulesToCloudIfNeeded(data.schedules);
                 }
                 lastUpdateTimestamp = data.lastUpdated;
 
@@ -10664,9 +10624,6 @@ async function loadAllSchedules() {
                 void pollClassReportUploadsFromCloud();
 
                 updateSyncStatus('synced', '✓ Cloud sync active');
-                if (skipCloudClobberPendingUpload) {
-                    saveAllSchedules();
-                }
             } else {
                 // API returned error
                 const errorMsg = data.error || 'Unknown error';
@@ -10984,7 +10941,12 @@ async function performSave() {
         isSaving = true;
         updateSyncStatus('syncing', 'Saving to cloud...');
 
-        console.log('Saving schedules to cloud...', Object.keys(teacherSchedules).length, 'teachers');
+        const payload = getSchedulesPayloadForCloudPost();
+        logScheduleSyncDebug('performSave posting to cloud', {
+            teacher: loggedInTeacherName || '',
+            keys: Object.keys(payload).length,
+            profileKeys: Object.keys(payload)
+        });
 
         const postUrl = absoluteHttpApiUrl(API_ENDPOINT);
         if (!postUrl) {
@@ -11003,7 +10965,7 @@ async function performSave() {
         let body;
         try {
             body = JSON.stringify({
-                schedules: getSchedulesPayloadForCloudPost(),
+                schedules: payload,
             });
         } catch (e) {
             console.error('Error serializing schedules for cloud:', e);
@@ -13942,8 +13904,8 @@ async function initTeachers() {
 
     await loadAllSchedules();
     if (syncAllStudentRepositionsForAllTutors()) {
-        markSchedulePendingCloudUpload();
         saveAllSchedulesLocal();
+        refreshScheduleViewFromMemory();
     }
     applyTeacherDataIsolationInMemory();
     renderSidebar();
@@ -18226,6 +18188,17 @@ function setSlotState(day, hour, state) {
     const slot = document.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
     
     if (!slot) return;
+
+    if (isActiveTeacherName(currentTeacher)) {
+        const nextLow = String(state ?? '').trim().toLowerCase();
+        const isAvailabilityWrite =
+            nextLow === 'available' || !state || nextLow === '' || nextLow === 'null';
+        if (isAvailabilityWrite) {
+            if (isTeacherSlotOccupiedForAvailability(day, hour)) return;
+            const aggregated = applyAllStudentColorsToTeacherScheduleCopy(slotStates, currentTeacher);
+            if (getClassOrExtraTokenFromSlotState(aggregated[key])) return;
+        }
+    }
 
     if (isGateViewingAlienTeacherGrid()) {
         const role = getGateSessionAppRole();

@@ -107,6 +107,11 @@ export async function onRequest(context) {
         if (role === 'teacher' || role === 'gate') {
           const base = (await KV_SCHEDULES.get('all_schedules', 'json')) || {};
           const rosterFull = (await kvGetAllRoster(KV_SCHEDULES)) || {};
+          console.log('[schedules-api] POST merge', {
+            role,
+            profile,
+            incomingKeys: Object.keys(schedules || {}),
+          });
           let merged;
           try {
             if (role === 'gate' && String(auth.payload.gateAppRole || '').trim() === 'class-supervisor') {

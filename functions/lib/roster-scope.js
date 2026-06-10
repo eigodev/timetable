@@ -514,6 +514,125 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
   return out;
 }
 
+const SCHEDULE_UNAVAILABLE_META_KEY = '__unavailableStudentNames';
+
+function scheduleSlotMapFromObject(schedule) {
+  if (!schedule || typeof schedule !== 'object' || Array.isArray(schedule)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(schedule)) {
+    if (k === SCHEDULE_UNAVAILABLE_META_KEY) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function normalizedScheduleSlotState(state) {
+  if (state == null) return '';
+  return String(state).trim().toLowerCase();
+}
+
+function isClearingScheduleSlotState(state) {
+  const s = normalizedScheduleSlotState(state);
+  return !s || s === 'null' || s === 'available';
+}
+
+/** Scheduled classes, bookings, and school tokens must not be wiped by availability-only sync payloads. */
+function isProtectedScheduleSlotState(state) {
+  const s = normalizedScheduleSlotState(state);
+  if (!s || s === 'null' || s === 'available') return false;
+  if (s === 'booked' || s === 'unavailable' || s === 'rescheduled') return true;
+  if (/^school::.+::(class|extra|reposition)$/.test(s)) return true;
+  if (['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(s)) return true;
+  return true;
+}
+
+/**
+ * Slot-level merge: missing incoming keys keep base slots; protected base slots cannot be
+ * overwritten by availability/empty unless the client explicitly sends null for that key.
+ */
+function mergeScheduleSlotMaps(baseSlots, incomingSlots, logContext = {}) {
+  const base = baseSlots && typeof baseSlots === 'object' ? baseSlots : {};
+  const inc = incomingSlots && typeof incomingSlots === 'object' ? incomingSlots : {};
+  const merged = { ...base };
+  const preserved = [];
+
+  for (const [slotKey, incValue] of Object.entries(inc)) {
+    const key = String(slotKey || '').trim();
+    if (!key) continue;
+    const baseValue = base[key];
+    const baseProtected = isProtectedScheduleSlotState(baseValue);
+    const incClearing = isClearingScheduleSlotState(incValue);
+
+    if (baseProtected && incClearing) {
+      if (incValue == null || normalizedScheduleSlotState(incValue) === 'null') {
+        delete merged[key];
+        continue;
+      }
+      preserved.push({ slotKey: key, baseValue, incoming: incValue });
+      continue;
+    }
+
+    if (incClearing) {
+      delete merged[key];
+    } else {
+      merged[key] = incValue;
+    }
+  }
+
+  if (preserved.length > 0 && logContext.profile) {
+    console.log('[schedule-merge] preserved protected class slots', {
+      profile: logContext.profile,
+      count: preserved.length,
+      slots: preserved.slice(0, 20),
+    });
+  }
+  return merged;
+}
+
+function mergeUnavailableStudentNamesMeta(baseMeta, incMeta, mergedSlots) {
+  const base = baseMeta && typeof baseMeta === 'object' ? baseMeta : {};
+  const inc = incMeta && typeof incMeta === 'object' ? incMeta : {};
+  const out = { ...base };
+  for (const [slotKey, studentName] of Object.entries(inc)) {
+    const key = String(slotKey || '').trim();
+    const name = String(studentName || '').trim();
+    if (!key) continue;
+    if (!name) {
+      delete out[key];
+      continue;
+    }
+    out[key] = name;
+  }
+  const pruned = {};
+  for (const [slotKey, studentName] of Object.entries(out)) {
+    const st = normalizedScheduleSlotState(mergedSlots[slotKey]);
+    if (st === 'booked' || st === 'unavailable' || st === 'rescheduled') {
+      pruned[slotKey] = studentName;
+    }
+  }
+  return pruned;
+}
+
+function mergeSingleScheduleRecord(baseSchedule, incomingSchedule, logContext = {}) {
+  const base = baseSchedule && typeof baseSchedule === 'object' ? baseSchedule : {};
+  const inc = incomingSchedule && typeof incomingSchedule === 'object' ? incomingSchedule : {};
+  const mergedSlots = mergeScheduleSlotMaps(
+    scheduleSlotMapFromObject(base),
+    scheduleSlotMapFromObject(inc),
+    logContext
+  );
+  const mergedMeta = mergeUnavailableStudentNamesMeta(
+    base[SCHEDULE_UNAVAILABLE_META_KEY],
+    inc[SCHEDULE_UNAVAILABLE_META_KEY],
+    mergedSlots
+  );
+  const out = { ...mergedSlots };
+  if (Object.keys(mergedMeta).length > 0) {
+    out[SCHEDULE_UNAVAILABLE_META_KEY] = mergedMeta;
+  }
+  return out;
+}
+
 export function mergeSchedulesForTeacher(baseSchedules, incomingSchedules, teacherProfile, fullRoster) {
   const profile = String(teacherProfile || '').trim();
   if (!profile) throw new Error('Missing teacher profile');
@@ -534,7 +653,7 @@ export function mergeSchedulesForTeacher(baseSchedules, incomingSchedules, teach
     if (!allowed.has(key)) {
       throw new Error('Cannot modify this schedule');
     }
-    base[key] = inc[key];
+    base[key] = mergeSingleScheduleRecord(base[key], inc[key], { profile: key });
   }
   return base;
 }
@@ -562,7 +681,7 @@ export function mergeSchedulesForClassSupervisor(baseSchedules, incomingSchedule
     if (!allowed.has(key)) {
       throw new Error('Cannot modify this schedule');
     }
-    base[key] = inc[key];
+    base[key] = mergeSingleScheduleRecord(base[key], inc[key], { profile: key });
   }
   return base;
 }
