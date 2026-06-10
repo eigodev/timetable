@@ -10946,10 +10946,14 @@ function getSchedulesPayloadForCloudPost() {
         return teacherSchedules;
     }
     if (isTeacherLoggedIn && loggedInTeacherName && !loggedInStudentFullName) {
-        const tutorKey = String(loggedInTeacherName || '').trim();
+        const tutorKey = canonicalTeacherNameOnRoster(loggedInTeacherName);
         const out = {};
-        if (tutorKey && teacherSchedules[tutorKey] != null) {
-            out[tutorKey] = teacherSchedules[tutorKey];
+        if (tutorKey) {
+            const teacherSchedule =
+                teacherSchedules[tutorKey] != null
+                    ? teacherSchedules[tutorKey]
+                    : teacherSchedules[String(loggedInTeacherName || '').trim()];
+            if (teacherSchedule != null) out[tutorKey] = teacherSchedule;
         }
         getStudentNamesVisibleInNavigation().forEach((studentName) => {
             const k = String(studentName || '').trim();
@@ -10960,6 +10964,56 @@ function getSchedulesPayloadForCloudPost() {
         return out;
     }
     return teacherSchedules;
+}
+
+/** Plain JSON clone so POST body never carries non-serializable schedule values. */
+function cloneSchedulesPayloadForCloudPost(payload) {
+    try {
+        return JSON.parse(JSON.stringify(payload && typeof payload === 'object' ? payload : {}));
+    } catch (e) {
+        console.error('Error cloning schedules payload for cloud:', e);
+        return null;
+    }
+}
+
+/**
+ * POST `/api/schedules` with refreshed Bearer auth and one 401 retry.
+ * @returns {Promise<Response|null>}
+ */
+async function postSchedulesToCloudApi(postUrl, payload) {
+    const schedules = cloneSchedulesPayloadForCloudPost(payload);
+    if (!schedules || typeof schedules !== 'object') return null;
+
+    let authHeaders = await timetableAuthHeadersForProtectedPostOrNull();
+    if (!authHeaders) return null;
+
+    let body;
+    try {
+        body = JSON.stringify({ schedules });
+    } catch (e) {
+        console.error('Error serializing schedules for cloud:', e);
+        return null;
+    }
+
+    const requestInit = (headers) => ({
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...headers,
+        },
+        body,
+        cache: 'no-store',
+    });
+
+    let response = await fetch(postUrl, requestInit(authHeaders));
+    if (response.status === 401) {
+        await refreshTimetableApiBearerTokenIfPossible();
+        authHeaders = timetableCloudPollAuthHeadersOrNull();
+        if (authHeaders) {
+            response = await fetch(postUrl, requestInit(authHeaders));
+        }
+    }
+    return response;
 }
 
 // Actually perform the save operation
@@ -10988,33 +11042,19 @@ async function performSave() {
             return;
         }
 
-        const authHeaders = timetableCloudPollAuthHeadersOrNull();
-        if (!authHeaders) {
+        if (Object.keys(payload).length === 0) {
+            saveAllSchedulesLocal();
+            clearSchedulePendingCloudUpload();
+            updateSyncStatus('synced', 'Cloud sync active');
+            return;
+        }
+
+        const response = await postSchedulesToCloudApi(postUrl, payload);
+        if (!response) {
             saveAllSchedulesLocal();
             updateSyncStatus('local-only', '⚠ Cloud save needs sign-in — saved locally only');
             return;
         }
-
-        let body;
-        try {
-            body = JSON.stringify({
-                schedules: payload,
-            });
-        } catch (e) {
-            console.error('Error serializing schedules for cloud:', e);
-            saveAllSchedulesLocal();
-            updateSyncStatus('local-only', '⚠ Save failed — using local storage');
-            return;
-        }
-
-        const response = await fetch(postUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...authHeaders
-            },
-            body,
-        });
 
         if (response.ok) {
             const data = await response.json().catch(() => null);
@@ -11064,6 +11104,10 @@ async function performSave() {
             errorMessage = 'KV not configured - check binding name is "schedules_kv"';
         } else if (errMsg.includes('404')) {
             errorMessage = 'API not found - check function deployment';
+        } else if (errMsg.includes('401') || errMsg.toLowerCase().includes('unauthorized')) {
+            errorMessage = 'Session expired — sign out and sign in again';
+        } else if (errMsg.includes('403') || errMsg.toLowerCase().includes('forbidden')) {
+            errorMessage = 'Save not permitted for this account — check roster profile name';
         } else if (errMsg) {
             errorMessage = errMsg;
         }
