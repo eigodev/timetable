@@ -568,6 +568,37 @@ export function mergeSchedulesForClassSupervisor(baseSchedules, incomingSchedule
 }
 
 /**
+ * Schedule keys a teacher/gate actor may read — mirrors client `getSchedulesPayloadForCloudPost`
+ * and `mergeSchedulesForTeacher` (teacher grid + assigned student grids + unassigned students).
+ * @param {object} [fullRoster]
+ * @param {string} profile
+ * @param {string} role
+ * @returns {Set<string>}
+ */
+function scheduleKeysVisibleToTeacherGateActor(fullRoster, profile, role) {
+  const keys = new Set();
+  const tp = String(profile || '').trim();
+  if (!tp) return keys;
+
+  const addTeacherBundle = (teacherProfile) => {
+    const t = String(teacherProfile || '').trim();
+    if (!t) return;
+    keys.add(t);
+    if (!fullRoster || typeof fullRoster !== 'object') return;
+    for (const stu of studentsAssignedToTeacher(fullRoster, t)) keys.add(stu);
+    for (const stu of rosterStudentNamesWithNoTutor(fullRoster)) keys.add(stu);
+  };
+
+  addTeacherBundle(tp);
+  if (role === 'gate' && fullRoster && typeof fullRoster === 'object') {
+    for (const tname of supervisedTeacherProfilesForSuperior(fullRoster, tp)) {
+      addTeacherBundle(tname);
+    }
+  }
+  return keys;
+}
+
+/**
  * @param {object} schedules
  * @param {{ role: string, profile: string }} actor
  * @param {object} [fullRoster] — required for gate supervision (merged teacher schedules)
@@ -579,11 +610,8 @@ export function filterSchedulesForActor(schedules, actor, fullRoster) {
   if (role === 'admin') return { ...schedules };
   if ((role === 'teacher' || role === 'gate') && profile) {
     const out = {};
-    if (schedules[profile] !== undefined) out[profile] = schedules[profile];
-    if (role === 'gate' && fullRoster && typeof fullRoster === 'object') {
-      for (const tp of supervisedTeacherProfilesForSuperior(fullRoster, profile)) {
-        if (tp !== profile && schedules[tp] !== undefined) out[tp] = schedules[tp];
-      }
+    for (const key of scheduleKeysVisibleToTeacherGateActor(fullRoster, profile, role)) {
+      if (schedules[key] !== undefined) out[key] = schedules[key];
     }
     return out;
   }

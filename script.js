@@ -2270,6 +2270,21 @@ function replaceTeacherSchedulesFromObject(next) {
 /**
  * Merge cloud schedules without dropping local-only keys (student grids) or newer local edits.
  */
+function logScheduleSyncDebug(label, extra) {
+    try {
+        if (typeof window !== 'undefined' && window.__TIMETABLE_SYNC_DEBUG__ === true) {
+            console.info('[TimeTable schedule sync]', label, extra || '');
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+function shouldMergeLocalOnlyScheduleKeys() {
+    if (isSchedulePendingCloudUpload()) return true;
+    return !timetableCloudPollAuthHeadersOrNull();
+}
+
 function shouldForceCloudSchedulesAfterLogin() {
     try {
         if (sessionStorage.getItem(FORCE_CLOUD_SCHEDULES_SESSION_KEY) === '1') {
@@ -2296,11 +2311,19 @@ function mergeRemoteSchedulesAfterLoad(remoteSchedules, remoteLastUpdated) {
     }
 
     replaceTeacherSchedulesFromObject(remoteSchedules || {});
-    for (const [k, v] of Object.entries(localParsed)) {
-        if (!remoteSchedules || !Object.prototype.hasOwnProperty.call(remoteSchedules, k)) {
-            teacherSchedules[k] = v;
+    if (shouldMergeLocalOnlyScheduleKeys()) {
+        for (const [k, v] of Object.entries(localParsed)) {
+            if (!remoteSchedules || !Object.prototype.hasOwnProperty.call(remoteSchedules, k)) {
+                teacherSchedules[k] = v;
+            }
         }
     }
+    logScheduleSyncDebug('merged remote schedules', {
+        teacher: loggedInTeacherName || '',
+        remoteKeys: Object.keys(remoteSchedules || {}).length,
+        memoryKeys: Object.keys(teacherSchedules || {}).length,
+        lastUpdated: remoteLastUpdated || null
+    });
 }
 
 function refreshScheduleViewFromMemory() {
@@ -10437,11 +10460,50 @@ function updateSyncStatus(status, message) {
     }
 }
 
+async function fetchSchedulesFromCloudAndMerge() {
+    const schedulesUrl = absoluteHttpApiUrl(API_ENDPOINT);
+    if (!schedulesUrl) return false;
+    const authHeaders = timetableCloudPollAuthHeadersOrNull();
+    if (!authHeaders) return false;
+
+    let schedulesFetchUrl = schedulesUrl;
+    try {
+        const u = new URL(schedulesUrl);
+        u.searchParams.set('t', String(Date.now()));
+        schedulesFetchUrl = u.href;
+    } catch {
+        schedulesFetchUrl =
+            schedulesUrl + (schedulesUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+    }
+
+    const response = await fetch(schedulesFetchUrl, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders
+        },
+        cache: 'no-cache',
+    });
+    if (!response.ok) return false;
+    const data = await response.json().catch(() => null);
+    if (!data?.success || !data.schedules) return false;
+
+    const skipCloudClobberPendingUpload =
+        isSchedulePendingCloudUpload() && Object.keys(teacherSchedules || {}).length > 0;
+    if (!skipCloudClobberPendingUpload) {
+        mergeRemoteSchedulesAfterLoad(data.schedules, data.lastUpdated);
+        applyTeacherDataIsolationInMemory();
+        syncWeeklyClassToAllTeacherSchedules();
+        saveAllSchedulesLocal();
+    }
+    lastUpdateTimestamp = data.lastUpdated;
+    return true;
+}
+
 // Load all schedules from Cloudflare KV or localStorage
 async function loadAllSchedules() {
     try {
         updateSyncStatus('syncing', 'Syncing with cloud...');
-        loadAllSchedulesLocal();
         const skipCloudClobberPendingUpload =
             isSchedulePendingCloudUpload() && Object.keys(teacherSchedules || {}).length > 0;
 
@@ -10467,6 +10529,12 @@ async function loadAllSchedules() {
             startPolling();
             void pollClassReportUploadsFromCloud();
             return;
+        }
+
+        if (!skipCloudClobberPendingUpload) {
+            replaceTeacherSchedulesFromObject({});
+        } else {
+            loadAllSchedulesLocal();
         }
 
         let schedulesFetchUrl = schedulesUrl;
@@ -10502,6 +10570,8 @@ async function loadAllSchedules() {
                 if (data.schedules && !skipCloudClobberPendingUpload) {
                     mergeRemoteSchedulesAfterLoad(data.schedules, data.lastUpdated);
                     applyTeacherDataIsolationInMemory();
+                    syncWeeklyClassToAllTeacherSchedules();
+                    saveAllSchedulesLocal();
                 }
                 lastUpdateTimestamp = data.lastUpdated;
 
@@ -10570,9 +10640,17 @@ function setupVisibilityCloudRefresh() {
     document.body.dataset.visibilityCloudRefresh = '1';
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
-        applySchedulesFromLocalStorageToMemory({ refreshUi: true });
-        void pollClassReportUploadsFromCloud();
-        void pollRosterUpdates();
+        void (async () => {
+            await refreshTimetableApiBearerTokenIfPossible();
+            const loaded = await fetchSchedulesFromCloudAndMerge();
+            if (!loaded) {
+                applySchedulesFromLocalStorageToMemory({ refreshUi: true });
+            } else {
+                refreshScheduleViewFromMemory();
+            }
+            void pollClassReportUploadsFromCloud();
+            void pollRosterUpdates();
+        })();
     });
 }
 
@@ -10667,6 +10745,8 @@ function startPolling() {
                                         console.log('Data changed - updating from cloud');
                                         mergeRemoteSchedulesAfterLoad(schedules, data.lastUpdated);
                                         applyTeacherDataIsolationInMemory();
+                                        syncWeeklyClassToAllTeacherSchedules();
+                                        saveAllSchedulesLocal();
                                         refreshScheduleViewFromMemory();
 
                                         updateSyncStatus('synced', '✓ Updated from cloud');
