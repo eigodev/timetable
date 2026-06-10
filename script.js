@@ -2310,6 +2310,132 @@ function shouldMergeLocalOnlyScheduleKeys() {
     return !timetableCloudPollAuthHeadersOrNull();
 }
 
+/** Keep a local-only schedule key when cloud payload omitted it (prevents losing student class grids). */
+function shouldPreserveLocalScheduleKeyOnCloudMerge(key) {
+    const k = String(key || '').trim();
+    if (!k) return false;
+    if (loggedInStudentFullName && k.toLowerCase() === String(loggedInStudentFullName).trim().toLowerCase()) {
+        return true;
+    }
+    if (
+        isTeacherLoggedIn &&
+        !loggedInStudentFullName &&
+        !isAdminLoggedIn &&
+        isStudentName(k)
+    ) {
+        return getStudentNamesVisibleInNavigation().some(
+            (n) => String(n || '').trim().toLowerCase() === k.toLowerCase()
+        );
+    }
+    return false;
+}
+
+function normalizedScheduleSlotStateClient(state) {
+    if (state == null) return '';
+    return String(state).trim().toLowerCase();
+}
+
+function isClearingScheduleSlotStateClient(state) {
+    const s = normalizedScheduleSlotStateClient(state);
+    return !s || s === 'null' || s === 'available';
+}
+
+/** Scheduled classes and school tokens must not be wiped by availability-only cloud payloads. */
+function isProtectedScheduleSlotStateClient(state) {
+    const s = normalizedScheduleSlotStateClient(state);
+    if (isClearingScheduleSlotStateClient(state)) return false;
+    if (s === 'booked' || s === 'unavailable' || s === 'rescheduled') return true;
+    if (/^school::.+::(class|extra|reposition)$/.test(s)) return true;
+    if (['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(s)) return true;
+    return true;
+}
+
+function mergeScheduleSlotMapsClient(baseSlots, incomingSlots) {
+    const base = baseSlots && typeof baseSlots === 'object' ? baseSlots : {};
+    const inc = incomingSlots && typeof incomingSlots === 'object' ? incomingSlots : {};
+    const merged = { ...base };
+
+    for (const [slotKey, incValue] of Object.entries(inc)) {
+        const key = String(slotKey || '').trim();
+        if (!key) continue;
+        const baseValue = base[key];
+        const baseProtected = isProtectedScheduleSlotStateClient(baseValue);
+        const incClearing = isClearingScheduleSlotStateClient(incValue);
+
+        if (baseProtected && incClearing) continue;
+
+        if (incClearing) {
+            delete merged[key];
+        } else {
+            merged[key] = incValue;
+        }
+    }
+    return merged;
+}
+
+function mergeScheduleRecordsClient(baseRecord, incomingRecord) {
+    const base = baseRecord && typeof baseRecord === 'object' ? baseRecord : {};
+    const inc = incomingRecord && typeof incomingRecord === 'object' ? incomingRecord : {};
+    const mergedSlots = mergeScheduleSlotMapsClient(
+        getScheduleSlotMapWithoutMeta(base),
+        getScheduleSlotMapWithoutMeta(inc)
+    );
+    const out = { ...mergedSlots };
+    const baseMeta = getUnavailableStudentNamesMetaFromSchedule(base);
+    const incMeta = getUnavailableStudentNamesMetaFromSchedule(inc);
+    const combinedMeta = { ...baseMeta, ...incMeta };
+    const prunedMeta = {};
+    for (const [slotKey, studentName] of Object.entries(combinedMeta)) {
+        const st = normalizedScheduleSlotStateClient(mergedSlots[slotKey]);
+        if (st === 'booked' || st === 'unavailable' || st === 'rescheduled') {
+            prunedMeta[slotKey] = studentName;
+        }
+    }
+    if (Object.keys(prunedMeta).length > 0) {
+        out[TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = prunedMeta;
+    }
+    return out;
+}
+
+function studentScheduleGridHasClassSlots(slots) {
+    const map = slots && typeof slots === 'object' ? slots : {};
+    return Object.values(map).some((v) => {
+        const low = normalizedScheduleSlotStateClient(v);
+        if (isClearingScheduleSlotStateClient(low)) return false;
+        return !!(parseSchoolStateToken(low) || isLegacyOverlayState(low));
+    });
+}
+
+/**
+ * After cloud merge, ensure the logged-in student's grid still has class/extra tokens
+ * (weekly template + heal from tutor aggregate when KV returned only green availability).
+ */
+function healLoggedInStudentScheduleGridIfNeeded() {
+    const student = String(loggedInStudentFullName || '').trim();
+    if (!student || !isStudentName(student)) return;
+
+    const tutor = getTutorRosterNameForStudent(student);
+    const raw = teacherSchedules[student] ? { ...teacherSchedules[student] } : {};
+    let slots = getScheduleSlotMapWithoutMeta(raw);
+    slots = mergeWeeklyClassIntoScheduleCopy(slots, student);
+
+    if (!studentScheduleGridHasClassSlots(slots) && tutor) {
+        const tutSlots = getScheduleSlotMapWithoutMeta(teacherSchedules[tutor] || {});
+        const tutAgg = applyAllStudentColorsToTeacherScheduleCopy(tutSlots, tutor);
+        const { classState, extraState } = getStudentOverlayStates(student);
+        for (const [k, v] of Object.entries(tutAgg)) {
+            const tok = normalizeStudentScheduleOverlayToken(v, student);
+            if (tok && (tok === classState || (extraState && tok === extraState))) {
+                slots[k] = tok;
+            }
+        }
+    }
+
+    slots = stripTeacherAvailabilityFromStudentScheduleCopy(slots);
+    slots = stripTeacherOverlayStatesFromStudentScheduleCopy(slots);
+    teacherSchedules[student] = slots;
+}
+
 /** When signed in, KV is source of truth on every load/refresh — not localStorage timestamps. */
 function shouldPreferLocalSchedulesOverRemote(remoteLastUpdated) {
     if (shouldForceCloudSchedulesAfterLogin()) return false;
@@ -2337,20 +2463,34 @@ function mergeRemoteSchedulesAfterLoad(remoteSchedules, remoteLastUpdated) {
 
     if (shouldPreferLocalSchedulesOverRemote(remoteLastUpdated)) {
         replaceTeacherSchedulesFromObject(localParsed);
+        healLoggedInStudentScheduleGridIfNeeded();
         logScheduleSyncDebug('kept local schedules (pending upload or offline)', {
             teacher: loggedInTeacherName || ''
         });
         return;
     }
 
-    replaceTeacherSchedulesFromObject(remoteSchedules || {});
-    if (shouldMergeLocalOnlyScheduleKeys()) {
-        for (const [k, v] of Object.entries(localParsed)) {
-            if (!remoteSchedules || !Object.prototype.hasOwnProperty.call(remoteSchedules, k)) {
-                teacherSchedules[k] = v;
-            }
+    const remote = remoteSchedules && typeof remoteSchedules === 'object' ? remoteSchedules : {};
+    const merged = {};
+    const allKeys = new Set([...Object.keys(localParsed), ...Object.keys(remote)]);
+
+    for (const keyRaw of allKeys) {
+        const key = String(keyRaw || '').trim();
+        if (!key) continue;
+        const hasLocal = Object.prototype.hasOwnProperty.call(localParsed, key);
+        const hasRemote = Object.prototype.hasOwnProperty.call(remote, key);
+
+        if (hasLocal && hasRemote) {
+            merged[key] = mergeScheduleRecordsClient(localParsed[key], remote[key]);
+        } else if (hasRemote) {
+            merged[key] = remote[key];
+        } else if (hasLocal && (shouldMergeLocalOnlyScheduleKeys() || shouldPreserveLocalScheduleKeyOnCloudMerge(key))) {
+            merged[key] = localParsed[key];
         }
     }
+
+    replaceTeacherSchedulesFromObject(merged);
+    healLoggedInStudentScheduleGridIfNeeded();
     logScheduleSyncDebug('merged remote schedules', {
         teacher: loggedInTeacherName || '',
         remoteKeys: Object.keys(remoteSchedules || {}).length,
@@ -2375,7 +2515,9 @@ function refreshScheduleViewFromMemory() {
 function applySchedulesFromLocalStorageToMemory(opts = {}) {
     if (!localStorage.getItem(STORAGE_KEY)) return false;
     replaceTeacherSchedulesFromObject(readSchedulesObjectFromLocalStorage());
+    healLoggedInStudentScheduleGridIfNeeded();
     applyTeacherDataIsolationInMemory();
+    syncWeeklyClassToAllTeacherSchedules();
     if (opts.refreshUi !== false) {
         refreshScheduleViewFromMemory();
     }
@@ -10775,11 +10917,7 @@ async function loadAllSchedules() {
             return;
         }
 
-        if (!skipCloudClobberPendingUpload) {
-            replaceTeacherSchedulesFromObject({});
-        } else {
-            loadAllSchedulesLocal();
-        }
+        loadAllSchedulesLocal();
 
         let schedulesFetchUrl = schedulesUrl;
         try {
@@ -11161,8 +11299,12 @@ function noteCloudApiResponseForKvQuota(response, errorMessage) {
 
 function applyCloudSchedulesToMemoryAndView(schedules, remoteLastUpdated) {
     mergeRemoteSchedulesAfterLoad(schedules, remoteLastUpdated);
+    healLoggedInStudentScheduleGridIfNeeded();
     applyTeacherDataIsolationInMemory();
     syncWeeklyClassToAllTeacherSchedules();
+    if (loggedInStudentFullName) {
+        healLoggedInStudentScheduleGridIfNeeded();
+    }
     saveAllSchedulesLocal();
     if (remoteLastUpdated) {
         try {
@@ -14307,7 +14449,11 @@ async function initTeachers() {
         return;
     }
 
-    if (restoredTeacher || teachersList.length > 0 || String(loggedInTeacherName || '').trim()) {
+    if (loggedInStudentFullName) {
+        const self = String(loggedInStudentFullName || '').trim();
+        healLoggedInStudentScheduleGridIfNeeded();
+        selectTeacher(self, { view: 'calendar' });
+    } else if (restoredTeacher || teachersList.length > 0 || String(loggedInTeacherName || '').trim()) {
         let initialTeacher = restoredTeacher;
         if (
             !initialTeacher &&
@@ -14321,8 +14467,7 @@ async function initTeachers() {
             initialTeacher = loggedInTeacherName || teachersList[0] || '';
         }
         if (initialTeacher) {
-            const restoredView = loggedInStudentFullName ? { view: 'classReport' } : { view: 'calendar' };
-            selectTeacher(initialTeacher, restoredTeacher ? restoredView : undefined);
+            selectTeacher(initialTeacher, restoredTeacher ? { view: 'calendar' } : undefined);
         }
     }
 }
@@ -17909,7 +18054,12 @@ function computeSlotStatesForProfile(name) {
     if (isActiveTeacherName(name)) {
         return applyAllStudentColorsToTeacherScheduleCopy(raw, name);
     }
-    return mergeWeeklyClassIntoScheduleCopy(raw, name);
+    let out = mergeWeeklyClassIntoScheduleCopy(raw, name);
+    if (isStudentName(name)) {
+        out = stripTeacherAvailabilityFromStudentScheduleCopy(out);
+        out = stripTeacherOverlayStatesFromStudentScheduleCopy(out);
+    }
+    return out;
 }
 
 /**
@@ -17926,7 +18076,22 @@ function isTutorSlotDisplayedClassColorState(tVal) {
  * Student calendar view: their class/extra cells (school colors) plus tutor "available" (green) where they have no class.
  */
 function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
-    const stu = stripTeacherAvailabilityFromStudentScheduleCopy(computeSlotStatesForProfile(studentName));
+    let stuSlots = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
+    stuSlots = mergeWeeklyClassIntoScheduleCopy(stuSlots, studentName);
+    if (!studentScheduleGridHasClassSlots(stuSlots) && tutorKey) {
+        const tutAgg = applyAllStudentColorsToTeacherScheduleCopy(
+            getScheduleSlotMapWithoutMeta(teacherSchedules[tutorKey] || {}),
+            tutorKey
+        );
+        const { classState, extraState } = getStudentOverlayStates(studentName);
+        for (const [k, v] of Object.entries(tutAgg)) {
+            const tok = normalizeStudentScheduleOverlayToken(v, studentName);
+            if (tok && (tok === classState || (extraState && tok === extraState))) {
+                stuSlots[k] = tok;
+            }
+        }
+    }
+    const stu = stripTeacherAvailabilityFromStudentScheduleCopy(stuSlots);
     const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
     const tut = getScheduleSlotMapWithoutMeta(tutSchedule);
     const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);

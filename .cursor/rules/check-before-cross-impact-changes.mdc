@@ -1,0 +1,35 @@
+---
+description: Ask the user before changes that could affect other features (TimeTable)
+alwaysApply: true
+---
+
+# Check before cross-impact changes
+
+Before implementing, **stop and ask the user** when a change could affect behavior outside the stated request.
+
+## High-risk areas in this project (always ask first)
+
+- `script.js`: schedule load/save/sync — `loadAllSchedules`, `mergeRemoteSchedulesAfterLoad`, `performSave`, `saveAllSchedules`, polling, `initTeachers`, student/teacher calendar merge
+- `functions/api/schedules.js`, `functions/api/roster.js`, `functions/lib/roster-scope.js`, `functions/lib/kv-safe.js`
+- Auth/session: login restore, Bearer token, `loggedInStudentFullName` / teacher isolation
+- Anything that writes to Cloudflare KV on page load (not only on explicit user action)
+
+## What to send the user before editing
+
+1. **What** you plan to change (files + behavior)
+2. **What else** it might affect (roles, devices, refresh, cross-browser)
+3. **Smallest fix** vs broader option
+
+Wait for explicit approval before editing when blast radius is more than one isolated UI tweak.
+
+## Proceed without asking only when
+
+- Change is clearly isolated (e.g. one CSS rule, one label, one button the user named)
+- User already approved that exact scope in the same thread
+- User said "go ahead" after an impact summary
+
+## Implementation discipline
+
+- One concern per change set; no stacking heal/merge/sync layers in one pass
+- Prefer the smallest diff that fixes the approved issue only
+- Do not redesign calendar, sidebar, colors, or unrelated features unless asked
