@@ -20,25 +20,39 @@
         return {};
     }
 
-    /** Decode role from JWT payload segment only (UI gating). APIs still verify signature server-side. */
-    function unsafeJwtRoleFromStoredBearer() {
+    function readStoredBearerTokenUnsafe() {
         try {
             let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
             if (!t || !String(t).trim()) {
                 t = sessionStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
             }
-            t = String(t || '').trim();
+            return String(t || '').trim();
+        } catch {
+            return '';
+        }
+    }
+
+    /** Decode JWT payload segment only (UI gating). APIs still verify signature server-side. */
+    function unsafeJwtPayloadFromStoredBearer() {
+        try {
+            const t = readStoredBearerTokenUnsafe();
             if (!t) return null;
             const payloadB64 = t.split('.')[0];
             if (!payloadB64) return null;
             let b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
             while (b64.length % 4) b64 += '=';
             const p = JSON.parse(atob(b64));
-            const role = p && p.role != null ? String(p.role).trim() : '';
-            return role || null;
+            return p && typeof p === 'object' ? p : null;
         } catch {
             return null;
         }
+    }
+
+    /** Decode role from JWT payload segment only (UI gating). APIs still verify signature server-side. */
+    function unsafeJwtRoleFromStoredBearer() {
+        const p = unsafeJwtPayloadFromStoredBearer();
+        const role = p && p.role != null ? String(p.role).trim() : '';
+        return role || null;
     }
 
     function adminSessionAllow(adminSessionKey) {
@@ -104,6 +118,7 @@
     global.TimeTableAuthVerifyGate = {
         timetableBearerAuthHeaders,
         timetableEnsureAdminApiAccess,
+        unsafeJwtPayloadFromStoredBearer,
         unsafeJwtRoleFromStoredBearer,
         API_BEARER_TOKEN_STORAGE_KEY,
     };

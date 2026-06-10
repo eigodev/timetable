@@ -692,6 +692,7 @@
 			const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
 			const LOGIN_CREDENTIALS_STORAGE_KEY = 'timetable_saved_login_credentials';
 			const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
+			const FORCE_CLOUD_SCHEDULES_SESSION_KEY = 'timetable_force_cloud_schedules';
 			const ROSTER_STORAGE_KEY = 'timetable_roster';
 			const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
 			const DEFAULT_ADMIN_USERNAME = '@Admin';
@@ -831,10 +832,25 @@
 						/* ignore */
 					}
 					persistTimetablePageApiBearerToken(data.token);
-					return { ok: true, status: res.status, error: '' };
+					return {
+						ok: true,
+						status: res.status,
+						error: '',
+						role: String(data?.role || '').trim(),
+						profile: String(data?.profile || '').trim(),
+						resolvedUsername: String(data?.resolvedUsername || '').trim()
+					};
 				} catch (e) {
 					console.warn('auth-login:', e);
 					return { ok: false, status: 0, error: 'Network error — check your connection and try again.' };
+				}
+			}
+
+			function markForceCloudSchedulesOnNextAppLoad() {
+				try {
+					sessionStorage.setItem(FORCE_CLOUD_SCHEDULES_SESSION_KEY, '1');
+				} catch (e) {
+					/* ignore */
 				}
 			}
 
@@ -1023,6 +1039,19 @@
 					}
 				}
 
+				if (authResult.ok && authResult.role) {
+					return {
+						ok: true,
+						role: authResult.role,
+						profileName: authResult.profile || '',
+						resolvedUsername: authResult.resolvedUsername || usernameTyped
+					};
+				}
+
+				if (!authResult.ok && authResult.status === 401) {
+					return { ok: false };
+				}
+
 				const usernameEff = roster && window.TimeTableAuthMigrate
 					? TimeTableAuthMigrate.resolveAuthLoginTypedFromRoster(roster, usernameTyped)
 					: usernameTyped;
@@ -1099,6 +1128,7 @@
 				if (loginResult.ok && loginResult.role === 'admin') {
 					sessionStorage.setItem(ADMIN_LOGIN_SESSION_KEY, 'true');
 					sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+					markForceCloudSchedulesOnNextAppLoad();
 					window.location.href = 'admin.html';
 					return;
 				}
@@ -1107,6 +1137,7 @@
 					localStorage.setItem(LOGIN_CREDENTIALS_STORAGE_KEY, JSON.stringify({ username: u, password }));
 					sessionStorage.removeItem(ADMIN_LOGIN_SESSION_KEY);
 					sessionStorage.removeItem(LOGIN_SESSION_SUPPRESS_KEY);
+					markForceCloudSchedulesOnNextAppLoad();
 					window.location.href = 'index.html';
 					return;
 				}

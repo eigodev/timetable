@@ -32,6 +32,8 @@ const LOGIN_SESSION_SUPPRESS_KEY = 'timetable_teacher_session_suppressed';
 const ADMIN_LOGIN_SESSION_KEY = 'timetable_admin_login_complete';
 /** Bumped in localStorage on logout so other tabs/windows receive `storage` and sign out too. */
 const LOGOUT_BROADCAST_STORAGE_KEY = 'timetable_logout_broadcast_ts';
+/** Set after a successful manual login so the next schedule load prefers cloud over stale local cache. */
+const FORCE_CLOUD_SCHEDULES_SESSION_KEY = 'timetable_force_cloud_schedules';
 /** Session: auto popup for pending data-share invites was already shown for these link ids. */
 const SUPERVISION_NOTICE_SESSION_KEY = 'timetable_supervision_invite_notice_shown_ids';
 const ADMIN_ACCOUNT_STORAGE_KEY = 'timetable_admin_account';
@@ -299,6 +301,179 @@ function canDeleteClassReportQuestionLine(question, studentName, user = getCurre
     if (canEditFeed(user)) return true;
     const speaker = question?.speaker === 'student' ? 'student' : 'teacher';
     return speaker === 'student' && isOwnStudentClassReport(studentName, user);
+}
+
+function canMarkClassReportQuestionWrongWord(question, studentName, user = getCurrentUser()) {
+    const speaker = question?.speaker === 'student' ? 'student' : 'teacher';
+    if (speaker !== 'student') return false;
+    if (canEditFeed(user)) return true;
+    return isOwnStudentClassReport(studentName, user);
+}
+
+function escapeClassReportHtmlText(raw) {
+    return String(raw || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function normalizeQuestionWrongRanges(text, rawRanges) {
+    const safeText = String(text || '');
+    const len = safeText.length;
+    const valid = [];
+    (Array.isArray(rawRanges) ? rawRanges : []).forEach((range) => {
+        const start = Math.floor(Number(range?.start));
+        const end = Math.floor(Number(range?.end));
+        if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+        if (start < 0 || end <= start || end > len) return;
+        if (!safeText.slice(start, end).trim()) return;
+        valid.push({ start, end });
+    });
+    valid.sort((a, b) => a.start - b.start);
+    const merged = [];
+    valid.forEach((range) => {
+        const last = merged[merged.length - 1];
+        if (last && range.start <= last.end) {
+            last.end = Math.max(last.end, range.end);
+        } else {
+            merged.push({ start: range.start, end: range.end });
+        }
+    });
+    return merged;
+}
+
+function getWordRangeAtOffset(text, offset) {
+    const safeText = String(text || '');
+    const len = safeText.length;
+    if (!len) return null;
+    let pos = Math.max(0, Math.min(offset, len - 1));
+    if (/\s/.test(safeText[pos])) {
+        if (pos + 1 < len && !/\s/.test(safeText[pos + 1])) pos += 1;
+        else if (pos > 0 && !/\s/.test(safeText[pos - 1])) pos -= 1;
+        else return null;
+    }
+    let start = pos;
+    let end = pos + 1;
+    while (start > 0 && !/\s/.test(safeText[start - 1])) start -= 1;
+    while (end < len && !/\s/.test(safeText[end])) end += 1;
+    if (start >= end || !safeText.slice(start, end).trim()) return null;
+    return { start, end };
+}
+
+function getTextOffsetWithinRoot(root, node, offset) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let total = 0;
+    let current;
+    while ((current = walker.nextNode())) {
+        if (current === node) return total + offset;
+        total += current.textContent.length;
+    }
+    return total;
+}
+
+function getWordRangeAtPointer(answerEl, clientX, clientY) {
+    let range = null;
+    if (typeof document.caretRangeFromPoint === 'function') {
+        range = document.caretRangeFromPoint(clientX, clientY);
+    } else if (typeof document.caretPositionFromPoint === 'function') {
+        const pos = document.caretPositionFromPoint(clientX, clientY);
+        if (pos) {
+            range = document.createRange();
+            range.setStart(pos.offsetNode, pos.offset);
+            range.collapse(true);
+        }
+    }
+    if (!range || !answerEl.contains(range.startContainer)) return null;
+    const offset = getTextOffsetWithinRoot(answerEl, range.startContainer, range.startOffset);
+    return getWordRangeAtOffset(answerEl.textContent || '', offset);
+}
+
+function getWordRangeFromSelection(answerEl) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+    const range = sel.getRangeAt(0);
+    if (!answerEl.contains(range.commonAncestorContainer)) return null;
+    const start = getTextOffsetWithinRoot(answerEl, range.startContainer, range.startOffset);
+    const end = getTextOffsetWithinRoot(answerEl, range.endContainer, range.endOffset);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+    return getWordRangeAtOffset(answerEl.textContent || '', start) || { start, end };
+}
+
+function buildStudentQuestionAnswerHtml(text, wrongRanges) {
+    const safeText = String(text || '');
+    const ranges = normalizeQuestionWrongRanges(safeText, wrongRanges);
+    if (!ranges.length) return escapeClassReportHtmlText(safeText);
+    let html = '';
+    let cursor = 0;
+    ranges.forEach((range) => {
+        if (range.start > cursor) {
+            html += escapeClassReportHtmlText(safeText.slice(cursor, range.start));
+        }
+        html += `<span class="student-class-report-question-wrong-word">${escapeClassReportHtmlText(safeText.slice(range.start, range.end))}</span>`;
+        cursor = range.end;
+    });
+    if (cursor < safeText.length) {
+        html += escapeClassReportHtmlText(safeText.slice(cursor));
+    }
+    return html;
+}
+
+function applyStudentQuestionAnswerMarkup(answerEl, question) {
+    if (!answerEl || !question) return;
+    answerEl.innerHTML = buildStudentQuestionAnswerHtml(question.text, question.wrongRanges);
+}
+
+function toggleQuestionWrongRange(question, start, end) {
+    if (!Array.isArray(question.wrongRanges)) question.wrongRanges = [];
+    const index = question.wrongRanges.findIndex((range) => range.start === start && range.end === end);
+    if (index >= 0) question.wrongRanges.splice(index, 1);
+    else question.wrongRanges.push({ start, end });
+    question.wrongRanges = normalizeQuestionWrongRanges(question.text, question.wrongRanges);
+}
+
+function bindStudentClassReportQuestionAnswer(answerEl, question, studentName, uploadId) {
+    if (!answerEl || !question) return;
+    const editable = canEditClassReportQuestionLine(question, studentName);
+    const markable = canMarkClassReportQuestionWrongWord(question, studentName);
+    answerEl.contentEditable = editable ? 'true' : 'false';
+    answerEl.setAttribute('aria-label', 'Student answer');
+    answerEl.dataset.placeholder = 'Write the answer...';
+    applyStudentQuestionAnswerMarkup(answerEl, question);
+
+    if (editable) {
+        answerEl.addEventListener('focus', () => {
+            answerEl.textContent = String(question.text || '');
+        });
+        answerEl.addEventListener('input', () => {
+            question.text = answerEl.textContent || '';
+            question.wrongRanges = normalizeQuestionWrongRanges(question.text, question.wrongRanges);
+            void persistClassReportOfflineSnapshot();
+            debouncePatchClassReportQuestions(studentName, uploadId);
+        });
+        answerEl.addEventListener('blur', () => {
+            question.text = answerEl.textContent || '';
+            question.wrongRanges = normalizeQuestionWrongRanges(question.text, question.wrongRanges);
+            applyStudentQuestionAnswerMarkup(answerEl, question);
+            void persistClassReportOfflineSnapshot();
+            debouncePatchClassReportQuestions(studentName, uploadId);
+        });
+    }
+
+    if (markable) {
+        answerEl.addEventListener('dblclick', (e) => {
+            let wordRange = getWordRangeFromSelection(answerEl);
+            if (!wordRange) wordRange = getWordRangeAtPointer(answerEl, e.clientX, e.clientY);
+            if (!wordRange) return;
+            const normalized = getWordRangeAtOffset(question.text || answerEl.textContent || '', wordRange.start);
+            if (!normalized) return;
+            e.preventDefault();
+            toggleQuestionWrongRange(question, normalized.start, normalized.end);
+            applyStudentQuestionAnswerMarkup(answerEl, question);
+            void persistClassReportOfflineSnapshot();
+            debouncePatchClassReportQuestions(studentName, uploadId);
+        });
+    }
 }
 
 // Role-based sidebar rendering: students get only view-safe navigation and actions.
@@ -1857,9 +2032,9 @@ function timetableCaughtErrorMessage(reason) {
 }
 
 /** Same shape as auth-verify-gate: first JWT segment is JSON payload (UI only; APIs verify HMAC). */
-function readStoredBearerTokenRoleUnsafe() {
-    if (typeof TimeTableAuthVerifyGate?.unsafeJwtRoleFromStoredBearer === 'function') {
-        return TimeTableAuthVerifyGate.unsafeJwtRoleFromStoredBearer();
+function readStoredBearerTokenPayloadUnsafe() {
+    if (typeof TimeTableAuthVerifyGate?.unsafeJwtPayloadFromStoredBearer === 'function') {
+        return TimeTableAuthVerifyGate.unsafeJwtPayloadFromStoredBearer();
     }
     try {
         let t = localStorage.getItem(API_BEARER_TOKEN_STORAGE_KEY);
@@ -1873,11 +2048,119 @@ function readStoredBearerTokenRoleUnsafe() {
         let b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
         while (b64.length % 4) b64 += '=';
         const p = JSON.parse(atob(b64));
-        const role = p && p.role != null ? String(p.role).trim() : '';
-        return role || null;
+        return p && typeof p === 'object' ? p : null;
     } catch {
         return null;
     }
+}
+
+function readStoredBearerTokenRoleUnsafe() {
+    const p = readStoredBearerTokenPayloadUnsafe();
+    const role = p && p.role != null ? String(p.role).trim() : '';
+    return role || null;
+}
+
+function applyVerifiedAuthSessionPayload(data) {
+    const role = String(data?.role || '').trim();
+    const profile = String(data?.profile || '').trim();
+    if (!role || !profile) return null;
+
+    isAdminLoggedIn = false;
+    loggedInStudentFullName = '';
+    loggedInTeacherName = '';
+    isTeacherLoggedIn = false;
+
+    if (role === 'admin') {
+        isAdminLoggedIn = true;
+        isTeacherLoggedIn = true;
+        return DEFAULT_ADMIN_USERNAME;
+    }
+    if (role === 'student') {
+        loggedInStudentFullName = profile;
+        isTeacherLoggedIn = true;
+        return profile;
+    }
+    if (role === 'teacher' || role === 'gate') {
+        loggedInTeacherName = profile;
+        isTeacherLoggedIn = true;
+        return profile;
+    }
+    return null;
+}
+
+/**
+ * Restore UI session from server-verified Bearer JWT (cross-device: token in localStorage).
+ * @returns {Promise<string|null>} profile key to select, or null
+ */
+async function tryRestoreSessionFromBearerIfPossible() {
+    const headers = getTimetableApiAuthHeaders();
+    if (!headers.Authorization) return null;
+
+    const verifyUrl = absoluteHttpApiUrl('/api/auth-verify');
+    if (verifyUrl) {
+        try {
+            const res = await fetch(`${verifyUrl}?t=${Date.now()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers
+                },
+                cache: 'no-cache'
+            });
+            const data = await res.json().catch(() => null);
+
+            if (data?.legacy === true) return null;
+
+            if (res.status === 401) {
+                clearTimetableApiBearerToken();
+                return null;
+            }
+
+            if (res.ok && data?.success) {
+                const restored = applyVerifiedAuthSessionPayload(data);
+                if (restored) return restored;
+            }
+        } catch {
+            /* network — fall through to non-expired JWT payload */
+        }
+    }
+
+    const payload = readStoredBearerTokenPayloadUnsafe();
+    if (!payload) return null;
+    if (payload.exp && Number(payload.exp) < Date.now() / 1000) {
+        clearTimetableApiBearerToken();
+        return null;
+    }
+    return applyVerifiedAuthSessionPayload({
+        role: payload.role,
+        profile: payload.profile
+    });
+}
+
+function assignStudentTutorFromRosterIfNeeded() {
+    if (!loggedInStudentFullName) return;
+    let tutor = getTutorRosterNameForStudent(loggedInStudentFullName);
+    if (!tutor && teachersList.length === 1) {
+        tutor = String(teachersList[0] || '').trim();
+    }
+    if (tutor) loggedInTeacherName = tutor;
+}
+
+async function enforceCloudAuthSessionConsistency() {
+    let authUnconfigured = false;
+    try {
+        authUnconfigured = sessionStorage.getItem('timetable_api_auth_unconfigured') === '1';
+    } catch {
+        authUnconfigured = false;
+    }
+    if (authUnconfigured || !isTeacherLoggedIn) return;
+    if (getTimetableApiAuthHeaders().Authorization) return;
+    await refreshTimetableApiBearerTokenIfPossible();
+    if (getTimetableApiAuthHeaders().Authorization) return;
+    isTeacherLoggedIn = false;
+    isAdminLoggedIn = false;
+    loggedInTeacherName = '';
+    loggedInStudentFullName = '';
 }
 
 function clearTimetableApiBearerToken() {
@@ -1987,12 +2270,25 @@ function replaceTeacherSchedulesFromObject(next) {
 /**
  * Merge cloud schedules without dropping local-only keys (student grids) or newer local edits.
  */
+function shouldForceCloudSchedulesAfterLogin() {
+    try {
+        if (sessionStorage.getItem(FORCE_CLOUD_SCHEDULES_SESSION_KEY) === '1') {
+            sessionStorage.removeItem(FORCE_CLOUD_SCHEDULES_SESSION_KEY);
+            return true;
+        }
+    } catch {
+        /* ignore */
+    }
+    return false;
+}
+
 function mergeRemoteSchedulesAfterLoad(remoteSchedules, remoteLastUpdated) {
     const localParsed = readSchedulesObjectFromLocalStorage();
     const localTs = getSchedulesLocalUpdatedAt();
     const remoteTs = remoteLastUpdated ? String(remoteLastUpdated) : '';
     const preferLocal =
-        isSchedulePendingCloudUpload() || !!(localTs && remoteTs && localTs > remoteTs);
+        !shouldForceCloudSchedulesAfterLogin()
+        && (isSchedulePendingCloudUpload() || !!(localTs && remoteTs && localTs > remoteTs));
 
     if (preferLocal) {
         replaceTeacherSchedulesFromObject(localParsed);
@@ -2061,17 +2357,21 @@ function timetableAuthLoginResponseFields(data) {
     let token = '';
     let errorText = '';
     let resolvedUsername = '';
+    let role = '';
+    let profile = '';
     try {
         if (data == null || typeof data !== 'object' || Array.isArray(data)) {
-            return { token, errorText, resolvedUsername };
+            return { token, errorText, resolvedUsername, role, profile };
         }
         if (data.token != null) token = String(data.token).trim();
         if (data.error != null) errorText = String(data.error);
         if (data.resolvedUsername != null) resolvedUsername = String(data.resolvedUsername).trim();
+        if (data.role != null) role = String(data.role).trim();
+        if (data.profile != null) profile = String(data.profile).trim();
     } catch {
         /* ignore */
     }
-    return { token, errorText, resolvedUsername };
+    return { token, errorText, resolvedUsername, role, profile };
 }
 
 function timetablePostAuthLoginRequest(loginUrl, body) {
@@ -2182,48 +2482,10 @@ async function refreshTimetableApiBearerTokenIfPossible() {
     }
 }
 
-/** Prefer server-verified Bearer JWT for admin; if `/api/auth-verify` is missing/broken, trust JWT role claim for UI (APIs still enforce). */
+/** @deprecated Use tryRestoreSessionFromBearerIfPossible — kept for compatibility. */
 async function tryRestoreAdminFromBearerIfPossible() {
-    const headers = getTimetableApiAuthHeaders();
-    if (!headers.Authorization) return false;
-    if (readStoredBearerTokenRoleUnsafe() !== 'admin') return false;
-
-    const verifyUrl = absoluteHttpApiUrl('/api/auth-verify');
-    if (verifyUrl) {
-        try {
-            const res = await fetch(`${verifyUrl}?t=${Date.now()}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...headers
-                },
-                cache: 'no-cache'
-            });
-            const data = await res.json().catch(() => null);
-            if (data?.legacy === true) {
-                return false;
-            }
-            if (res.ok && data?.success) {
-                if (data.role === 'admin') {
-                    /* confirmed */
-                } else {
-                    return false;
-                }
-            } else if (res.status === 401) {
-                return false;
-            } else {
-                /** 404 / 5xx / parse failure — continue using JWT claim */
-            }
-        } catch {
-            /* network — continue using claim */
-        }
-    }
-
-    isAdminLoggedIn = true;
-    loggedInStudentFullName = '';
-    loggedInTeacherName = '';
-    isTeacherLoggedIn = true;
-    return true;
+    const restored = await tryRestoreSessionFromBearerIfPossible();
+    return !!restored && isAdminLoggedIn;
 }
 
 /** Drop other teachers' and unrelated students' schedule keys for isolated teacher sessions (keeps own grid + visible students). */
@@ -3724,11 +3986,19 @@ function saveStudentClassReportRows() {
 }
 
 function cloneQuestionListForMemory(qs) {
-    return (Array.isArray(qs) ? qs : []).map((q, index) => ({
-        id: String(q?.id || `q_${index}_${Date.now()}`).trim(),
-        speaker: q?.speaker === 'student' ? 'student' : 'teacher',
-        text: String(q?.text || q?.question || '')
-    }));
+    return (Array.isArray(qs) ? qs : []).map((q, index) => {
+        const text = String(q?.text || q?.question || '');
+        const row = {
+            id: String(q?.id || `q_${index}_${Date.now()}`).trim(),
+            speaker: q?.speaker === 'student' ? 'student' : 'teacher',
+            text
+        };
+        if (row.speaker === 'student') {
+            const wrongRanges = normalizeQuestionWrongRanges(text, q?.wrongRanges);
+            if (wrongRanges.length) row.wrongRanges = wrongRanges;
+        }
+        return row;
+    });
 }
 
 function cloneActivityListForMemory(activities) {
@@ -3935,11 +4205,19 @@ function normalizeManifestBucketsForFingerprint(studentsRecord) {
                         };
                     }).filter(Boolean);
                     const questionsRaw = Array.isArray(upload.questions) ? upload.questions : [];
-                    const questions = questionsRaw.map((q, index) => ({
-                        id: String(q?.id || `q_${id}_${index}`).slice(0, 140),
-                        speaker: q?.speaker === 'student' ? 'student' : 'teacher',
-                        text: String(q?.text || q?.question || '').slice(0, 8000),
-                    }));
+                    const questions = questionsRaw.map((q, index) => {
+                        const text = String(q?.text || q?.question || '').slice(0, 8000);
+                        const row = {
+                            id: String(q?.id || `q_${id}_${index}`).slice(0, 140),
+                            speaker: q?.speaker === 'student' ? 'student' : 'teacher',
+                            text
+                        };
+                        if (row.speaker === 'student') {
+                            const wrongRanges = normalizeQuestionWrongRanges(text, q?.wrongRanges);
+                            if (wrongRanges.length) row.wrongRanges = wrongRanges;
+                        }
+                        return row;
+                    });
                     const activitiesRaw = Array.isArray(upload.activities) ? upload.activities : [];
                     const activities = cloneActivityListForMemory(activitiesRaw).slice(0, 30);
                     return {
@@ -4215,11 +4493,19 @@ async function patchClassReportUploadQuestionsOnServer(studentKey, uploadId, que
                 student: String(studentKey || '').trim(),
                 uploadId: String(uploadId || '').trim(),
                 questions: Array.isArray(questionsPayload)
-                    ? questionsPayload.map((q) => ({
-                        id: q.id,
-                        speaker: q.speaker === 'student' ? 'student' : 'teacher',
-                        text: String(q.text || '')
-                    }))
+                    ? questionsPayload.map((q) => {
+                        const text = String(q.text || '');
+                        const row = {
+                            id: q.id,
+                            speaker: q.speaker === 'student' ? 'student' : 'teacher',
+                            text
+                        };
+                        if (row.speaker === 'student') {
+                            const wrongRanges = normalizeQuestionWrongRanges(text, q?.wrongRanges);
+                            if (wrongRanges.length) row.wrongRanges = wrongRanges;
+                        }
+                        return row;
+                    })
                     : []
             })
         });
@@ -7577,7 +7863,7 @@ function addQuestionToLatestStudentClassReportUpload(studentName) {
     requestAnimationFrame(() => {
         const panel = document.getElementById('studentClassReportPanel');
         const input = panel?.querySelector(
-            `.student-class-report-file-card[data-upload-id="${latestUpload.id}"] .student-class-report-question-row:last-of-type input`
+            `.student-class-report-file-card[data-upload-id="${latestUpload.id}"] .student-class-report-question-row:last-of-type .student-class-report-question-input, .student-class-report-file-card[data-upload-id="${latestUpload.id}"] .student-class-report-question-row:last-of-type .student-class-report-question-answer`
         );
         input?.focus();
     });
@@ -7632,7 +7918,7 @@ function addQuestionLineToStudentClassReportUpload(studentName, uploadId, afterQ
     requestAnimationFrame(() => {
         const panel = document.getElementById('studentClassReportPanel');
         const input = panel?.querySelector(
-            `.student-class-report-file-card[data-upload-id="${upload.id}"] .student-class-report-question-row[data-question-id="${nextQuestion.id}"] input`
+            `.student-class-report-file-card[data-upload-id="${upload.id}"] .student-class-report-question-row[data-question-id="${nextQuestion.id}"] .student-class-report-question-input, .student-class-report-file-card[data-upload-id="${upload.id}"] .student-class-report-question-row[data-question-id="${nextQuestion.id}"] .student-class-report-question-answer`
         );
         input?.focus();
     });
@@ -8248,18 +8534,26 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
             label.className = 'student-class-report-question-speaker';
             label.textContent = speaker === 'teacher' ? teacherLabel : studentLabel;
 
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'student-class-report-question-input';
-            input.placeholder = speaker === 'teacher' ? 'Write the question...' : 'Write the answer...';
-            input.value = String(question.text || '');
-            input.readOnly = !canEditClassReportQuestionLine(question, studentName);
-            input.addEventListener('input', () => {
-                if (!canEditClassReportQuestionLine(question, studentName)) return;
-                question.text = input.value;
-                void persistClassReportOfflineSnapshot();
-                debouncePatchClassReportQuestions(studentName, upload.id);
-            });
+            let answerEl = null;
+            let input = null;
+            if (speaker === 'student') {
+                answerEl = document.createElement('div');
+                answerEl.className = 'student-class-report-question-answer';
+                bindStudentClassReportQuestionAnswer(answerEl, question, studentName, upload.id);
+            } else {
+                input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'student-class-report-question-input';
+                input.placeholder = 'Write the question...';
+                input.value = String(question.text || '');
+                input.readOnly = !canEditClassReportQuestionLine(question, studentName);
+                input.addEventListener('input', () => {
+                    if (!canEditClassReportQuestionLine(question, studentName)) return;
+                    question.text = input.value;
+                    void persistClassReportOfflineSnapshot();
+                    debouncePatchClassReportQuestions(studentName, upload.id);
+                });
+            }
 
             const actions = document.createElement('div');
             actions.className = 'student-class-report-question-actions';
@@ -8293,7 +8587,7 @@ function appendStudentClassReportUploadPreview(feedEl, upload, studentName) {
             }
 
             if (speaker === 'student') {
-                questionRow.appendChild(input);
+                questionRow.appendChild(answerEl);
                 questionRow.appendChild(label);
                 questionRow.appendChild(actions);
             } else {
@@ -13453,17 +13747,22 @@ function setupPasswordToggles() {
 // Initialize teachers sidebar
 async function initTeachers() {
     await refreshTimetableApiBearerTokenIfPossible();
-    await initRoster();
-    await ensureAdminAccountReady();
-    let restoredTeacher = null;
-    if (await tryRestoreAdminFromBearerIfPossible()) {
-        restoredTeacher = DEFAULT_ADMIN_USERNAME;
-    } else {
+
+    let restoredTeacher = await tryRestoreSessionFromBearerIfPossible();
+    if (!restoredTeacher) {
         restoredTeacher = await tryRestoreSessionFromSavedCredentials();
     }
-    if (isTeacherLoggedIn && loadSavedLoginCredentials()) {
+
+    await ensureAdminAccountReady();
+
+    if (isTeacherLoggedIn) {
         await refreshTimetableApiBearerTokenIfPossible();
     }
+    await enforceCloudAuthSessionConsistency();
+
+    await initRoster();
+    assignStudentTutorFromRosterIfNeeded();
+
     applyTeacherDataIsolationInMemory();
     await loadAllSchedules();
     if (syncAllStudentRepositionsForAllTutors()) {

@@ -637,8 +637,16 @@
                         /* ignore */
                     }
                     persistTimetablePageApiBearerToken(data.token);
+                    return {
+                        ok: true,
+                        status: res.status,
+                        role: String(data?.role || '').trim(),
+                        profile: String(data?.profile || '').trim(),
+                        resolvedUsername: String(data?.resolvedUsername || '').trim()
+                    };
                 } catch (e) {
                     console.warn('auth-login:', e);
+                    return { ok: false, status: 0 };
                 }
             }
 
@@ -815,7 +823,7 @@
                     return { ok: true, role: 'admin', resolvedUsername: DEFAULT_ADMIN_USERNAME };
                 }
 
-                await refreshTimetablePageApiBearerToken(usernameTyped, password);
+                const authResult = await refreshTimetablePageApiBearerToken(usernameTyped, password);
 
                 let roster = await loadHostedRoster();
                 if (!roster) roster = loadCachedRoster();
@@ -825,6 +833,19 @@
                     } catch (e) {
                         console.error(e);
                     }
+                }
+
+                if (authResult && authResult.ok && authResult.role) {
+                    return {
+                        ok: true,
+                        role: authResult.role,
+                        profileName: authResult.profile || '',
+                        resolvedUsername: authResult.resolvedUsername || usernameTyped
+                    };
+                }
+
+                if (authResult && !authResult.ok && authResult.status === 401) {
+                    return { ok: false };
                 }
 
                 const usernameEff = roster && window.TimeTableAuthMigrate

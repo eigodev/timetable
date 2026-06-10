@@ -15,6 +15,45 @@ const MAX_RELATED_FILES = 20;
 const MAX_ACTIVITIES_PER_UPLOAD = 30;
 
 const VIDEO_EMBED_PROVIDERS = new Set(['youtube', 'vimeo']);
+const MAX_WRONG_RANGES_PER_QUESTION = 80;
+
+function sanitizeQuestionWrongRanges(text, rawRanges) {
+  const safeText = String(text || '');
+  const len = safeText.length;
+  const valid = [];
+  if (!Array.isArray(rawRanges)) return valid;
+  for (const range of rawRanges.slice(0, MAX_WRONG_RANGES_PER_QUESTION)) {
+    const start = Math.floor(Number(range?.start));
+    const end = Math.floor(Number(range?.end));
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (start < 0 || end <= start || end > len) continue;
+    if (!safeText.slice(start, end).trim()) continue;
+    valid.push({ start, end });
+  }
+  valid.sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const range of valid) {
+    const last = merged[merged.length - 1];
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push({ start: range.start, end: range.end });
+  }
+  return merged;
+}
+
+function sanitizeQuestionRow(q, uploadId, index) {
+  const text = String(q?.text || q?.question || '').slice(0, 8000);
+  const speaker = q?.speaker === 'student' ? 'student' : 'teacher';
+  const row = {
+    id: String(q?.id || `q_${uploadId}_${index}`).slice(0, 140),
+    speaker,
+    text,
+  };
+  if (speaker === 'student') {
+    const wrongRanges = sanitizeQuestionWrongRanges(text, q?.wrongRanges);
+    if (wrongRanges.length) row.wrongRanges = wrongRanges;
+  }
+  return row;
+}
 
 function sanitizeVideoEmbedUpload(uploadRaw, uploadId) {
   const provider = String(uploadRaw?.provider || '').trim().toLowerCase();
@@ -122,11 +161,7 @@ function coerceManifest(raw) {
             type: String(r.type || '').toLowerCase().slice(0, 120),
           }));
           const questionsRaw = Array.isArray(upload.questions) ? upload.questions : [];
-          const questions = questionsRaw.map((q, index) => ({
-            id: String(q?.id || `q_${id}_${index}`).slice(0, 140),
-            speaker: q?.speaker === 'student' ? 'student' : 'teacher',
-            text: String(q?.text || q?.question || '').slice(0, 8000),
-          }));
+          const questions = questionsRaw.map((q, index) => sanitizeQuestionRow(q, id, index));
           const activities = sanitizeActivitiesList(upload.activities, id);
           if (String(upload.kind || '').trim() === 'video-embed') {
             try {
@@ -489,11 +524,7 @@ export async function onRequest(context) {
         }
         if (Array.isArray(body.questions)) {
           const questionsRaw = body.questions;
-          u.questions = questionsRaw.map((q, index) => ({
-            id: String(q?.id || `q_${uploadId}_${index}`).slice(0, 140),
-            speaker: q?.speaker === 'student' ? 'student' : 'teacher',
-            text: String(q?.text || q?.question || '').slice(0, 8000),
-          }));
+          u.questions = questionsRaw.map((q, index) => sanitizeQuestionRow(q, uploadId, index));
         }
         if (Array.isArray(body.activities)) {
           u.activities = sanitizeActivitiesList(body.activities, uploadId);
@@ -625,11 +656,7 @@ export async function onRequest(context) {
         }
 
         const questionsRaw = Array.isArray(uploadRaw.questions) ? uploadRaw.questions : [];
-        const questions = questionsRaw.map((q, index) => ({
-          id: String(q?.id || `q_${uploadId}_${index}`).slice(0, 140),
-          speaker: q?.speaker === 'student' ? 'student' : 'teacher',
-          text: String(q?.text || q?.question || '').slice(0, 8000),
-        }));
+        const questions = questionsRaw.map((q, index) => sanitizeQuestionRow(q, uploadId, index));
         const activities = sanitizeActivitiesList(uploadRaw.activities, uploadId);
 
         const row = {
