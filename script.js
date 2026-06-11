@@ -2394,7 +2394,9 @@ function mergeScheduleRecordsClient(baseRecord, incomingRecord) {
     if (Object.keys(prunedMeta).length > 0) {
         out[TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = prunedMeta;
     }
-    return out;
+    const baseAvail = getTeacherAvailabilitySlotsMetaFromSchedule(base);
+    const incAvail = getTeacherAvailabilitySlotsMetaFromSchedule(inc);
+    return withTeacherAvailabilitySlotsMeta(out, { ...baseAvail, ...incAvail });
 }
 
 function studentScheduleGridHasClassSlots(slots) {
@@ -5506,6 +5508,11 @@ function applyAllStudentColorsToTeacherScheduleCopy(sched, teacherName) {
             tutorGreenSlots[k] = true;
         }
     });
+    if (teacherFilter && teacherSchedules[teacherFilter]) {
+        Object.keys(getTeacherAvailabilitySlotsMetaFromSchedule(teacherSchedules[teacherFilter])).forEach((k) => {
+            tutorGreenSlots[k] = true;
+        });
+    }
     Object.keys(out).forEach((k) => {
         const current = String(out[k] || '').trim();
         if (parseSchoolStateToken(current) || isLegacyOverlayState(current)) {
@@ -5623,7 +5630,11 @@ function syncWeeklyClassToAllTeacherSchedules() {
         const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
         const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
         const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
-        teacherSchedules[tName] = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, tName);
+        const availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(raw);
+        const nextSlots = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, tName);
+        let nextRecord = withUnavailableStudentNamesMeta(tName, nextSlots);
+        nextRecord = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
+        teacherSchedules[tName] = nextRecord;
         if (Object.keys(unavailableMeta).length > 0) {
             teacherSchedules[tName][TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = unavailableMeta;
         }
@@ -10229,6 +10240,8 @@ let currentSlot = null;
 let currentContextMenuMode = 'school';
 const teacherUnavailableStudentNamesByTeacher = {};
 const TEACHER_UNAVAILABLE_STUDENTS_META_KEY = '__unavailableStudentNames';
+/** Tutor slots explicitly marked green; survives student class aggregate sync. */
+const TEACHER_AVAILABILITY_SLOTS_META_KEY = '__availabilitySlots';
 let studentVisibleRescheduledNamesBySlot = {};
 /** Session-only: slots booked by a class supervisor on another teacher's grid (for allowed clears). */
 let supervisorSlotBookingsByTeacher = {};
@@ -10238,9 +10251,55 @@ function getScheduleSlotMapWithoutMeta(schedule) {
     if (!schedule || typeof schedule !== 'object') return out;
     Object.entries(schedule).forEach(([key, value]) => {
         if (key === TEACHER_UNAVAILABLE_STUDENTS_META_KEY) return;
+        if (key === TEACHER_AVAILABILITY_SLOTS_META_KEY) return;
         out[key] = value;
     });
     return out;
+}
+
+function getTeacherAvailabilitySlotsMetaFromSchedule(schedule) {
+    const meta = {};
+    if (!schedule || typeof schedule !== 'object') return meta;
+    const raw = schedule[TEACHER_AVAILABILITY_SLOTS_META_KEY];
+    if (raw && typeof raw === 'object') {
+        Object.entries(raw).forEach(([slotKey, flag]) => {
+            const key = String(slotKey || '').trim();
+            if (key && flag) meta[key] = true;
+        });
+    }
+    const slots = getScheduleSlotMapWithoutMeta(schedule);
+    Object.entries(slots).forEach(([slotKey, value]) => {
+        if (String(value || '').trim().toLowerCase() === 'available') {
+            meta[slotKey] = true;
+        }
+    });
+    return meta;
+}
+
+function withTeacherAvailabilitySlotsMeta(schedule, meta) {
+    const next = { ...(schedule || {}) };
+    const cleaned = {};
+    Object.entries(meta || {}).forEach(([slotKey, flag]) => {
+        const key = String(slotKey || '').trim();
+        if (key && flag) cleaned[key] = true;
+    });
+    if (Object.keys(cleaned).length > 0) {
+        next[TEACHER_AVAILABILITY_SLOTS_META_KEY] = cleaned;
+    } else {
+        delete next[TEACHER_AVAILABILITY_SLOTS_META_KEY];
+    }
+    return next;
+}
+
+function patchTeacherAvailabilitySlotMeta(teacherName, slotKey, isAvailable) {
+    const name = String(teacherName || '').trim();
+    const key = String(slotKey || '').trim();
+    if (!name || !key || !isActiveTeacherName(name)) return;
+    const sched = teacherSchedules[name] ? { ...teacherSchedules[name] } : {};
+    const meta = getTeacherAvailabilitySlotsMetaFromSchedule(sched);
+    if (isAvailable) meta[key] = true;
+    else delete meta[key];
+    teacherSchedules[name] = withTeacherAvailabilitySlotsMeta(sched, meta);
 }
 
 function getUnavailableStudentNamesMetaFromSchedule(schedule) {
@@ -18069,8 +18128,10 @@ function saveTeacherSchedule(teacherName) {
     if (!teacherName) return;
     const copy = getSlotStatesCopyForScheduleSave(teacherName);
     if (isActiveTeacherName(teacherName)) {
+        const availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(teacherSchedules[teacherName] || {});
         const nextTeacherSlots = applyAllStudentColorsToTeacherScheduleCopy(copy, teacherName);
-        teacherSchedules[teacherName] = withUnavailableStudentNamesMeta(teacherName, nextTeacherSlots);
+        let nextRecord = withUnavailableStudentNamesMeta(teacherName, nextTeacherSlots);
+        teacherSchedules[teacherName] = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
     } else {
         let next = mergeWeeklyClassIntoScheduleCopy(copy, teacherName);
         if (isStudentName(teacherName)) {
@@ -18185,7 +18246,10 @@ function finishStudentSchoolSlotClearToGreen(studentName, day, hour) {
         );
         if (!tutorBlocksGreen && !othersStillHaveClass) {
             tutorSlots[key] = 'available';
-            teacherSchedules[tutorKey] = withUnavailableStudentNamesMeta(tutorKey, tutorSlots);
+            const availMeta = { ...getTeacherAvailabilitySlotsMetaFromSchedule(teacherSchedules[tutorKey] || {}), [key]: true };
+            let nextTutor = withUnavailableStudentNamesMeta(tutorKey, tutorSlots);
+            nextTutor = withTeacherAvailabilitySlotsMeta(nextTutor, availMeta);
+            teacherSchedules[tutorKey] = nextTutor;
             teacherUnavailableStudentNamesByTeacher[tutorKey] = getUnavailableStudentNamesMetaFromSchedule(
                 teacherSchedules[tutorKey]
             );
@@ -18274,6 +18338,7 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
     const stu = stripTeacherAvailabilityFromStudentScheduleCopy(stuSlots);
     const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
     const tut = getScheduleSlotMapWithoutMeta(tutSchedule);
+    const tutorAvailMeta = getTeacherAvailabilitySlotsMetaFromSchedule(tutSchedule);
     const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);
     const merged = {};
     const visibleRescheduledNames = {};
@@ -18281,7 +18346,10 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
             const s = stu[key];
-            const t = tutorSlotStateForStudentCalendarMerge(tut[key]);
+            let t = tutorSlotStateForStudentCalendarMerge(tut[key]);
+            if (!t && tutorAvailMeta[key]) {
+                t = 'available';
+            }
             let rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
             if (!rescheduledStudentName) {
                 rescheduledStudentName = getPeerStudentRepositionHolderAtSlot(tutorKey, studentName, key);
@@ -18328,8 +18396,10 @@ function loadTeacherSchedule(teacherName) {
     calendarPeerStudentClassOverlay = null;
     if (isActiveTeacherName(teacherName)) {
         teacherUnavailableStudentNamesByTeacher[teacherName] = unavailableMeta;
+        const availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(rawSchedule);
         slotStates = applyAllStudentColorsToTeacherScheduleCopy(raw, teacherName);
-        teacherSchedules[teacherName] = withUnavailableStudentNamesMeta(teacherName, { ...slotStates });
+        let nextRecord = withUnavailableStudentNamesMeta(teacherName, { ...slotStates });
+        teacherSchedules[teacherName] = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
     } else {
         slotStates = mergeWeeklyClassIntoScheduleCopy(raw, teacherName);
         if (isStudentName(teacherName)) {
@@ -19022,6 +19092,14 @@ function setSlotState(day, hour, state) {
         slotStates[key] = state;
     } else {
         slotStates[key] = null;
+    }
+    if (isActiveTeacherName(currentTeacher)) {
+        const low = String(state ?? '').trim().toLowerCase();
+        if (low === 'available') {
+            patchTeacherAvailabilitySlotMeta(currentTeacher, key, true);
+        } else {
+            patchTeacherAvailabilitySlotMeta(currentTeacher, key, false);
+        }
     }
     const displayRawForUi = getDisplaySlotState(day, hour);
     const displayForUi = isCalendarEventTypeVisible(displayRawForUi) ? displayRawForUi : null;

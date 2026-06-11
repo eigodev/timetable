@@ -515,12 +515,14 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
 }
 
 const SCHEDULE_UNAVAILABLE_META_KEY = '__unavailableStudentNames';
+const SCHEDULE_AVAILABILITY_META_KEY = '__availabilitySlots';
 
 function scheduleSlotMapFromObject(schedule) {
   if (!schedule || typeof schedule !== 'object' || Array.isArray(schedule)) return {};
   const out = {};
   for (const [k, v] of Object.entries(schedule)) {
     if (k === SCHEDULE_UNAVAILABLE_META_KEY) continue;
+    if (k === SCHEDULE_AVAILABILITY_META_KEY) continue;
     out[k] = v;
   }
   return out;
@@ -613,6 +615,19 @@ function mergeUnavailableStudentNamesMeta(baseMeta, incMeta, mergedSlots) {
   return pruned;
 }
 
+function mergeAvailabilitySlotsMeta(baseMeta, incMeta) {
+  const base = baseMeta && typeof baseMeta === 'object' ? baseMeta : {};
+  const inc = incMeta && typeof incMeta === 'object' ? incMeta : {};
+  const out = { ...base };
+  for (const [slotKey, flag] of Object.entries(inc)) {
+    const key = String(slotKey || '').trim();
+    if (!key) continue;
+    if (flag) out[key] = true;
+    else delete out[key];
+  }
+  return out;
+}
+
 function mergeSingleScheduleRecord(baseSchedule, incomingSchedule, logContext = {}) {
   const base = baseSchedule && typeof baseSchedule === 'object' ? baseSchedule : {};
   const inc = incomingSchedule && typeof incomingSchedule === 'object' ? incomingSchedule : {};
@@ -626,9 +641,16 @@ function mergeSingleScheduleRecord(baseSchedule, incomingSchedule, logContext = 
     inc[SCHEDULE_UNAVAILABLE_META_KEY],
     mergedSlots
   );
+  const mergedAvail = mergeAvailabilitySlotsMeta(
+    base[SCHEDULE_AVAILABILITY_META_KEY],
+    inc[SCHEDULE_AVAILABILITY_META_KEY]
+  );
   const out = { ...mergedSlots };
   if (Object.keys(mergedMeta).length > 0) {
     out[SCHEDULE_UNAVAILABLE_META_KEY] = mergedMeta;
+  }
+  if (Object.keys(mergedAvail).length > 0) {
+    out[SCHEDULE_AVAILABILITY_META_KEY] = mergedAvail;
   }
   return out;
 }
