@@ -18121,35 +18121,47 @@ function isTutorSlotDisplayedClassColorState(tVal) {
     return !!(parseSchoolStateToken(low) || isLegacyOverlayState(low));
 }
 
-/**
- * Schools student calendar: remove class/extra at day/hour, sync tutor aggregate, re-merge so the cell
- * shows tutor availability (green) instead of staying colored or turning blank white.
- */
-function clearStudentScheduledClassFromSlot(day, hour) {
-    const studentName = String(currentTeacher || '').trim();
-    if (!studentName || !isStudentName(studentName)) return;
-    if (isLoggedInStudentCalendarReadOnly()) {
-        showAppMessage('View only — your teacher manages this schedule.');
-        return;
-    }
+/** Class or extra school color on the student schools calendar (not reposition / peer overlay). */
+function isStudentSchoolClassOrExtraDisplayState(displayState) {
+    const low = String(displayState || '').trim().toLowerCase();
+    if (!low || low === 'available' || low === 'null') return false;
+    if (low === PEER_STUDENT_CLASS_SLOT_STATE) return false;
+    if (isStudentSchoolRepositionSlotState(low)) return false;
+    if (low === 'rescheduled' || low === 'unavailable' || low === BOOKED_CLASS_SLOT_STATE) return false;
+    const token = String(resolveSchoolTokenInfoFromState(low)?.token || low).trim().toLowerCase();
+    const parsed = parseSchoolStateToken(token);
+    if (parsed?.variant === 'class' || parsed?.variant === 'extra') return true;
+    return isLegacyOverlayState(token);
+}
 
+/** Reposition cell for this student (school token or yellow rescheduled with their name). */
+function isStudentSchoolRepositionClearableAtSlot(studentName, day, hour, displayState) {
+    const student = String(studentName || '').trim();
+    if (!student) return false;
     const key = `${day}-${hour}`;
-    const displayState = getDisplaySlotState(day, hour);
-    const displayResolved = String(
-        resolveSchoolTokenInfoFromState(displayState)?.token || String(displayState || '').trim().toLowerCase()
-    )
-        .trim()
-        .toLowerCase();
-    if (!parseSchoolStateToken(displayResolved) && !isLegacyOverlayState(displayResolved)) {
-        return;
+    const low = String(displayState || '').trim().toLowerCase();
+    if (isStudentSchoolRepositionSlotState(low)) return true;
+    const slots = getScheduleSlotMapWithoutMeta(teacherSchedules[student] || {});
+    if (isStudentSchoolRepositionSlotState(slots[key])) return true;
+    if (low === 'rescheduled') {
+        const holder = String(studentVisibleRescheduledNamesBySlot[key] || '').trim();
+        return holder.toLowerCase() === student.toLowerCase();
     }
+    return false;
+}
 
+function clearStudentSchoolClassOrExtraAtSlot(studentName, day, hour) {
+    const key = `${day}-${hour}`;
     let slots = { ...getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {}) };
     slots[key] = null;
     slots = stripTeacherAvailabilityFromStudentScheduleCopy(slots);
     slots = stripTeacherOverlayStatesFromStudentScheduleCopy(slots);
     teacherSchedules[studentName] = slots;
+}
 
+/** After clearing class/extra/reposition on a student grid, restore tutor green and refresh the merged view. */
+function finishStudentSchoolSlotClearToGreen(studentName, day, hour) {
+    const key = `${day}-${hour}`;
     const tutorKey = getTutorRosterNameForStudent(studentName);
     const repositionSynced = syncStudentRepositionsToTutorSchedule(studentName);
     syncWeeklyClassToAllTeacherSchedules();
@@ -18189,6 +18201,31 @@ function clearStudentScheduledClassFromSlot(day, hour) {
     }
     resetClassStartNotificationCache();
     notifyUpcomingClasses();
+}
+
+/**
+ * Schools student calendar left-click: class / extra / reposition → green; white / green → no-op.
+ */
+function handleStudentSchoolCalendarLeftClick(day, hour) {
+    const studentName = String(currentTeacher || '').trim();
+    if (!studentName || !isStudentName(studentName)) return;
+    if (isLoggedInStudentCalendarReadOnly()) return;
+
+    const displayState = getDisplaySlotState(day, hour);
+    if (isStudentSchoolRepositionClearableAtSlot(studentName, day, hour, displayState)) {
+        clearStudentSchoolRepositionAtSlot(studentName, day, hour);
+        finishStudentSchoolSlotClearToGreen(studentName, day, hour);
+        return;
+    }
+    if (isStudentSchoolClassOrExtraDisplayState(displayState)) {
+        clearStudentSchoolClassOrExtraAtSlot(studentName, day, hour);
+        finishStudentSchoolSlotClearToGreen(studentName, day, hour);
+    }
+}
+
+/** @deprecated Use handleStudentSchoolCalendarLeftClick */
+function clearStudentScheduledClassFromSlot(day, hour) {
+    handleStudentSchoolCalendarLeftClick(day, hour);
 }
 
 /**
@@ -18392,13 +18429,8 @@ function initCalendar() {
                     return;
                 }
                 if (isLoggedInStudentCalendarReadOnly()) return;
-                const displayState = getDisplaySlotState(day, hour);
-                const normalized = String(displayState || '').trim().toLowerCase();
-                const resolvedToken = String(
-                    resolveSchoolTokenInfoFromState(normalized)?.token || normalized
-                ).trim().toLowerCase();
-                if (parseSchoolStateToken(resolvedToken) || isLegacyOverlayState(resolvedToken)) {
-                    clearStudentScheduledClassFromSlot(day, hour);
+                if (isCustomContextMenuEnabledForCurrentSelection()) {
+                    handleStudentSchoolCalendarLeftClick(day, hour);
                 }
             });
 
@@ -18980,8 +19012,7 @@ function setSlotState(day, hour, state) {
 }
 
 /**
- * Teacher roster calendar only: first left-click sets availability (green); second clears to empty.
- * Does not run on student/school calendars or on slots that already hold a class, booking, etc.
+ * Teacher roster only: white ↔ green on left-click. Class, extra, reposition, and booked cells are inert.
  */
 function cycleTeacherAvailabilitySlotState(day, hour) {
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
@@ -18990,20 +19021,12 @@ function cycleTeacherAvailabilitySlotState(day, hour) {
         showAppMessage('Only the teacher adjusts availability here. Use the menu to book a class when allowed.');
         return;
     }
-    if (isSchoolManagedTeacherSlotLocked(day, hour)) {
-        showAppMessage('This class is managed by Schools and cannot be edited here.');
+    if (isTeacherSlotOccupiedForAvailability(day, hour)) {
         return;
     }
 
     const currentState = getSlotState(day, hour);
     const curLow = String(currentState || '').trim().toLowerCase();
-    if (isTeacherRepositionSlotState(currentState)) {
-        clearTeacherYellowSlotToAvailable(day, hour);
-        return;
-    }
-    if (isTeacherSlotOccupiedForAvailability(day, hour)) {
-        return;
-    }
 
     if (!currentState || curLow === '' || curLow === 'null') {
         setSlotState(day, hour, 'available');

@@ -7752,26 +7752,34 @@ header h1 {
     /* Per-cell container queries so student-name font scales with column width. */
     container-type: inline-size;
     container-name: timeslot;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
 
     border: 1px solid transparent;
     background: white;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Filled slots (class/extra/peer): cell is not clickable; names keep pointer on chips. */
+/* Filled slots (class/extra/peer/reposition): cell body is not clickable; name chips keep pointer. */
 .time-slot.state-school,
-.time-slot.state-peer-class {
+.time-slot.state-peer-class,
+.time-slot.state-unavailable,
+.time-slot.state-booked {
     cursor: default;
 }
 
-/* Teacher roster: yellow reposition/booking slots are left-clickable → green availability. */
-body.teacher-calendar-roster .time-slot.state-unavailable,
-body.teacher-calendar-roster .time-slot.state-booked {
+/* Teacher roster: only empty white and green cells toggle on left-click. */
+body.teacher-calendar-roster .time-slot {
+    cursor: default;
+}
+
+body.teacher-calendar-roster .time-slot:not(.state-school):not(.state-peer-class):not(.state-unavailable):not(.state-booked) {
     cursor: pointer;
 }
 
-/* Student (and teacher viewing a student): Class/Extra/Reposition only on green; white inert. */
+/* Student schools view: right-click menu only on green; left-click clears class/extra/reposition. */
 body.student-school-calendar .time-slot {
     cursor: default;
 }
@@ -7808,7 +7816,7 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 .time-slot.current-time-cell {
-    z-index: 30;
+    z-index: 1;
 }
 
 .time-slot.time-slot--with-student-names {
@@ -8596,9 +8604,14 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 
-.time-slot:hover {
+body.teacher-calendar-roster .time-slot:not(.state-school):not(.state-peer-class):not(.state-unavailable):not(.state-booked):hover {
     background: #fff5e6;
     border-color: #334461;
+}
+
+body.student-school-calendar .time-slot.state-available:hover {
+    border-color: #2d3d0f;
+    box-shadow: 0 0 0 1px #3f5216;
 }
 
 /* Slot states */
@@ -8607,22 +8620,6 @@ body.student-school-calendar .time-slot.state-available {
     color: white;
     border-color: #556b2f;
     box-shadow: 0 2px 8px rgba(107, 142, 35, 0.4);
-    transition:
-        background-color 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-        border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-        transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-    transform: translateZ(0);
-}
-
-.time-slot.state-available:hover {
-    background: #7ca824;
-    border-color: #2d3d0f;
-    box-shadow:
-        0 0 0 2px #3f5216,
-        0 6px 20px rgba(60, 82, 22, 0.45);
-    transform: translateZ(0) scale(1.035);
-    z-index: 2;
 }
 
 .time-slot.state-unavailable {
@@ -8664,16 +8661,13 @@ body.student-school-calendar .time-slot.state-available {
 
 /* Manual override for the live intersection cell (today + current hour). */
 .time-slot.current-time-cell {
-    position: relative;
-    z-index: 30;
-    
     border-radius: 5px;
     border: 2px solid #334461;
-    box-shadow: 1px 1px 1px 1px rgba(0, 0, 35, 0.5);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 35, 0.35);
 }
 
 .time-slot.current-time-cell.state-available:hover {
-    z-index: 35;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 35, 0.35), 0 0 0 1px #3f5216;
 }
 
 /* Context Menu */
