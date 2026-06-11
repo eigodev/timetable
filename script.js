@@ -5867,10 +5867,13 @@ function clearTeacherYellowSlotToAvailable(day, hour) {
         : false;
 
     setSlotState(day, hour, 'available');
+    saveTeacherSchedule(currentTeacher);
 
     if (studentCleared && studentName) {
         saveTeacherSchedule(studentName);
         refreshCalendarsAfterStudentRepositionSync(studentName);
+    } else if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+        refreshCalendarDisplay();
     }
 }
 
@@ -6277,15 +6280,14 @@ function isCustomContextMenuEnabledForCurrentSelection() {
     return !!currentTeacher && !isActiveTeacherName(currentTeacher);
 }
 
-function isTeacherCalendarClearContextMenuEnabled(day, hour) {
+/** Teacher roster: right-click yellow reposition (not booked) → Cancel Reposition. */
+function isTeacherRepositionCancelContextMenuEnabled(day, hour) {
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
     if (isLoggedInStudentCalendarReadOnly()) return false;
     if (isGateViewingAlienTeacherGrid()) return false;
     const raw = getSlotState(day, hour);
     const low = String(raw || '').trim().toLowerCase();
-    if (!low || low === 'null' || low === 'available') return false;
-    if (parseSchoolStateToken(low) || isLegacyOverlayState(low)) return false;
-    return true;
+    return low === 'unavailable' || low === 'rescheduled';
 }
 
 /**
@@ -18603,7 +18605,7 @@ function initCalendar() {
                 }
             });
 
-            // Right click: student calendar → Class / Extra / Reposition on green only; teacher roster → Clear on filled slots.
+            // Right click: student calendar → Class / Extra / Reposition on green; teacher roster → Cancel Reposition on yellow.
             slot.addEventListener('contextmenu', (e) => {
                 if (isCustomContextMenuEnabledForCurrentSelection()) {
                     if (isCalendarSlotGreenAvailableForSchoolContextMenu(day, hour)) {
@@ -18614,9 +18616,9 @@ function initCalendar() {
                     }
                     return;
                 }
-                if (isTeacherCalendarClearContextMenuEnabled(day, hour)) {
+                if (isTeacherRepositionCancelContextMenuEnabled(day, hour)) {
                     e.preventDefault();
-                    showContextMenu(e, day, hour, 'teacher-clear');
+                    showContextMenu(e, day, hour, 'teacher-cancel-reposition');
                     return;
                 }
                 hideContextMenu();
@@ -18683,10 +18685,10 @@ function initCalendar() {
             showBookClassStudentsSubmenu(selectedSchool);
             return;
         }
-        if (currentContextMenuMode === 'teacher-clear') {
-            const clearAction = String(item.dataset.action || '').trim();
-            if (clearAction === 'clear' && currentSlot) {
-                performTeacherGridClearScheduledClass(currentSlot.day, currentSlot.hour);
+        if (currentContextMenuMode === 'teacher-cancel-reposition') {
+            const action = String(item.dataset.action || '').trim();
+            if (action === 'cancel-reposition' && currentSlot) {
+                clearTeacherYellowSlotToAvailable(currentSlot.day, currentSlot.hour);
             }
             hideContextMenu();
             return;
@@ -19551,11 +19553,11 @@ function refreshContextMenuTheme() {
     contextMenu.classList.remove('context-menu--book-submenu-expanded');
     contextMenu.classList.remove('context-menu--book-submenu-left');
     delete contextMenu.dataset.selectedStudent;
-    if (currentContextMenuMode === 'teacher-clear') {
+    if (currentContextMenuMode === 'teacher-cancel-reposition') {
         contextMenu.innerHTML = `
             <div class="context-menu-row">
-                <button type="button" class="context-menu-item context-menu-item--compact" data-action="clear">
-                    <span class="context-menu-label">Clear</span>
+                <button type="button" class="context-menu-item context-menu-item--compact" data-action="cancel-reposition">
+                    <span class="context-menu-label">Cancel Reposition</span>
                 </button>
             </div>
         `;
