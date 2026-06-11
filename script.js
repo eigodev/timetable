@@ -5500,6 +5500,12 @@ function isTeacherSlotOccupiedForAvailability(day, hour) {
 function applyAllStudentColorsToTeacherScheduleCopy(sched, teacherName) {
     const out = { ...sched };
     const teacherFilter = String(teacherName || '').trim();
+    const tutorGreenSlots = {};
+    Object.keys(out).forEach((k) => {
+        if (String(out[k] || '').trim().toLowerCase() === 'available') {
+            tutorGreenSlots[k] = true;
+        }
+    });
     Object.keys(out).forEach((k) => {
         const current = String(out[k] || '').trim();
         if (parseSchoolStateToken(current) || isLegacyOverlayState(current)) {
@@ -5557,25 +5563,41 @@ function applyAllStudentColorsToTeacherScheduleCopy(sched, teacherName) {
         if (!hasCfg) continue;
         const ch = Number.parseInt(String(c.classHour || ''), 10);
         const eh = Number.parseInt(String(c.extraHour || ''), 10);
+        const weeklySlotMap = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
         if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
             const ek = `${c.extraDay}-${eh}`;
-            if (!(keyClassPriority[ek] || 0) && !(keyExtraPriority[ek] || 0)) {
+            const extraCancelled =
+                Object.prototype.hasOwnProperty.call(weeklySlotMap, ek) && weeklySlotMap[ek] === null;
+            if (
+                !extraCancelled &&
+                !(keyClassPriority[ek] || 0) &&
+                !(keyExtraPriority[ek] || 0)
+            ) {
                 keyBest[ek] = states.extraState;
                 keyExtraPriority[ek] = extraPriorityByKind.speakon;
             }
         }
         if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
             const ck = `${c.classDay}-${ch}`;
-            const curr = keyClassPriority[ck] || 0;
-            if (curr <= classPriorityByKind.speakon) {
-                keyBest[ck] = states.classState;
-                keyClassPriority[ck] = classPriorityByKind.speakon;
+            const classCancelled =
+                Object.prototype.hasOwnProperty.call(weeklySlotMap, ck) && weeklySlotMap[ck] === null;
+            if (!classCancelled) {
+                const curr = keyClassPriority[ck] || 0;
+                if (curr <= classPriorityByKind.speakon) {
+                    keyBest[ck] = states.classState;
+                    keyClassPriority[ck] = classPriorityByKind.speakon;
+                }
             }
         }
     }
 
     Object.keys(keyBest).forEach((k) => {
         out[k] = keyBest[k];
+    });
+    Object.keys(tutorGreenSlots).forEach((k) => {
+        if (!keyBest[k]) {
+            out[k] = 'available';
+        }
     });
     return out;
 }
@@ -18128,8 +18150,33 @@ function clearStudentScheduledClassFromSlot(day, hour) {
     slots = stripTeacherOverlayStatesFromStudentScheduleCopy(slots);
     teacherSchedules[studentName] = slots;
 
+    const tutorKey = getTutorRosterNameForStudent(studentName);
     const repositionSynced = syncStudentRepositionsToTutorSchedule(studentName);
     syncWeeklyClassToAllTeacherSchedules();
+
+    if (tutorKey && isActiveTeacherName(tutorKey)) {
+        const tutorRaw = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
+        const tutorSlots = getScheduleSlotMapWithoutMeta(tutorRaw);
+        const tLow = String(tutorSlots[key] || '').trim().toLowerCase();
+        const tutorBlocksGreen =
+            isTeacherRepositionSlotState(tutorSlots[key]) || tLow === 'unavailable';
+        const othersStillHaveClass = !!getClassOrExtraTokenFromSlotState(
+            applyAllStudentColorsToTeacherScheduleCopy({}, tutorKey)[key]
+        );
+        if (!tutorBlocksGreen && !othersStillHaveClass) {
+            tutorSlots[key] = 'available';
+            teacherSchedules[tutorKey] = withUnavailableStudentNamesMeta(tutorKey, tutorSlots);
+            teacherUnavailableStudentNamesByTeacher[tutorKey] = getUnavailableStudentNamesMetaFromSchedule(
+                teacherSchedules[tutorKey]
+            );
+            syncWeeklyClassToAllTeacherSchedules();
+        }
+    }
+
+    if (tutorKey) {
+        slotStates = mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey);
+        refreshPeerStudentClassOverlayForViewedStudent();
+    }
 
     markSchedulePendingCloudUpload();
     saveAllSchedulesLocal();
