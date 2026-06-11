@@ -6016,9 +6016,8 @@ function isStudentNameVisibleOnCalendarCell(rosterStudent) {
         }
         return isStudentNameVisibleBySchoolFilter(r);
     }
-    // Logged-in student: merged grid shows everyone's class colors; name chips only for self.
-    const mine = String(loggedInStudentFullName || '').trim().toLowerCase();
-    return r.toLowerCase() === mine;
+    // Logged-in student: show names for tutor-cohort peers scheduled in the same slot.
+    return areStudentsSameTutorCohort(r, loggedInStudentFullName);
 }
 
 function syncCalendarStudentNamesButtonState() {
@@ -6063,45 +6062,15 @@ function getStudentNamesForTeacherSlot(day, hour, state) {
     const resolvedState = resolveSchoolTokenInfoFromState(state);
     const normalizedState = resolvedState?.token || String(state || '').trim().toLowerCase();
     if (!parseSchoolStateToken(normalizedState) && !isLegacyOverlayState(normalizedState)) return [];
-    const key = `${day}-${hour}`;
-    const students = getAllRosterStudentNamesSorted();
+
     const names = [];
     const used = new Set();
-    for (const studentName of students) {
-        const { classState, extraState } = getStudentOverlayStates(studentName);
-        const st = teacherSchedules[studentName] || {};
-        const rawStudentState = String(st[key] || '').trim().toLowerCase();
-        let studentState = '';
-        if (rawStudentState === classState || rawStudentState === extraState) {
-            studentState = rawStudentState;
-        } else if (rawStudentState === 'magenta' || rawStudentState === 'special' || rawStudentState === 'navy') {
-            studentState = classState;
-        } else if (rawStudentState === 'salmon' || rawStudentState === 'cyan') {
-            studentState = extraState;
-        } else {
-            studentState = resolveSchoolTokenInfoFromState(rawStudentState)?.token || rawStudentState;
-        }
-        if (studentState === classState || (extraState && studentState === extraState)) {
-            if (!used.has(studentName) && isStudentNameVisibleOnCalendarCell(studentName)) {
-                used.add(studentName);
-                names.push(studentName);
-            }
-            continue;
-        }
-        if (getStudentRosterKind(studentName) !== 'speakon') continue;
-        const weekly = getStudentWeeklyClassEntry(studentName);
-        const classHour = Number.parseInt(String(weekly.classHour || ''), 10);
-        const extraHour = Number.parseInt(String(weekly.extraHour || ''), 10);
-        const isClass = normalizedState === classState && weekly.classDay === day && classHour === hour;
-        const isExtra = normalizedState === extraState && weekly.extraDay === day && extraHour === hour;
-        if ((isClass || isExtra) && !used.has(studentName) && isStudentNameVisibleOnCalendarCell(studentName)) {
+    for (const studentName of getAllRosterStudentNamesSorted()) {
+        if (!studentHasScheduledClassOrExtraAtSlot(studentName, day, hour)) continue;
+        if (!used.has(studentName) && isStudentNameVisibleOnCalendarCell(studentName)) {
             used.add(studentName);
             names.push(studentName);
         }
-    }
-    if (loggedInStudentFullName) {
-        const selfLc = String(loggedInStudentFullName || '').trim().toLowerCase();
-        return names.filter((n) => String(n || '').trim().toLowerCase() === selfLc);
     }
     return names;
 }
@@ -9492,6 +9461,48 @@ function clearCalendarTeacherAggregateOverlay() {
 }
 
 /**
+ * Whether this student has class or extra scheduled at an exact day/hour.
+ * Painted grid cells win; weekly template applies only when the slot is unset (available/empty).
+ * @param {string} studentName
+ * @param {string} day
+ * @param {number} hour
+ * @returns {boolean}
+ */
+function studentHasScheduledClassOrExtraAtSlot(studentName, day, hour) {
+    const key = `${day}-${hour}`;
+    const { classState, extraState } = getStudentOverlayStates(studentName);
+    const slotMap = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
+    const raw = slotMap[key];
+    const rawLow = String(raw ?? '').trim().toLowerCase();
+    const painted = normalizeStudentScheduleOverlayToken(raw, studentName);
+    if (painted === classState || (extraState && painted === extraState)) {
+        return true;
+    }
+    const slotUnset =
+        raw === undefined ||
+        raw === null ||
+        rawLow === '' ||
+        rawLow === 'available' ||
+        rawLow === 'null';
+    if (!slotUnset) {
+        return false;
+    }
+    if (!studentUsesWeeklyClassTemplate(studentName)) {
+        return false;
+    }
+    const c = getStudentWeeklyClassEntry(studentName);
+    const ch = Number.parseInt(String(c.classHour || ''), 10);
+    const eh = Number.parseInt(String(c.extraHour || ''), 10);
+    if (c.classDay === day && !Number.isNaN(ch) && ch === hour) {
+        return true;
+    }
+    if (c.extraDay === day && !Number.isNaN(eh) && eh === hour) {
+        return true;
+    }
+    return false;
+}
+
+/**
  * Collect class/extra slot keys for a student (grid + weekly template).
  * @param {string} studentName
  * @returns {Set<string>}
@@ -9510,12 +9521,18 @@ function getStudentClassAndExtraSlotKeys(studentName) {
         const c = getStudentWeeklyClassEntry(studentName);
         const ch = Number.parseInt(String(c.classHour || ''), 10);
         const eh = Number.parseInt(String(c.extraHour || ''), 10);
+        const weeklyKeys = [];
         if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
-            keys.add(`${c.classDay}-${ch}`);
+            weeklyKeys.push({ day: c.classDay, hour: ch, key: `${c.classDay}-${ch}` });
         }
         if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
-            keys.add(`${c.extraDay}-${eh}`);
+            weeklyKeys.push({ day: c.extraDay, hour: eh, key: `${c.extraDay}-${eh}` });
         }
+        weeklyKeys.forEach(({ day, hour, key }) => {
+            if (!keys.has(key) && studentHasScheduledClassOrExtraAtSlot(studentName, day, hour)) {
+                keys.add(key);
+            }
+        });
     }
     return keys;
 }
