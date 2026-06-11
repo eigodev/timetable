@@ -18090,6 +18090,54 @@ function isTutorSlotDisplayedClassColorState(tVal) {
 }
 
 /**
+ * After removing a student's class/extra at day/hour, what should the cell show?
+ * Merges with tutor availability (green), reposition, or booked — not blank white when the tutor is free.
+ */
+function getStudentCalendarSlotStateAfterRemovingClass(studentName, day, hour) {
+    const student = String(studentName || '').trim();
+    if (!student || !isStudentName(student)) return null;
+    const tutorKey = getTutorRosterNameForStudent(student);
+    if (!tutorKey) return null;
+    const key = `${day}-${hour}`;
+
+    let stuSlots = {};
+    const current = String(currentTeacher || '').trim();
+    if (current.localeCompare(student, undefined, { sensitivity: 'base' }) === 0) {
+        stuSlots = { ...slotStates };
+    } else {
+        stuSlots = mergeWeeklyClassIntoScheduleCopy(
+            getScheduleSlotMapWithoutMeta(teacherSchedules[student] || {}),
+            student
+        );
+    }
+    stuSlots = stripTeacherAvailabilityFromStudentScheduleCopy(stuSlots);
+    stuSlots = stripTeacherOverlayStatesFromStudentScheduleCopy(stuSlots);
+    delete stuSlots[key];
+    stuSlots[key] = null;
+
+    const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
+    const tut = getScheduleSlotMapWithoutMeta(tutSchedule);
+    const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);
+    const s = stuSlots[key];
+    const t = tut[key];
+    let rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
+    if (!rescheduledStudentName) {
+        rescheduledStudentName = getPeerStudentRepositionHolderAtSlot(tutorKey, student, key);
+    }
+    return resolveScheduleSlotPriority(getClassOrExtraTokenFromSlotState(s), t, {
+        studentSlot: s,
+        rescheduledStudentName,
+        includeTeacherNonPriorityFallback: false
+    });
+}
+
+/** Schools student calendar: click off a scheduled class → green when tutor is available, not empty white. */
+function clearStudentScheduledClassFromSlot(day, hour) {
+    const nextState = getStudentCalendarSlotStateAfterRemovingClass(currentTeacher, day, hour);
+    setSlotState(day, hour, nextState);
+}
+
+/**
  * Student calendar view: their class/extra cells (school colors) plus tutor "available" (green) where they have no class.
  */
 function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
@@ -18296,7 +18344,7 @@ function initCalendar() {
                     resolveSchoolTokenInfoFromState(normalized)?.token || normalized
                 ).trim().toLowerCase();
                 if (parseSchoolStateToken(resolvedToken) || isLegacyOverlayState(resolvedToken)) {
-                    setSlotState(day, hour, null);
+                    clearStudentScheduledClassFromSlot(day, hour);
                 }
             });
 
@@ -18399,7 +18447,11 @@ function initCalendar() {
             const selectedToken = String(resolveSchoolTokenInfoFromState(selectedState)?.token || selectedState).trim().toLowerCase();
             const nextToken = String(resolveSchoolTokenInfoFromState(nextState)?.token || nextState || '').trim().toLowerCase();
             if (nextToken && selectedToken === nextToken) {
-                nextState = null;
+                nextState = getStudentCalendarSlotStateAfterRemovingClass(
+                    currentTeacher,
+                    currentSlot.day,
+                    currentSlot.hour
+                );
             }
         }
         setSlotState(currentSlot.day, currentSlot.hour, nextState);
