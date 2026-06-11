@@ -7768,6 +7768,8 @@ header h1 {
 .time-slot.state-unavailable,
 .time-slot.state-booked {
     cursor: default;
+    /* Above the live time line so scheduled cells are not crossed by it. */
+    z-index: 20;
 }
 
 /* Teacher roster: only empty white and green cells toggle on left-click. */
@@ -7796,7 +7798,8 @@ body.student-school-calendar .time-slot.state-available {
     position: absolute;
     height: 2px;
     background: #334461;
-    z-index: 25;
+    /* Above white/green (auto) but below filled class/reposition cells (z-index 20). */
+    z-index: 10;
     pointer-events: none;
     transform: translateY(-1px);
     box-shadow: 0 0 0 1px rgba(229, 57, 53, 0.15);
@@ -7813,10 +7816,6 @@ body.student-school-calendar .time-slot.state-available {
     top: 50%;
     transform: translateY(-50%);
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
-}
-
-.time-slot.current-time-cell {
-    z-index: 1;
 }
 
 .time-slot.time-slot--with-student-names {
