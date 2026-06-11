@@ -2425,7 +2425,9 @@ function healLoggedInStudentScheduleGridIfNeeded() {
         const tutSlots = getScheduleSlotMapWithoutMeta(teacherSchedules[tutor] || {});
         const tutAgg = applyAllStudentColorsToTeacherScheduleCopy(tutSlots, tutor);
         const { classState, extraState } = getStudentOverlayStates(student);
+        const weeklyKeys = studentWeeklyTemplateSlotKeys(student);
         for (const [k, v] of Object.entries(tutAgg)) {
+            if (!weeklyKeys.has(k)) continue;
             const tok = normalizeStudentScheduleOverlayToken(v, student);
             if (tok && (tok === classState || (extraState && tok === extraState))) {
                 slots[k] = tok;
@@ -9519,11 +9521,30 @@ function clearCalendarTeacherAggregateOverlay() {
  * @param {number} hour
  * @returns {boolean}
  */
+/** Weekly-template slot keys configured on the roster for one student. */
+function studentWeeklyTemplateSlotKeys(studentName) {
+    const keys = new Set();
+    if (!studentUsesWeeklyClassTemplate(studentName)) return keys;
+    const c = getStudentWeeklyClassEntry(studentName);
+    const ch = Number.parseInt(String(c.classHour || ''), 10);
+    const eh = Number.parseInt(String(c.extraHour || ''), 10);
+    if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
+        keys.add(`${c.classDay}-${ch}`);
+    }
+    if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
+        keys.add(`${c.extraDay}-${eh}`);
+    }
+    return keys;
+}
+
 function studentHasScheduledClassOrExtraAtSlot(studentName, day, hour) {
     const key = `${day}-${hour}`;
     const { classState, extraState } = getStudentOverlayStates(studentName);
     const slotMap = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
     const raw = slotMap[key];
+    if (Object.prototype.hasOwnProperty.call(slotMap, key) && raw === null) {
+        return false;
+    }
     const rawLow = String(raw ?? '').trim().toLowerCase();
     const painted = normalizeStudentScheduleOverlayToken(raw, studentName);
     if (painted === classState || (extraState && painted === extraState)) {
@@ -9531,7 +9552,6 @@ function studentHasScheduledClassOrExtraAtSlot(studentName, day, hour) {
     }
     const slotUnset =
         raw === undefined ||
-        raw === null ||
         rawLow === '' ||
         rawLow === 'available' ||
         rawLow === 'null';
@@ -18123,6 +18143,62 @@ function getSlotStatesCopyForScheduleSave(profileName) {
     return { ...getScheduleSlotMapWithoutMeta(teacherSchedules[name] || {}) };
 }
 
+/**
+ * Persist only this student's class/extra/reposition slots — not the full merged tutor overlay grid.
+ * Prevents saving Berenildo's view from wiping Alexandre's stored classes (and vice versa).
+ */
+function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
+    const student = String(studentName || '').trim();
+    const live = liveSlotStates && typeof liveSlotStates === 'object' ? liveSlotStates : {};
+    const existing = getScheduleSlotMapWithoutMeta(teacherSchedules[student] || {});
+    const out = {};
+    const { classState, extraState } = getStudentOverlayStates(student);
+    const weeklyKeys = studentWeeklyTemplateSlotKeys(student);
+    const allKeys = new Set([...Object.keys(existing), ...weeklyKeys]);
+    Object.keys(live).forEach((k) => {
+        const v = live[k];
+        const painted = normalizeStudentScheduleOverlayToken(v, student);
+        if (painted === classState || (extraState && painted === extraState)) {
+            allKeys.add(k);
+        }
+        if (isStudentSchoolRepositionSlotState(v)) {
+            allKeys.add(k);
+        }
+    });
+
+    allKeys.forEach((key) => {
+        const liveVal = live[key];
+        const livePainted = normalizeStudentScheduleOverlayToken(liveVal, student);
+        if (livePainted === classState || (extraState && livePainted === extraState)) {
+            out[key] = livePainted;
+            return;
+        }
+        if (isStudentSchoolRepositionSlotState(liveVal)) {
+            out[key] = liveVal;
+            return;
+        }
+        const existingPainted = normalizeStudentScheduleOverlayToken(existing[key], student);
+        const hadClassOrExtra =
+            existingPainted === classState || (extraState && existingPainted === extraState);
+        const clearedInView =
+            liveVal === null ||
+            liveVal === undefined ||
+            String(liveVal ?? '').trim().toLowerCase() === 'available' ||
+            String(liveVal ?? '').trim() === '';
+        if (existing[key] === null) {
+            out[key] = null;
+            return;
+        }
+        if (hadClassOrExtra && clearedInView) {
+            out[key] = null;
+        }
+    });
+
+    let next = mergeWeeklyClassIntoScheduleCopy(out, student);
+    next = stripTeacherAvailabilityFromStudentScheduleCopy(next);
+    return stripTeacherOverlayStatesFromStudentScheduleCopy(next);
+}
+
 // Save current schedule to teacherSchedules
 function saveTeacherSchedule(teacherName) {
     if (!teacherName) return;
@@ -18132,13 +18208,8 @@ function saveTeacherSchedule(teacherName) {
         const nextTeacherSlots = applyAllStudentColorsToTeacherScheduleCopy(copy, teacherName);
         let nextRecord = withUnavailableStudentNamesMeta(teacherName, nextTeacherSlots);
         teacherSchedules[teacherName] = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
-    } else {
-        let next = mergeWeeklyClassIntoScheduleCopy(copy, teacherName);
-        if (isStudentName(teacherName)) {
-            next = stripTeacherAvailabilityFromStudentScheduleCopy(next);
-            next = stripTeacherOverlayStatesFromStudentScheduleCopy(next);
-        }
-        teacherSchedules[teacherName] = next;
+    } else if (isStudentName(teacherName)) {
+        teacherSchedules[teacherName] = persistStudentScheduleFromCalendarView(teacherName, copy);
         const repositionSynced = syncStudentRepositionsToTutorSchedule(teacherName);
         syncWeeklyClassToAllTeacherSchedules();
         if (isTeacherViewingStudentCalendar()) {
@@ -18148,6 +18219,8 @@ function saveTeacherSchedule(teacherName) {
         if (repositionSynced) {
             refreshCalendarsAfterStudentRepositionSync(teacherName);
         }
+    } else {
+        teacherSchedules[teacherName] = copy;
     }
     markSchedulePendingCloudUpload();
     saveAllSchedulesLocal();
@@ -18328,7 +18401,9 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
             tutorKey
         );
         const { classState, extraState } = getStudentOverlayStates(studentName);
+        const weeklyKeys = studentWeeklyTemplateSlotKeys(studentName);
         for (const [k, v] of Object.entries(tutAgg)) {
+            if (!weeklyKeys.has(k)) continue;
             const tok = normalizeStudentScheduleOverlayToken(v, studentName);
             if (tok && (tok === classState || (extraState && tok === extraState))) {
                 stuSlots[k] = tok;
