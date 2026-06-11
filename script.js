@@ -5648,10 +5648,10 @@ function syncWeeklyClassToAllTeacherSchedules() {
         }
     } else if (isTeacherViewingStudentCalendar()) {
         refreshCalendarTeacherAggregateOverlay();
-        refreshPeerStudentClassOverlayForViewedStudent();
         const viewedTutorKey = getTutorRosterNameForStudent(currentTeacher);
         if (viewedTutorKey) {
             slotStates = mergeStudentCalendarWithTutorFreeSlots(currentTeacher, viewedTutorKey);
+            refreshPeerStudentClassOverlayForViewedStudent();
         }
         if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
             refreshCalendarDisplay();
@@ -6084,8 +6084,7 @@ function getStudentNamesForTeacherSlot(day, hour, state) {
         isTeacherViewingStudentCalendar() &&
         String(state || '').trim().toLowerCase() === PEER_STUDENT_CLASS_SLOT_STATE
     ) {
-        const tutorKey = getTutorRosterNameForStudent(currentTeacher);
-        return getPeerStudentNamesAtClassSlot(day, hour, currentTeacher, tutorKey);
+        return [];
     }
     if (!state) return [];
     const isTutorGrid = isActiveTeacherName(currentTeacher);
@@ -6181,6 +6180,15 @@ function isSchoolManagedTeacherSlotLocked(day, hour) {
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
     if (!slotEl) return;
+    if (
+        isTeacherViewingStudentCalendar() &&
+        String(state || '').trim().toLowerCase() === PEER_STUDENT_CLASS_SLOT_STATE
+    ) {
+        slotEl.textContent = '';
+        slotEl.title = '';
+        slotEl.classList.remove('time-slot--with-student-names');
+        return;
+    }
     ensureCalendarSchoolFilterSelection();
     const assignedUnavailableName = getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state);
     if (!calendarStudentNamesInCellsVisible && !assignedUnavailableName) {
@@ -18229,6 +18237,22 @@ function clearStudentScheduledClassFromSlot(day, hour) {
 }
 
 /**
+ * Tutor slot values that may tint a student calendar merge (green / yellow reposition).
+ * Class/extra colors on the tutor aggregate belong to other students and are shown via the red peer overlay.
+ */
+function tutorSlotStateForStudentCalendarMerge(rawState) {
+    const low = String(rawState ?? '').trim().toLowerCase();
+    if (!low || low === 'null') return null;
+    if (low === 'available') return 'available';
+    if (low === 'unavailable' || low === 'rescheduled' || low === BOOKED_CLASS_SLOT_STATE) {
+        return rawState;
+    }
+    if (isStudentSchoolRepositionSlotState(low)) return rawState;
+    if (parseSchoolStateToken(low) || isLegacyOverlayState(low)) return null;
+    return null;
+}
+
+/**
  * Student calendar view: their class/extra cells (school colors) plus tutor "available" (green) where they have no class.
  */
 function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
@@ -18257,7 +18281,7 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
             const s = stu[key];
-            const t = tut[key];
+            const t = tutorSlotStateForStudentCalendarMerge(tut[key]);
             let rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
             if (!rescheduledStudentName) {
                 rescheduledStudentName = getPeerStudentRepositionHolderAtSlot(tutorKey, studentName, key);
