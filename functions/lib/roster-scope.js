@@ -535,7 +535,7 @@ function normalizedScheduleSlotState(state) {
 
 function isClearingScheduleSlotState(state) {
   const s = normalizedScheduleSlotState(state);
-  return !s || s === 'null' || s === 'available';
+  return !s || s === 'null';
 }
 
 /** Scheduled classes, bookings, and school tokens must not be wiped by availability-only sync payloads. */
@@ -550,7 +550,7 @@ function isProtectedScheduleSlotState(state) {
 
 /**
  * Slot-level merge: missing incoming keys keep base slots; protected base slots cannot be
- * overwritten by availability/empty unless the client explicitly sends null for that key.
+ * wiped by empty/clearing payloads (aligned with client mergeScheduleSlotMapsClient).
  */
 function mergeScheduleSlotMaps(baseSlots, incomingSlots, logContext = {}) {
   const base = baseSlots && typeof baseSlots === 'object' ? baseSlots : {};
@@ -566,10 +566,6 @@ function mergeScheduleSlotMaps(baseSlots, incomingSlots, logContext = {}) {
     const incClearing = isClearingScheduleSlotState(incValue);
 
     if (baseProtected && incClearing) {
-      if (incValue == null || normalizedScheduleSlotState(incValue) === 'null') {
-        delete merged[key];
-        continue;
-      }
       preserved.push({ slotKey: key, baseValue, incoming: incValue });
       continue;
     }

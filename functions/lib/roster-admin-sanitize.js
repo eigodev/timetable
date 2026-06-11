@@ -131,6 +131,7 @@ export function sanitizeRosterForAdminPersist(roster) {
 }
 
 const META_KEY = '__unavailableStudentNames';
+const AVAIL_META_KEY = '__availabilitySlots';
 const BOOKED_LC = 'booked';
 
 function rosterStudentLcSet(roster) {
@@ -145,7 +146,7 @@ function rosterStudentLcSet(roster) {
   return out;
 }
 
-/** KV schedule keys mirror roster teacher profiles + gate class-supervisor profiles when present. */
+/** KV schedule keys: teacher profiles, gate class-supervisors, and student class grids. */
 function allowedScheduleTeacherKeys(roster) {
   const allowed = new Set();
   const addExact = (n) => {
@@ -160,6 +161,11 @@ function allowedScheduleTeacherKeys(roster) {
     if (String(e.appRole || '').trim() !== 'class-supervisor') continue;
     addExact(String(e.profileName || '').trim());
   }
+
+  for (const nm of [...(Array.isArray(roster?.private) ? roster.private : [])]) addExact(nm);
+  for (const nm of [...(Array.isArray(roster?.speakon) ? roster.speakon : [])]) addExact(nm);
+  for (const nm of [...(Array.isArray(roster?.passport) ? roster.passport : [])]) addExact(nm);
+
   return allowed;
 }
 
@@ -174,12 +180,18 @@ export function pruneOneScheduleMap(map, studentLcSet) {
   /** @type {Record<string, string>} */
   const meta =
     metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw) ? { ...metaRaw } : {};
+  const availMetaRaw = map[AVAIL_META_KEY];
+  /** @type {Record<string, boolean>} */
+  let availMeta =
+    availMetaRaw && typeof availMetaRaw === 'object' && !Array.isArray(availMetaRaw)
+      ? { ...availMetaRaw }
+      : {};
 
   /** @type {Record<string, unknown>} */
   const out = {};
 
   Object.entries(map).forEach(([slotKey, value]) => {
-    if (!slotKey || slotKey === META_KEY) return;
+    if (!slotKey || slotKey === META_KEY || slotKey === AVAIL_META_KEY) return;
     const stLc =
       typeof value === 'string'
         ? value.trim().toLowerCase()
@@ -204,6 +216,13 @@ export function pruneOneScheduleMap(map, studentLcSet) {
 
   if (Object.keys(meta).length > 0) {
     out[META_KEY] = meta;
+  }
+  Object.keys(availMeta).forEach((slotKey) => {
+    const st = String(out[slotKey] ?? '').trim().toLowerCase();
+    if (st !== 'available') delete availMeta[slotKey];
+  });
+  if (Object.keys(availMeta).length > 0) {
+    out[AVAIL_META_KEY] = availMeta;
   }
   return out;
 }
