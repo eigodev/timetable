@@ -5381,10 +5381,16 @@ function mergeWeeklyClassIntoScheduleCopy(sched, studentName) {
     const ch = Number.parseInt(String(c.classHour || ''), 10);
     const eh = Number.parseInt(String(c.extraHour || ''), 10);
     if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
-        out[`${c.classDay}-${ch}`] = states.classState;
+        const ck = `${c.classDay}-${ch}`;
+        if (out[ck] !== null) {
+            out[ck] = states.classState;
+        }
     }
     if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
-        out[`${c.extraDay}-${eh}`] = states.extraState;
+        const ek = `${c.extraDay}-${eh}`;
+        if (out[ek] !== null) {
+            out[ek] = states.extraState;
+        }
     }
     return out;
 }
@@ -5621,6 +5627,10 @@ function syncWeeklyClassToAllTeacherSchedules() {
     } else if (isTeacherViewingStudentCalendar()) {
         refreshCalendarTeacherAggregateOverlay();
         refreshPeerStudentClassOverlayForViewedStudent();
+        const viewedTutorKey = getTutorRosterNameForStudent(currentTeacher);
+        if (viewedTutorKey) {
+            slotStates = mergeStudentCalendarWithTutorFreeSlots(currentTeacher, viewedTutorKey);
+        }
         if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
             refreshCalendarDisplay();
         }
@@ -18090,51 +18100,48 @@ function isTutorSlotDisplayedClassColorState(tVal) {
 }
 
 /**
- * After removing a student's class/extra at day/hour, what should the cell show?
- * Merges with tutor availability (green), reposition, or booked — not blank white when the tutor is free.
+ * Schools student calendar: remove class/extra at day/hour, sync tutor aggregate, re-merge so the cell
+ * shows tutor availability (green) instead of staying colored or turning blank white.
  */
-function getStudentCalendarSlotStateAfterRemovingClass(studentName, day, hour) {
-    const student = String(studentName || '').trim();
-    if (!student || !isStudentName(student)) return null;
-    const tutorKey = getTutorRosterNameForStudent(student);
-    if (!tutorKey) return null;
-    const key = `${day}-${hour}`;
-
-    let stuSlots = {};
-    const current = String(currentTeacher || '').trim();
-    if (current.localeCompare(student, undefined, { sensitivity: 'base' }) === 0) {
-        stuSlots = { ...slotStates };
-    } else {
-        stuSlots = mergeWeeklyClassIntoScheduleCopy(
-            getScheduleSlotMapWithoutMeta(teacherSchedules[student] || {}),
-            student
-        );
-    }
-    stuSlots = stripTeacherAvailabilityFromStudentScheduleCopy(stuSlots);
-    stuSlots = stripTeacherOverlayStatesFromStudentScheduleCopy(stuSlots);
-    delete stuSlots[key];
-    stuSlots[key] = null;
-
-    const tutSchedule = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
-    const tut = getScheduleSlotMapWithoutMeta(tutSchedule);
-    const tutorUnavailableMeta = getUnavailableStudentNamesMetaFromSchedule(tutSchedule);
-    const s = stuSlots[key];
-    const t = tut[key];
-    let rescheduledStudentName = String(tutorUnavailableMeta[key] || '').trim();
-    if (!rescheduledStudentName) {
-        rescheduledStudentName = getPeerStudentRepositionHolderAtSlot(tutorKey, student, key);
-    }
-    return resolveScheduleSlotPriority(getClassOrExtraTokenFromSlotState(s), t, {
-        studentSlot: s,
-        rescheduledStudentName,
-        includeTeacherNonPriorityFallback: false
-    });
-}
-
-/** Schools student calendar: click off a scheduled class → green when tutor is available, not empty white. */
 function clearStudentScheduledClassFromSlot(day, hour) {
-    const nextState = getStudentCalendarSlotStateAfterRemovingClass(currentTeacher, day, hour);
-    setSlotState(day, hour, nextState);
+    const studentName = String(currentTeacher || '').trim();
+    if (!studentName || !isStudentName(studentName)) return;
+    if (isLoggedInStudentCalendarReadOnly()) {
+        showAppMessage('View only — your teacher manages this schedule.');
+        return;
+    }
+
+    const key = `${day}-${hour}`;
+    const displayState = getDisplaySlotState(day, hour);
+    const displayResolved = String(
+        resolveSchoolTokenInfoFromState(displayState)?.token || String(displayState || '').trim().toLowerCase()
+    )
+        .trim()
+        .toLowerCase();
+    if (!parseSchoolStateToken(displayResolved) && !isLegacyOverlayState(displayResolved)) {
+        return;
+    }
+
+    let slots = { ...getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {}) };
+    slots[key] = null;
+    slots = stripTeacherAvailabilityFromStudentScheduleCopy(slots);
+    slots = stripTeacherOverlayStatesFromStudentScheduleCopy(slots);
+    teacherSchedules[studentName] = slots;
+
+    const repositionSynced = syncStudentRepositionsToTutorSchedule(studentName);
+    syncWeeklyClassToAllTeacherSchedules();
+
+    markSchedulePendingCloudUpload();
+    saveAllSchedulesLocal();
+    saveAllSchedules();
+
+    if (repositionSynced) {
+        refreshCalendarsAfterStudentRepositionSync(studentName);
+    } else if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+        refreshCalendarDisplay();
+    }
+    resetClassStartNotificationCache();
+    notifyUpcomingClasses();
 }
 
 /**
@@ -18338,8 +18345,8 @@ function initCalendar() {
                     return;
                 }
                 if (isLoggedInStudentCalendarReadOnly()) return;
-                const currentState = getSlotState(day, hour);
-                const normalized = String(currentState || '').trim().toLowerCase();
+                const displayState = getDisplaySlotState(day, hour);
+                const normalized = String(displayState || '').trim().toLowerCase();
                 const resolvedToken = String(
                     resolveSchoolTokenInfoFromState(normalized)?.token || normalized
                 ).trim().toLowerCase();
@@ -18447,11 +18454,9 @@ function initCalendar() {
             const selectedToken = String(resolveSchoolTokenInfoFromState(selectedState)?.token || selectedState).trim().toLowerCase();
             const nextToken = String(resolveSchoolTokenInfoFromState(nextState)?.token || nextState || '').trim().toLowerCase();
             if (nextToken && selectedToken === nextToken) {
-                nextState = getStudentCalendarSlotStateAfterRemovingClass(
-                    currentTeacher,
-                    currentSlot.day,
-                    currentSlot.hour
-                );
+                clearStudentScheduledClassFromSlot(currentSlot.day, currentSlot.hour);
+                hideContextMenu();
+                return;
             }
         }
         setSlotState(currentSlot.day, currentSlot.hour, nextState);
