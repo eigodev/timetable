@@ -5446,6 +5446,14 @@ function isTeacherRepositionSlotState(state) {
     return s === 'unavailable' || s === 'rescheduled' || s === BOOKED_CLASS_SLOT_STATE;
 }
 
+/** Yellow reposition on teacher roster (not booked). */
+function isTeacherYellowRepositionCellState(state) {
+    const low = String(state || '').trim().toLowerCase();
+    if (low === 'unavailable' || low === 'rescheduled') return true;
+    if (isStudentSchoolRepositionSlotState(low)) return true;
+    return false;
+}
+
 /**
  * Merge slot states: class/extra > reposition/booked > available > empty.
  * @param {string|null|undefined} classOrExtraToken
@@ -5758,9 +5766,8 @@ function syncStudentRepositionsToTutorSchedule(studentName) {
             }
         } else if (holdsSlot) {
             delete meta[key];
-            const tutLow = String(tutorSlots[key] || '').trim().toLowerCase();
-            if (tutLow === 'rescheduled' || tutLow === 'unavailable') {
-                delete tutorSlots[key];
+            if (isTeacherYellowRepositionCellState(tutorSlots[key])) {
+                tutorSlots[key] = 'available';
                 touched = true;
             }
         }
@@ -5769,7 +5776,14 @@ function syncStudentRepositionsToTutorSchedule(studentName) {
     if (!touched) return false;
     const prunedMeta = pruneUnavailableStudentMetaForSlotMap(meta, tutorSlots);
     teacherUnavailableStudentNamesByTeacher[tutorKey] = prunedMeta;
-    teacherSchedules[tutorKey] = withUnavailableStudentNamesMeta(tutorKey, tutorSlots);
+    const availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(tutorExisting);
+    Object.keys(tutorSlots).forEach((k) => {
+        if (String(tutorSlots[k] || '').trim().toLowerCase() === 'available') {
+            availMeta[k] = true;
+        }
+    });
+    let nextRecord = withUnavailableStudentNamesMeta(tutorKey, tutorSlots);
+    teacherSchedules[tutorKey] = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
     return true;
 }
 
@@ -5856,20 +5870,30 @@ function clearTeacherYellowSlotToAvailable(day, hour) {
         return;
     }
     const state = getSlotState(day, hour);
-    if (!isTeacherRepositionSlotState(state)) return;
+    if (!isTeacherYellowRepositionCellState(state)) return;
 
+    const key = `${day}-${hour}`;
     let studentName = getUnavailableAssignedStudentNameForCurrentTeacherSlot(day, hour, state);
     if (!studentName) {
         studentName = findTutorStudentWithRepositionAtSlot(currentTeacher, day, hour);
     }
-    const studentCleared = studentName
-        ? clearStudentSchoolRepositionAtSlot(studentName, day, hour)
-        : false;
+    if (studentName) {
+        clearStudentSchoolRepositionAtSlot(studentName, day, hour);
+        syncStudentRepositionsToTutorSchedule(studentName);
+    }
+
+    const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
+    if (byTeacher && Object.prototype.hasOwnProperty.call(byTeacher, key)) {
+        delete byTeacher[key];
+    }
+    const supMap = supervisorSlotBookingsByTeacher[currentTeacher];
+    if (supMap && Object.prototype.hasOwnProperty.call(supMap, key)) {
+        delete supMap[key];
+    }
 
     setSlotState(day, hour, 'available');
-    saveTeacherSchedule(currentTeacher);
 
-    if (studentCleared && studentName) {
+    if (studentName) {
         saveTeacherSchedule(studentName);
         refreshCalendarsAfterStudentRepositionSync(studentName);
     } else if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
@@ -6285,9 +6309,7 @@ function isTeacherRepositionCancelContextMenuEnabled(day, hour) {
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return false;
     if (isLoggedInStudentCalendarReadOnly()) return false;
     if (isGateViewingAlienTeacherGrid()) return false;
-    const raw = getSlotState(day, hour);
-    const low = String(raw || '').trim().toLowerCase();
-    return low === 'unavailable' || low === 'rescheduled';
+    return isTeacherYellowRepositionCellState(getSlotState(day, hour));
 }
 
 /**
@@ -18657,8 +18679,9 @@ function initCalendar() {
 
     setupCalendarStudentPopoverDismiss();
 
-    // Close context menu when clicking elsewhere
-    document.addEventListener('click', () => {
+    // Close context menu when clicking elsewhere (not on the menu itself)
+    document.addEventListener('click', (e) => {
+        if (contextMenu && contextMenu.contains(e.target)) return;
         hideContextMenu();
     });
 
@@ -18687,10 +18710,11 @@ function initCalendar() {
         }
         if (currentContextMenuMode === 'teacher-cancel-reposition') {
             const action = String(item.dataset.action || '').trim();
-            if (action === 'cancel-reposition' && currentSlot) {
-                clearTeacherYellowSlotToAvailable(currentSlot.day, currentSlot.hour);
-            }
+            const slot = currentSlot ? { ...currentSlot } : null;
             hideContextMenu();
+            if (action === 'cancel-reposition' && slot) {
+                clearTeacherYellowSlotToAvailable(slot.day, slot.hour);
+            }
             return;
         }
         const color = item.dataset.color;
@@ -19076,9 +19100,13 @@ function setSlotState(day, hour, state) {
         const isAvailabilityWrite =
             nextLow === 'available' || !state || nextLow === '' || nextLow === 'null';
         if (isAvailabilityWrite) {
-            if (isTeacherSlotOccupiedForAvailability(day, hour)) return;
-            const aggregated = applyAllStudentColorsToTeacherScheduleCopy(slotStates, currentTeacher);
-            if (getClassOrExtraTokenFromSlotState(aggregated[key])) return;
+            const curState = getSlotState(day, hour);
+            const clearingYellowReposition = isTeacherYellowRepositionCellState(curState);
+            if (!clearingYellowReposition) {
+                if (isTeacherSlotOccupiedForAvailability(day, hour)) return;
+                const aggregated = applyAllStudentColorsToTeacherScheduleCopy(slotStates, currentTeacher);
+                if (getClassOrExtraTokenFromSlotState(aggregated[key])) return;
+            }
         }
     }
 
