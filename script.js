@@ -5516,6 +5516,13 @@ function isTeacherSlotOccupiedForAvailability(day, hour) {
 function applyAllStudentColorsToTeacherScheduleCopy(sched, teacherName, liveAvailMetaOverride) {
     const out = { ...sched };
     const teacherFilter = String(teacherName || '').trim();
+    const tutorRepositionPreserve = {};
+    Object.entries(sched || {}).forEach(([k, v]) => {
+        const low = String(v ?? '').trim().toLowerCase();
+        if (low === 'rescheduled' || low === 'unavailable' || low === BOOKED_CLASS_SLOT_STATE) {
+            tutorRepositionPreserve[k] = v;
+        }
+    });
     const tutorGreenSlots = {};
     Object.keys(out).forEach((k) => {
         if (String(out[k] || '').trim().toLowerCase() === 'available') {
@@ -5620,9 +5627,12 @@ function applyAllStudentColorsToTeacherScheduleCopy(sched, teacherName, liveAvai
         out[k] = keyBest[k];
     });
     Object.keys(tutorGreenSlots).forEach((k) => {
-        if (!keyBest[k]) {
-            out[k] = 'available';
-        }
+        if (keyBest[k]) return;
+        if (isTutorOverlayBlockingAvailabilityState(out[k])) return;
+        out[k] = 'available';
+    });
+    Object.entries(tutorRepositionPreserve).forEach(([k, v]) => {
+        if (!keyBest[k]) out[k] = v;
     });
     return out;
 }
@@ -5783,12 +5793,16 @@ function syncStudentRepositionsToTutorSchedule(studentName) {
     if (!touched) return false;
     const prunedMeta = pruneUnavailableStudentMetaForSlotMap(meta, tutorSlots);
     teacherUnavailableStudentNamesByTeacher[tutorKey] = prunedMeta;
-    const availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(tutorExisting);
+    let availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(tutorExisting);
     Object.keys(tutorSlots).forEach((k) => {
-        if (String(tutorSlots[k] || '').trim().toLowerCase() === 'available') {
+        const low = String(tutorSlots[k] || '').trim().toLowerCase();
+        if (low === 'available') {
             availMeta[k] = true;
+        } else if (isTutorOverlayBlockingAvailabilityState(tutorSlots[k])) {
+            delete availMeta[k];
         }
     });
+    availMeta = pruneAvailabilityMetaAgainstSlots(availMeta, tutorSlots);
     let nextRecord = withUnavailableStudentNamesMeta(tutorKey, tutorSlots);
     teacherSchedules[tutorKey] = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
     return true;
@@ -10308,6 +10322,26 @@ function getScheduleSlotMapWithoutMeta(schedule) {
     return out;
 }
 
+/** Slot states that must not be replaced by tutor green availability overlay. */
+function isTutorOverlayBlockingAvailabilityState(state) {
+    const low = String(state ?? '').trim().toLowerCase();
+    if (!low || low === 'null' || low === 'available') return false;
+    if (low === 'rescheduled' || low === 'unavailable' || low === BOOKED_CLASS_SLOT_STATE) return true;
+    if (isStudentSchoolRepositionSlotState(low)) return true;
+    return !!(parseSchoolStateToken(low) || isLegacyOverlayState(low));
+}
+
+function pruneAvailabilityMetaAgainstSlots(meta, slots) {
+    const out = { ...(meta || {}) };
+    const map = slots && typeof slots === 'object' ? slots : {};
+    Object.keys(out).forEach((slotKey) => {
+        if (isTutorOverlayBlockingAvailabilityState(map[slotKey])) {
+            delete out[slotKey];
+        }
+    });
+    return out;
+}
+
 function getTeacherAvailabilitySlotsMetaFromSchedule(schedule) {
     const meta = {};
     if (!schedule || typeof schedule !== 'object') return meta;
@@ -10324,7 +10358,7 @@ function getTeacherAvailabilitySlotsMetaFromSchedule(schedule) {
             meta[slotKey] = true;
         }
     });
-    return meta;
+    return pruneAvailabilityMetaAgainstSlots(meta, slots);
 }
 
 function withTeacherAvailabilitySlotsMeta(schedule, meta) {
@@ -10383,7 +10417,11 @@ function deriveTeacherAvailabilityMetaFromSlots(slotMap) {
 function persistTutorScheduleSlots(teacherName, slotMap) {
     const name = String(teacherName || '').trim();
     const sched = teacherSchedules[name] ? { ...teacherSchedules[name] } : {};
-    const availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(sched);
+    const existingSlots = getScheduleSlotMapWithoutMeta(sched);
+    const mergedSlots = { ...existingSlots, ...(slotMap || {}) };
+    let availMeta = getTeacherAvailabilitySlotsMetaFromSchedule(sched);
+    Object.assign(availMeta, deriveTeacherAvailabilityMetaFromSlots(mergedSlots));
+    availMeta = pruneAvailabilityMetaAgainstSlots(availMeta, mergedSlots);
     let next = withUnavailableStudentNamesMeta(name, slotMap);
     return withTeacherAvailabilitySlotsMeta(next, availMeta);
 }
