@@ -2515,14 +2515,30 @@ function refreshScheduleViewFromMemory() {
     }
 }
 
+/** Align in-memory booked/reposition name meta with persisted tutor schedules. */
+function hydrateTeacherUnavailableSessionFromSchedules() {
+    teachersList.forEach((tName) => {
+        const name = String(tName || '').trim();
+        if (!name || !isActiveTeacherName(name)) return;
+        const raw = teacherSchedules[name];
+        if (!raw || typeof raw !== 'object') return;
+        teacherUnavailableStudentNamesByTeacher[name] = getUnavailableStudentNamesMetaFromSchedule(raw);
+    });
+}
+
 /** Apply schedule blob written by another tab/window (localStorage `storage` event). */
 function applySchedulesFromLocalStorageToMemory(opts = {}) {
     if (!localStorage.getItem(STORAGE_KEY)) return false;
-    replaceTeacherSchedulesFromObject(readSchedulesObjectFromLocalStorage());
+    const imported = readSchedulesObjectFromLocalStorage();
+    const importedSnapshot = JSON.stringify(imported);
+    replaceTeacherSchedulesFromObject(imported);
+    hydrateTeacherUnavailableSessionFromSchedules();
     healLoggedInStudentScheduleGridIfNeeded();
     applyTeacherDataIsolationInMemory();
     syncWeeklyClassToAllTeacherSchedules();
-    if (syncAllStudentRepositionsForAllTutors()) {
+    syncAllStudentRepositionsForAllTutors();
+    const healedSnapshot = JSON.stringify(teacherSchedules);
+    if (healedSnapshot !== importedSnapshot) {
         saveAllSchedulesLocal();
     }
     if (opts.refreshUi !== false) {
@@ -2530,6 +2546,8 @@ function applySchedulesFromLocalStorageToMemory(opts = {}) {
     }
     return true;
 }
+
+let crossTabScheduleSyncTimer = null;
 
 function initCrossTabScheduleSyncListener() {
     try {
@@ -2541,13 +2559,19 @@ function initCrossTabScheduleSyncListener() {
     window.addEventListener('storage', (e) => {
         if (e.storageArea !== localStorage) return;
         if (e.key !== STORAGE_KEY && e.key !== SCHEDULES_LOCAL_UPDATED_KEY) return;
-        if (timetableCloudPollAuthHeadersOrNull()) {
-            void fetchSchedulesFromCloudAndMerge().then((ok) => {
-                if (ok) refreshScheduleViewFromMemory();
-            });
-            return;
+        if (crossTabScheduleSyncTimer) {
+            clearTimeout(crossTabScheduleSyncTimer);
         }
-        applySchedulesFromLocalStorageToMemory({ refreshUi: true });
+        crossTabScheduleSyncTimer = window.setTimeout(() => {
+            crossTabScheduleSyncTimer = null;
+            if (timetableCloudPollAuthHeadersOrNull()) {
+                void fetchSchedulesFromCloudAndMerge().then((ok) => {
+                    if (ok) refreshScheduleViewFromMemory();
+                });
+                return;
+            }
+            applySchedulesFromLocalStorageToMemory({ refreshUi: true });
+        }, 300);
     });
 }
 
@@ -5658,9 +5682,7 @@ function syncWeeklyClassToAllTeacherSchedules() {
         const raw = teacherSchedules[tName] ? { ...teacherSchedules[tName] } : {};
         const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
         const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
-        if (!teacherUnavailableStudentNamesByTeacher[tName]) {
-            teacherUnavailableStudentNamesByTeacher[tName] = { ...unavailableMeta };
-        }
+        teacherUnavailableStudentNamesByTeacher[tName] = { ...unavailableMeta };
         const nextSlots = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, tName);
         const availMeta = deriveTeacherAvailabilityMetaFromSlots(nextSlots);
         let nextRecord = withUnavailableStudentNamesMeta(tName, nextSlots);
@@ -18584,9 +18606,6 @@ function loadTeacherSchedule(teacherName) {
     if (isActiveTeacherName(teacherName)) {
         teacherUnavailableStudentNamesByTeacher[teacherName] = unavailableMeta;
         slotStates = applyAllStudentColorsToTeacherScheduleCopy(raw, teacherName);
-        const mergedAvailMeta = deriveTeacherAvailabilityMetaFromSlots(slotStates);
-        let nextRecord = withUnavailableStudentNamesMeta(teacherName, { ...slotStates });
-        teacherSchedules[teacherName] = withTeacherAvailabilitySlotsMeta(nextRecord, mergedAvailMeta);
     } else {
         slotStates = mergeWeeklyClassIntoScheduleCopy(raw, teacherName);
         if (isStudentName(teacherName)) {
