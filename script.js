@@ -2362,7 +2362,15 @@ function mergeScheduleSlotMapsClient(baseSlots, incomingSlots) {
         const baseProtected = isProtectedScheduleSlotStateClient(baseValue);
         const incClearing = isClearingScheduleSlotStateClient(incValue);
 
-        if (baseProtected && incClearing) continue;
+        if (baseProtected && incClearing) {
+            if (
+                (incValue == null || normalizedScheduleSlotStateClient(incValue) === 'null') &&
+                isStudentSchoolRepositionSlotState(baseValue)
+            ) {
+                delete merged[key];
+            }
+            continue;
+        }
 
         if (incClearing) {
             delete merged[key];
@@ -5874,8 +5882,7 @@ function clearStudentSchoolRepositionAtSlot(studentName, day, hour) {
     const key = `${day}-${hour}`;
     const raw = teacherSchedules[student] ? { ...teacherSchedules[student] } : {};
     const slots = { ...getScheduleSlotMapWithoutMeta(raw) };
-    if (!isStudentSchoolRepositionSlotState(slots[key])) return false;
-    delete slots[key];
+    slots[key] = null;
     let next = mergeWeeklyClassIntoScheduleCopy(slots, student);
     next = stripTeacherAvailabilityFromStudentScheduleCopy(next);
     next = stripTeacherOverlayStatesFromStudentScheduleCopy(next);
@@ -11579,6 +11586,18 @@ function applyCloudSchedulesToMemoryAndView(schedules, remoteLastUpdated) {
 }
 
 // Save all schedules to Cloudflare KV or localStorage (with debouncing)
+function flushSchedulesToCloudImmediately() {
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+    }
+    if (isSaving) {
+        schedulesCloudSavePending = true;
+        return Promise.resolve();
+    }
+    return performSave();
+}
+
 function saveAllSchedules() {
     if (isKvQuotaExceededSession()) {
         saveAllSchedulesLocal();
@@ -18290,6 +18309,13 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
         if (isStudentSchoolRepositionSlotState(v)) {
             allKeys.add(k);
         }
+        const liveLow = String(v ?? '').trim().toLowerCase();
+        if (
+            (liveLow === 'available' || liveLow === 'null' || v === null || v === undefined) &&
+            isStudentSchoolRepositionSlotState(existing[k])
+        ) {
+            allKeys.add(k);
+        }
     });
 
     allKeys.forEach((key) => {
@@ -18306,6 +18332,7 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
         const existingPainted = normalizeStudentScheduleOverlayToken(existing[key], student);
         const hadClassOrExtra =
             existingPainted === classState || (extraState && existingPainted === extraState);
+        const hadReposition = isStudentSchoolRepositionSlotState(existing[key]);
         const clearedInView =
             liveVal === null ||
             liveVal === undefined ||
@@ -18315,7 +18342,7 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
             out[key] = null;
             return;
         }
-        if (hadClassOrExtra && clearedInView) {
+        if ((hadClassOrExtra || hadReposition) && clearedInView) {
             out[key] = null;
         }
     });
@@ -18442,8 +18469,8 @@ function clearStudentSchoolClassOrExtraAtSlot(studentName, day, hour) {
 function finishStudentSchoolSlotClearToGreen(studentName, day, hour) {
     const key = `${day}-${hour}`;
     const tutorKey = getTutorRosterNameForStudent(studentName);
-    const repositionSynced = syncStudentRepositionsToTutorSchedule(studentName);
-    syncWeeklyClassToAllTeacherSchedules();
+
+    syncStudentRepositionsToTutorSchedule(studentName);
 
     if (tutorKey && isActiveTeacherName(tutorKey)) {
         const tutorRaw = teacherSchedules[tutorKey] ? { ...teacherSchedules[tutorKey] } : {};
@@ -18463,6 +18490,8 @@ function finishStudentSchoolSlotClearToGreen(studentName, day, hour) {
         }
     }
 
+    syncWeeklyClassToAllTeacherSchedules();
+
     if (tutorKey) {
         slotStates = mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey);
         refreshPeerStudentClassOverlayForViewedStudent();
@@ -18473,9 +18502,11 @@ function finishStudentSchoolSlotClearToGreen(studentName, day, hour) {
     }
     saveTeacherSchedule(studentName);
 
-    if (repositionSynced) {
-        refreshCalendarsAfterStudentRepositionSync(studentName);
-    } else if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
+    markSchedulePendingCloudUpload();
+    saveAllSchedulesLocal();
+    void flushSchedulesToCloudImmediately();
+
+    if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
         refreshCalendarDisplay();
     }
     resetClassStartNotificationCache();

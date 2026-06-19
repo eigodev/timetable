@@ -566,6 +566,12 @@ function mergeScheduleSlotMaps(baseSlots, incomingSlots, logContext = {}) {
     const incClearing = isClearingScheduleSlotState(incValue);
 
     if (baseProtected && incClearing) {
+      if (incValue == null || normalizedScheduleSlotState(incValue) === 'null') {
+        if (/^school::.+::reposition$/.test(normalizedScheduleSlotState(baseValue))) {
+          delete merged[key];
+          continue;
+        }
+      }
       preserved.push({ slotKey: key, baseValue, incoming: incValue });
       continue;
     }
