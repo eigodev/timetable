@@ -643,10 +643,12 @@ function mergeSingleScheduleRecord(baseSchedule, incomingSchedule, logContext = 
     inc[SCHEDULE_UNAVAILABLE_META_KEY],
     mergedSlots
   );
-  const mergedAvail = mergeAvailabilitySlotsMeta(
-    base[SCHEDULE_AVAILABILITY_META_KEY],
-    inc[SCHEDULE_AVAILABILITY_META_KEY]
-  );
+  const mergedAvail = {};
+  for (const [slotKey, value] of Object.entries(mergedSlots)) {
+    if (normalizedScheduleSlotState(value) === 'available') {
+      mergedAvail[slotKey] = true;
+    }
+  }
   const out = { ...mergedSlots };
   if (Object.keys(mergedMeta).length > 0) {
     out[SCHEDULE_UNAVAILABLE_META_KEY] = mergedMeta;

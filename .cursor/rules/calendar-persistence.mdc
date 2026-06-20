@@ -1,0 +1,75 @@
+---
+description: Calendar edits must persist; teacher/student view color contract (TimeTable)
+alwaysApply: true
+---
+
+# Calendar persistence & color contract
+
+All user edits on **Teacher roster** and **Student Schools** calendars must survive reload, new session, cloud sync, and cross-tab refresh. Do not ship UI-only changes that revert after save, poll, or `loadTeacherSchedule`.
+
+## Persistence requirements (non-negotiable)
+
+Every calendar edit must flow through:
+
+1. **`slotStates`** (live grid) or explicit slot mutation
+2. **`saveTeacherSchedule(profileName)`** — writes `teacherSchedules`, `localStorage`, and **immediate cloud flush** for teacher + student profile keys
+3. **Meta keys stay aligned with slot maps** — `__availabilitySlots` must match `'available'` slots only; never resurrect greens from stale meta on load/sync/merge
+
+### Teacher roster edits (must persist)
+
+| Action | Save path |
+|--------|-----------|
+| White ↔ green (left-click) | `setSlotState` → `patchTeacherAvailabilitySlotMeta` → `saveTeacherSchedule(tutor)` |
+| Select all / Clear all | `patchTeacherAvailabilitySlotMeta` per slot → `saveTeacherSchedule(tutor)` |
+| Cancel Reposition (right-click yellow) | `clearStudentSchoolRepositionAtSlot` + `setSlotState(available)` + `saveTeacherSchedule(student)` when linked |
+
+### Student Schools edits (must persist)
+
+| Action | Save path |
+|--------|-----------|
+| Class / Extra / Reposition (context menu) | `setSlotState` → `saveTeacherSchedule(student)` + tutor sync |
+| Left-click clear class/extra/reposition → green | `clearStudentSchool*AtSlot` → `finishStudentSchoolSlotClearToGreen` → `saveTeacherSchedule(tutor)` + `saveTeacherSchedule(student)` |
+
+### Do not break persistence when fixing bugs
+
+- **`loadTeacherSchedule`** loads into `slotStates` only — it must **not** write back to `teacherSchedules` (that caused sync loops and stale meta). Persistence happens only via **`saveTeacherSchedule`**.
+- **`applyAllStudentColorsToTeacherScheduleCopy`** must use **slot-map-derived** availability meta (`deriveTeacherAvailabilityMetaFromSlots` / live copy override), not orphaned `__availabilitySlots` flags.
+- **Cloud merge** must derive `__availabilitySlots` from merged slot maps, not union stale remote meta over local clears.
+- Avoid debounced-only cloud save for calendar profile writes; use **`flushSchedulesToCloudImmediately()`** via `saveTeacherSchedule` for teacher/student keys.
+
+## Color contract (what each view shows)
+
+### Student Schools calendar
+
+- **Green** — tutor slot marked available (`available` / `__availabilitySlots`).
+- **White (empty)** — tutor not available at that time.
+- **Yellow** — this student's reposition (or tutor mirror).
+- **School primary/secondary colors** — this student's scheduled class / extra.
+- **Red** — other students' classes at the same tutor (peer overlay); no names on red cells.
+
+Student merge source: `mergeStudentCalendarWithTutorFreeSlots` — tutor greens must match teacher roster after save.
+
+### Teacher roster calendar
+
+- **White / green** — tutor availability only (left-click toggles).
+- **School colors** — aggregated from assigned students' stored class/extra slots (`applyAllStudentColorsToTeacherScheduleCopy`).
+- **Yellow** — reposition / booked (not left-click toggled).
+- **Red peer overlay** — when viewing one student in Schools, other students' classes at that slot.
+
+Teacher must see each student's scheduled class in that student's **school color**, not a single generic color.
+
+## Before merging calendar/sync changes
+
+Verify:
+
+1. Edit → hard refresh → state unchanged
+2. Edit → wait for poll / second tab → state unchanged
+3. Teacher green/white matches student Schools view for the same tutor
+4. Cancelling reposition/class stays cancelled after new session
+
+## Key functions (reference)
+
+- Save: `saveTeacherSchedule`, `flushSchedulesToCloudImmediately`, `persistStudentScheduleFromCalendarView`
+- Availability meta: `patchTeacherAvailabilitySlotMeta`, `deriveTeacherAvailabilityMetaFromSlots`, `pruneAvailabilityMetaAgainstSlots`
+- Merge: `mergeStudentCalendarWithTutorFreeSlots`, `mergeScheduleRecordsClient`
+- Sync: `syncStudentRepositionsToTutorSchedule`, `syncWeeklyClassToAllTeacherSchedules` (must not restore cleared availability)

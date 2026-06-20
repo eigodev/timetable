@@ -2402,9 +2402,8 @@ function mergeScheduleRecordsClient(baseRecord, incomingRecord) {
     if (Object.keys(prunedMeta).length > 0) {
         out[TEACHER_UNAVAILABLE_STUDENTS_META_KEY] = prunedMeta;
     }
-    const baseAvail = getTeacherAvailabilitySlotsMetaFromSchedule(base);
-    const incAvail = getTeacherAvailabilitySlotsMetaFromSchedule(inc);
-    return withTeacherAvailabilitySlotsMeta(out, { ...baseAvail, ...incAvail });
+    const availMeta = deriveTeacherAvailabilityMetaFromSlots(mergedSlots);
+    return withTeacherAvailabilitySlotsMeta(out, availMeta);
 }
 
 function studentScheduleGridHasClassSlots(slots) {
@@ -5691,14 +5690,24 @@ function syncWeeklyClassToAllTeacherSchedules() {
         const slotsOnly = getScheduleSlotMapWithoutMeta(raw);
         const unavailableMeta = getUnavailableStudentNamesMetaFromSchedule(raw);
         teacherUnavailableStudentNamesByTeacher[tName] = { ...unavailableMeta };
-        const nextSlots = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, tName);
+        const slotMapAvailMeta = deriveTeacherAvailabilityMetaFromSlots(slotsOnly);
+        const nextSlots = applyAllStudentColorsToTeacherScheduleCopy(
+            slotsOnly,
+            tName,
+            slotMapAvailMeta
+        );
         const availMeta = deriveTeacherAvailabilityMetaFromSlots(nextSlots);
         let nextRecord = withUnavailableStudentNamesMeta(tName, nextSlots);
         teacherSchedules[tName] = withTeacherAvailabilitySlotsMeta(nextRecord, availMeta);
     });
     if (currentTeacher && isActiveTeacherName(currentTeacher)) {
         const slotsOnly = getScheduleSlotMapWithoutMeta(teacherSchedules[currentTeacher] || {});
-        slotStates = applyAllStudentColorsToTeacherScheduleCopy(slotsOnly, currentTeacher);
+        const slotMapAvailMeta = deriveTeacherAvailabilityMetaFromSlots(slotsOnly);
+        slotStates = applyAllStudentColorsToTeacherScheduleCopy(
+            slotsOnly,
+            currentTeacher,
+            slotMapAvailMeta
+        );
         if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
             refreshCalendarDisplay();
         }
@@ -5946,8 +5955,6 @@ function clearTeacherYellowSlotToAvailable(day, hour) {
     if (studentName) {
         saveTeacherSchedule(studentName);
         refreshCalendarsAfterStudentRepositionSync(studentName);
-    } else if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
-        refreshCalendarDisplay();
     }
 }
 
@@ -10364,7 +10371,8 @@ function pruneAvailabilityMetaAgainstSlots(meta, slots) {
     const out = { ...(meta || {}) };
     const map = slots && typeof slots === 'object' ? slots : {};
     Object.keys(out).forEach((slotKey) => {
-        if (isTutorOverlayBlockingAvailabilityState(map[slotKey])) {
+        const low = String(map[slotKey] ?? '').trim().toLowerCase();
+        if (low !== 'available' || isTutorOverlayBlockingAvailabilityState(map[slotKey])) {
             delete out[slotKey];
         }
     });
@@ -18388,6 +18396,11 @@ function saveTeacherSchedule(teacherName) {
     }
     markSchedulePendingCloudUpload();
     saveAllSchedulesLocal();
+    // Teacher roster + student Schools grids: persist to KV immediately (not debounced).
+    if (isActiveTeacherName(teacherName) || isStudentName(teacherName)) {
+        void flushSchedulesToCloudImmediately();
+        return;
+    }
     const flushCloud =
         isGateViewingAlienTeacherGrid() && getGateSessionAppRole() === 'class-supervisor';
     if (flushCloud) {
@@ -18407,7 +18420,8 @@ function saveTeacherSchedule(teacherName) {
 function computeSlotStatesForProfile(name) {
     const raw = teacherSchedules[name] ? getScheduleSlotMapWithoutMeta(teacherSchedules[name]) : {};
     if (isActiveTeacherName(name)) {
-        return applyAllStudentColorsToTeacherScheduleCopy(raw, name);
+        const slotMapAvailMeta = deriveTeacherAvailabilityMetaFromSlots(raw);
+        return applyAllStudentColorsToTeacherScheduleCopy(raw, name, slotMapAvailMeta);
     }
     let out = mergeWeeklyClassIntoScheduleCopy(raw, name);
     if (isStudentName(name)) {
@@ -18501,10 +18515,6 @@ function finishStudentSchoolSlotClearToGreen(studentName, day, hour) {
         saveTeacherSchedule(tutorKey);
     }
     saveTeacherSchedule(studentName);
-
-    markSchedulePendingCloudUpload();
-    saveAllSchedulesLocal();
-    void flushSchedulesToCloudImmediately();
 
     if (document.getElementById('timeSlots')?.querySelector('.time-slot')) {
         refreshCalendarDisplay();
@@ -18636,7 +18646,8 @@ function loadTeacherSchedule(teacherName) {
     calendarPeerStudentClassOverlay = null;
     if (isActiveTeacherName(teacherName)) {
         teacherUnavailableStudentNamesByTeacher[teacherName] = unavailableMeta;
-        slotStates = applyAllStudentColorsToTeacherScheduleCopy(raw, teacherName);
+        const slotMapAvailMeta = deriveTeacherAvailabilityMetaFromSlots(raw);
+        slotStates = applyAllStudentColorsToTeacherScheduleCopy(raw, teacherName, slotMapAvailMeta);
     } else {
         slotStates = mergeWeeklyClassIntoScheduleCopy(raw, teacherName);
         if (isStudentName(teacherName)) {
@@ -19808,6 +19819,7 @@ function selectAll() {
                     return;
                 }
                 slotStates[key] = 'available';
+                patchTeacherAvailabilitySlotMeta(currentTeacher, key, true);
                 applyStateVisualToSlot(slot, 'available');
                 renderStudentNamesInSlot(slot, day, hour, 'available');
                 const byTeacher = teacherUnavailableStudentNamesByTeacher[currentTeacher];
@@ -19845,6 +19857,7 @@ function clearAll() {
                     return;
                 }
                 slotStates[key] = null;
+                patchTeacherAvailabilitySlotMeta(currentTeacher, key, false);
                 applyStateVisualToSlot(slot, null);
                 renderStudentNamesInSlot(slot, day, hour, null);
             }
