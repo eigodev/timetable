@@ -72,6 +72,7 @@ Verify:
 2. Edit → wait for poll / second tab → state unchanged
 3. Teacher green/white matches student Schools view for the same tutor
 4. Cancelling reposition/class stays cancelled after new session
+5. Same teacher account in two browsers shows identical schedule after refresh (cloud is authoritative when signed in)
 
 ## Key functions (reference)
 

@@ -5,7 +5,7 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 // LocalStorage key (fallback)
 const STORAGE_KEY = 'timetable_schedules';
-/** ISO timestamp bumped on every local schedule write; used to prefer local over stale cloud on reload. */
+/** ISO timestamp of last cloud `lastUpdated` mirrored locally (offline fallback only). */
 const SCHEDULES_LOCAL_UPDATED_KEY = 'timetable_schedules_local_updated';
 /** Session-only: local edits not yet confirmed by KV (avoids stale cloud wiping a fast refresh). */
 const SCHEDULE_PENDING_CLOUD_UPLOAD_KEY = 'timetable_schedule_pending_cloud_upload';
@@ -2476,10 +2476,14 @@ function healLoggedInStudentScheduleGridIfNeeded() {
 }
 
 /** When signed in, KV is source of truth on every load/refresh — not localStorage timestamps. */
+function isCloudScheduleSyncActive() {
+    return !!timetableCloudPollAuthHeadersOrNull();
+}
+
 function shouldPreferLocalSchedulesOverRemote(remoteLastUpdated) {
     if (shouldForceCloudSchedulesAfterLogin()) return false;
+    if (isCloudScheduleSyncActive()) return false;
     if (isSchedulePendingCloudUpload()) return true;
-    if (timetableCloudPollAuthHeadersOrNull()) return false;
     const localTs = getSchedulesLocalUpdatedAt();
     const remoteTs = remoteLastUpdated ? String(remoteLastUpdated) : '';
     return !!(localTs && remoteTs && localTs > remoteTs);
@@ -2499,17 +2503,29 @@ function shouldForceCloudSchedulesAfterLogin() {
 
 function mergeRemoteSchedulesAfterLoad(remoteSchedules, remoteLastUpdated) {
     const localParsed = readSchedulesObjectFromLocalStorage();
+    const remote = remoteSchedules && typeof remoteSchedules === 'object' ? remoteSchedules : {};
 
     if (shouldPreferLocalSchedulesOverRemote(remoteLastUpdated)) {
         replaceTeacherSchedulesFromObject(localParsed);
         healLoggedInStudentScheduleGridIfNeeded();
-        logScheduleSyncDebug('kept local schedules (pending upload or offline)', {
+        logScheduleSyncDebug('kept local schedules (offline / no auth)', {
             teacher: loggedInTeacherName || ''
         });
         return;
     }
 
-    const remote = remoteSchedules && typeof remoteSchedules === 'object' ? remoteSchedules : {};
+    if (isCloudScheduleSyncActive()) {
+        replaceTeacherSchedulesFromObject({ ...remote });
+        healLoggedInStudentScheduleGridIfNeeded();
+        logScheduleSyncDebug('applied cloud schedules (authoritative)', {
+            teacher: loggedInTeacherName || '',
+            remoteKeys: Object.keys(remote).length,
+            memoryKeys: Object.keys(teacherSchedules || {}).length,
+            lastUpdated: remoteLastUpdated || null
+        });
+        return;
+    }
+
     const merged = {};
     const allKeys = new Set([...Object.keys(localParsed), ...Object.keys(remote)]);
 
@@ -2530,7 +2546,7 @@ function mergeRemoteSchedulesAfterLoad(remoteSchedules, remoteLastUpdated) {
 
     replaceTeacherSchedulesFromObject(merged);
     healLoggedInStudentScheduleGridIfNeeded();
-    logScheduleSyncDebug('merged remote schedules', {
+    logScheduleSyncDebug('merged remote schedules (offline legacy)', {
         teacher: loggedInTeacherName || '',
         remoteKeys: Object.keys(remoteSchedules || {}).length,
         memoryKeys: Object.keys(teacherSchedules || {}).length,
@@ -2563,6 +2579,20 @@ function hydrateTeacherUnavailableSessionFromSchedules() {
 
 /** Apply schedule blob written by another tab/window (localStorage `storage` event). */
 function applySchedulesFromLocalStorageToMemory(opts = {}) {
+    if (isCloudScheduleSyncActive()) {
+        void fetchSchedulesFromCloudAndMerge().then((ok) => {
+            if (ok && opts.refreshUi !== false) {
+                refreshScheduleViewFromMemory();
+            } else if (!ok) {
+                applySchedulesFromLocalStorageToMemoryOffline(opts);
+            }
+        });
+        return true;
+    }
+    return applySchedulesFromLocalStorageToMemoryOffline(opts);
+}
+
+function applySchedulesFromLocalStorageToMemoryOffline(opts = {}) {
     if (!localStorage.getItem(STORAGE_KEY)) return false;
     const imported = readSchedulesObjectFromLocalStorage();
     const importedSnapshot = JSON.stringify(imported);
@@ -11194,11 +11224,8 @@ async function fetchSchedulesFromCloudAndMerge() {
     if (!data?.success || !data.schedules) return false;
 
     const remoteIsNewer = isScheduleRemoteNewerThanTracked(data.lastUpdated);
-    const skipCloudClobberPendingUpload = shouldSkipCloudMergeForPendingUpload();
-    if (!skipCloudClobberPendingUpload || (remoteIsNewer && !hasInFlightScheduleCloudSave())) {
-        applyCloudSchedulesToMemoryAndView(data.schedules, data.lastUpdated);
-        if (remoteIsNewer) clearSchedulePendingCloudUpload();
-    }
+    applyCloudSchedulesToMemoryAndView(data.schedules, data.lastUpdated);
+    if (remoteIsNewer) clearSchedulePendingCloudUpload();
     lastUpdateTimestamp = data.lastUpdated;
     return true;
 }
@@ -11207,7 +11234,6 @@ async function fetchSchedulesFromCloudAndMerge() {
 async function loadAllSchedules() {
     try {
         updateSyncStatus('syncing', 'Syncing with cloud...');
-        const skipCloudClobberPendingUpload = shouldSkipCloudMergeForPendingUpload();
 
         const schedulesUrl = absoluteHttpApiUrl(API_ENDPOINT);
         if (!schedulesUrl) {
@@ -11232,8 +11258,6 @@ async function loadAllSchedules() {
             void pollClassReportUploadsFromCloud();
             return;
         }
-
-        loadAllSchedulesLocal();
 
         let schedulesFetchUrl = schedulesUrl;
         try {
@@ -11266,11 +11290,7 @@ async function loadAllSchedules() {
 
             if (data.success) {
                 const remoteIsNewer = isScheduleRemoteNewerThanTracked(data.lastUpdated);
-                if (
-                    data.schedules &&
-                    (!skipCloudClobberPendingUpload ||
-                        (remoteIsNewer && !hasInFlightScheduleCloudSave()))
-                ) {
+                if (data.schedules) {
                     applyCloudSchedulesToMemoryAndView(data.schedules, data.lastUpdated);
                     if (remoteIsNewer) clearSchedulePendingCloudUpload();
                 }
@@ -11559,12 +11579,6 @@ function isScheduleRemoteNewerThanTracked(remoteLastUpdated) {
     if (!remote) return false;
     if (!tracked) return true;
     return remote > tracked;
-}
-
-function shouldSkipCloudMergeForPendingUpload() {
-    if (!isSchedulePendingCloudUpload()) return false;
-    if (hasInFlightScheduleCloudSave()) return true;
-    return Object.keys(teacherSchedules || {}).length > 0;
 }
 
 function isKvQuotaExceededMessage(messageRaw) {
@@ -11905,7 +11919,9 @@ async function performSave() {
 function saveAllSchedulesLocal() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(teacherSchedules));
-        localStorage.setItem(SCHEDULES_LOCAL_UPDATED_KEY, new Date().toISOString());
+        if (!isCloudScheduleSyncActive()) {
+            localStorage.setItem(SCHEDULES_LOCAL_UPDATED_KEY, new Date().toISOString());
+        }
     } catch (error) {
         console.error('Error saving schedules to localStorage:', error);
     }
