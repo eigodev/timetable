@@ -2350,6 +2350,20 @@ function isProtectedScheduleSlotStateClient(state) {
     return true;
 }
 
+/** Stored `null` on a student grid = explicit weekly/class cancellation at that slot. */
+function isStudentScheduleExplicitSlotCancellation(slotMap, slotKey) {
+    const map = slotMap && typeof slotMap === 'object' ? slotMap : {};
+    const key = String(slotKey || '').trim();
+    return !!key && Object.prototype.hasOwnProperty.call(map, key) && map[key] === null;
+}
+
+function isStudentClassOrExtraScheduleSlotStateClient(state) {
+    const low = normalizedScheduleSlotStateClient(state);
+    if (!low || isStudentSchoolRepositionSlotState(low)) return false;
+    if (/^school::.+::(class|extra)$/.test(low)) return true;
+    return ['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(low);
+}
+
 function mergeScheduleSlotMapsClient(baseSlots, incomingSlots) {
     const base = baseSlots && typeof baseSlots === 'object' ? baseSlots : {};
     const inc = incomingSlots && typeof incomingSlots === 'object' ? incomingSlots : {};
@@ -2362,12 +2376,24 @@ function mergeScheduleSlotMapsClient(baseSlots, incomingSlots) {
         const baseProtected = isProtectedScheduleSlotStateClient(baseValue);
         const incClearing = isClearingScheduleSlotStateClient(incValue);
 
+        if (
+            isStudentScheduleExplicitSlotCancellation(base, key) &&
+            isProtectedScheduleSlotStateClient(incValue)
+        ) {
+            merged[key] = null;
+            continue;
+        }
+
         if (baseProtected && incClearing) {
-            if (
-                (incValue == null || normalizedScheduleSlotStateClient(incValue) === 'null') &&
-                isStudentSchoolRepositionSlotState(baseValue)
-            ) {
-                delete merged[key];
+            if (incValue == null || normalizedScheduleSlotStateClient(incValue) === 'null') {
+                if (isStudentSchoolRepositionSlotState(baseValue)) {
+                    delete merged[key];
+                    continue;
+                }
+                if (isStudentClassOrExtraScheduleSlotStateClient(baseValue)) {
+                    merged[key] = null;
+                    continue;
+                }
             }
             continue;
         }
@@ -2433,8 +2459,10 @@ function healLoggedInStudentScheduleGridIfNeeded() {
         const tutAgg = applyAllStudentColorsToTeacherScheduleCopy(tutSlots, tutor);
         const { classState, extraState } = getStudentOverlayStates(student);
         const weeklyKeys = studentWeeklyTemplateSlotKeys(student);
+        const storedSlots = getScheduleSlotMapWithoutMeta(teacherSchedules[student] || {});
         for (const [k, v] of Object.entries(tutAgg)) {
             if (!weeklyKeys.has(k)) continue;
+            if (isStudentScheduleExplicitSlotCancellation(storedSlots, k)) continue;
             const tok = normalizeStudentScheduleOverlayToken(v, student);
             if (tok && (tok === classState || (extraState && tok === extraState))) {
                 slots[k] = tok;
@@ -6191,9 +6219,20 @@ function getStudentNamesForTeacherSlot(day, hour, state) {
     const normalizedState = resolvedState?.token || String(state || '').trim().toLowerCase();
     if (!parseSchoolStateToken(normalizedState) && !isLegacyOverlayState(normalizedState)) return [];
 
+    const viewedStudentOnly =
+        isStudentGrid || isTeacherViewingStudentCalendar()
+            ? String(currentTeacher || '').trim()
+            : '';
+
     const names = [];
     const used = new Set();
     for (const studentName of getAllRosterStudentNamesSorted()) {
+        if (
+            viewedStudentOnly &&
+            studentName.localeCompare(viewedStudentOnly, undefined, { sensitivity: 'base' }) !== 0
+        ) {
+            continue;
+        }
         if (!studentHasScheduledClassOrExtraAtSlot(studentName, day, hour)) continue;
         if (!used.has(studentName) && isStudentNameVisibleOnCalendarCell(studentName)) {
             used.add(studentName);
@@ -18352,6 +18391,15 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
         }
         if ((hadClassOrExtra || hadReposition) && clearedInView) {
             out[key] = null;
+            return;
+        }
+        if (
+            clearedInView &&
+            weeklyKeys.has(key) &&
+            studentUsesWeeklyClassTemplate(student) &&
+            !Object.prototype.hasOwnProperty.call(out, key)
+        ) {
+            out[key] = null;
         }
     });
 
@@ -18570,6 +18618,7 @@ function tutorSlotStateForStudentCalendarMerge(rawState) {
 function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
     let stuSlots = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
     stuSlots = mergeWeeklyClassIntoScheduleCopy(stuSlots, studentName);
+    const storedStudentSlots = getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {});
     if (!studentScheduleGridHasClassSlots(stuSlots) && tutorKey) {
         const tutAgg = applyAllStudentColorsToTeacherScheduleCopy(
             getScheduleSlotMapWithoutMeta(teacherSchedules[tutorKey] || {}),
@@ -18579,6 +18628,7 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
         const weeklyKeys = studentWeeklyTemplateSlotKeys(studentName);
         for (const [k, v] of Object.entries(tutAgg)) {
             if (!weeklyKeys.has(k)) continue;
+            if (isStudentScheduleExplicitSlotCancellation(storedStudentSlots, k)) continue;
             const tok = normalizeStudentScheduleOverlayToken(v, studentName);
             if (tok && (tok === classState || (extraState && tok === extraState))) {
                 stuSlots[k] = tok;

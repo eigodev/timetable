@@ -30,6 +30,12 @@ Every calendar edit must flow through:
 | Class / Extra / Reposition (context menu) | `setSlotState` → `saveTeacherSchedule(student)` + tutor sync |
 | Left-click clear class/extra/reposition → green | `clearStudentSchool*AtSlot` → `finishStudentSchoolSlotClearToGreen` → `saveTeacherSchedule(tutor)` + `saveTeacherSchedule(student)` |
 
+Cancelling a student's weekly class must write explicit `null` at that slot key so merge/heal logic does not resurrect it when another student books the same hour.
+
+### Student Schools name chips
+
+On a **single student's** Schools calendar, only that student's name may appear on their class/extra cells — never another student's name on the same cell.
+
 ### Do not break persistence when fixing bugs
 
 - **`loadTeacherSchedule`** loads into `slotStates` only — it must **not** write back to `teacherSchedules` (that caused sync loops and stale meta). Persistence happens only via **`saveTeacherSchedule`**.

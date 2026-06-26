@@ -565,10 +565,27 @@ function mergeScheduleSlotMaps(baseSlots, incomingSlots, logContext = {}) {
     const baseProtected = isProtectedScheduleSlotState(baseValue);
     const incClearing = isClearingScheduleSlotState(incValue);
 
+    if (
+      Object.prototype.hasOwnProperty.call(base, key) &&
+      base[key] === null &&
+      isProtectedScheduleSlotState(incValue)
+    ) {
+      merged[key] = null;
+      continue;
+    }
+
     if (baseProtected && incClearing) {
       if (incValue == null || normalizedScheduleSlotState(incValue) === 'null') {
-        if (/^school::.+::reposition$/.test(normalizedScheduleSlotState(baseValue))) {
+        const baseLow = normalizedScheduleSlotState(baseValue);
+        if (/^school::.+::reposition$/.test(baseLow)) {
           delete merged[key];
+          continue;
+        }
+        if (
+          /^school::.+::(class|extra)$/.test(baseLow) ||
+          ['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(baseLow)
+        ) {
+          merged[key] = null;
           continue;
         }
       }
