@@ -10802,16 +10802,19 @@ function buildTeacherScopedRosterPatchForCloud(rosterPayload) {
         'schoolThemeColors',
         'schoolBillingModels',
         'schoolBillingConfigs',
+        'schoolScheduleProfiles',
         'googleMeetSharedLinkModeBySchool',
     ];
     for (const path of schoolScopedPaths) {
         const src = rosterPayload[path];
         if (!src || typeof src !== 'object' || Array.isArray(src)) continue;
-        if (Object.keys(src).length > 0) patch[path] = { ...src };
+        patch[path] = { ...src };
     }
 
-    if (Array.isArray(rosterPayload.customSchools) && rosterPayload.customSchools.length > 0) {
-        patch.customSchools = [...rosterPayload.customSchools];
+    if (Array.isArray(rosterPayload.customSchools)) {
+        patch.customSchools = rosterPayload.customSchools
+            .map((s) => String(s || '').trim())
+            .filter(Boolean);
     }
 
     return patch;
@@ -14068,6 +14071,7 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
     delete schoolBillingConfigs[schoolKey];
     delete schoolScheduleProfiles[schoolKey];
     delete googleMeetSharedLinkModeBySchoolKey[schoolKey];
+    delete classReportCollapsedBySchool[schoolKey];
 
     if (currentTeacher && removedKeys.has(currentTeacher.trim().toLowerCase())) {
         currentTeacher = null;
@@ -14078,6 +14082,8 @@ function deleteSchoolFromSidebarConfirmed(displayTitle) {
     saveStudentClassReportRows();
     saveAllSchedulesLocal();
     saveAllSchedules();
+    void flushRosterSaveToCloud();
+    void flushSchedulesToCloudImmediately();
     renderSidebar();
 
     if (loggedInStudentFullName) {

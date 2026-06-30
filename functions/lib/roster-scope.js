@@ -446,15 +446,20 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
   }
 
   const csPatch = Array.isArray(patch.customSchools) ? patch.customSchools : null;
-  if (csPatch) {
-    const safeAdds = csPatch
+  if (csPatch !== null) {
+    const safeFromPatch = csPatch
       .map((s) => String(s || '').trim())
       .filter((s) => s && customSchoolVisibleToTeacher(base, s, profile));
-    const merged = new Set(
-      [...(Array.isArray(out.customSchools) ? out.customSchools : []), ...safeAdds]
-        .map((s) => String(s || '').trim())
-        .filter(Boolean)
-    );
+    const existing = Array.isArray(out.customSchools) ? out.customSchools : [];
+    const retained = existing.filter((s) => {
+      const title = String(s || '').trim();
+      if (!title) return false;
+      return !customSchoolVisibleToTeacher(base, title, profile);
+    });
+    const merged = new Set([
+      ...retained.map((s) => String(s).trim()).filter(Boolean),
+      ...safeFromPatch,
+    ]);
     out.customSchools = [...merged].filter(Boolean).sort(sortNames);
   }
 
@@ -483,6 +488,7 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
     'schoolThemeColors',
     'schoolBillingModels',
     'schoolBillingConfigs',
+    'schoolScheduleProfiles',
     'googleMeetSharedLinkModeBySchool',
   ];
   for (const p of schoolScopedPaths) {
@@ -490,7 +496,10 @@ export function mergeTeacherRosterPatch(base, patch, teacherProfile) {
     const outMap = out[p] && typeof out[p] === 'object' && !Array.isArray(out[p]) ? out[p] : null;
     if (outMap) {
       for (const k of Object.keys(outMap)) {
-        if (!permittedSchoolKeys.has(normSchoolTitleKey(k))) continue;
+        if (!permittedSchoolKeys.has(normSchoolTitleKey(k))) {
+          delete outMap[k];
+          continue;
+        }
         if (!patchMap || !Object.prototype.hasOwnProperty.call(patchMap, k)) {
           delete outMap[k];
         }
