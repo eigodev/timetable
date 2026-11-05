@@ -8603,7 +8603,7 @@ body.student-school-calendar .time-slot.state-available {
 }
 
 
-body.teacher-calendar-roster .time-slot:not(.state-school):not(.state-peer-class):not(.state-unavailable):not(.state-booked):hover {
+body.teacher-calendar-roster .time-slot:not(.state-school):not(.state-peer-class):not(.state-unavailable):not(.state-booked):not(.time-slot--halves):hover {
     background: #fff5e6;
     border-color: #334461;
 }
@@ -8619,6 +8619,51 @@ body.student-school-calendar .time-slot.state-available:hover {
     color: white;
     border-color: #556b2f;
     box-shadow: 0 2px 8px rgba(107, 142, 35, 0.4);
+}
+
+/* One hour cell split into :00–:30 and :30–:60. Darker than the 60-minute green. */
+.time-slot.time-slot--halves {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0;
+    background: #e0e0e0;
+    box-shadow: none;
+}
+
+.time-slot-half {
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0 2px;
+    box-sizing: border-box;
+    background: #fff;
+    color: #5c6570;
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.1;
+    text-align: center;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.time-slot-half--on {
+    background: #3f5610;
+    color: #fff;
+}
+
+body.teacher-calendar-roster .time-slot.time-slot--halves .time-slot-half {
+    cursor: pointer;
+}
+
+body.teacher-calendar-roster .time-slot.time-slot--halves:hover {
+    background: #e0e0e0;
+    border-color: transparent;
+    box-shadow: none;
 }
 
 .time-slot.state-unavailable {

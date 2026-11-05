@@ -2340,6 +2340,47 @@ function isClearingScheduleSlotStateClient(state) {
     return !s || s === 'null';
 }
 
+/**
+ * 30-minute availability inside one hour cell.
+ * `available-split` = both halves, `:0` = :00–:30 only, `:1` = :30–:60 only.
+ * This is availability, not a class or booking.
+ */
+function availabilitySplitHalvesFromState(state) {
+    const low = String(state ?? '').trim().toLowerCase();
+    if (low === 'available-split') return [true, true];
+    if (low === 'available-split:0') return [true, false];
+    if (low === 'available-split:1') return [false, true];
+    return null;
+}
+
+function isAvailabilitySplitState(state) {
+    return !!availabilitySplitHalvesFromState(state);
+}
+
+function availabilitySplitStateFromHalves(halves) {
+    const first = !!(halves && halves[0]);
+    const second = !!(halves && halves[1]);
+    if (first && second) return 'available-split';
+    if (first) return 'available-split:0';
+    if (second) return 'available-split:1';
+    return null;
+}
+
+function formatClockMinutes(totalMinutes) {
+    const mins = ((Number(totalMinutes) % 1440) + 1440) % 1440;
+    const hour24 = Math.floor(mins / 60);
+    const minute = mins % 60;
+    const period = hour24 >= 12 ? 'p.m.' : 'a.m.';
+    let hour12 = hour24 % 12;
+    if (hour12 === 0) hour12 = 12;
+    return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+function availabilityHalfRangeLabel(hour, halfIndex) {
+    const start = Number(hour) * 60 + (halfIndex === 1 ? 30 : 0);
+    return `${formatClockMinutes(start)} – ${formatClockMinutes(start + 30)}`;
+}
+
 /** Scheduled classes and school tokens must not be wiped by availability-only cloud payloads. */
 function isProtectedScheduleSlotStateClient(state) {
     const s = normalizedScheduleSlotStateClient(state);
@@ -5526,7 +5567,7 @@ function normalizeStudentScheduleOverlayToken(rawVal, studentName) {
 /** School class/extra token from a slot state, if any. */
 function getClassOrExtraTokenFromSlotState(state) {
     const low = String(state ?? '').trim().toLowerCase();
-    if (!low || low === 'null' || low === 'available') return null;
+    if (!low || low === 'null' || low === 'available' || isAvailabilitySplitState(low)) return null;
     if (isStudentSchoolRepositionSlotState(low)) return null;
     if (parseSchoolStateToken(low) || isLegacyOverlayState(low)) return state;
     return null;
@@ -5573,8 +5614,8 @@ function resolveScheduleSlotPriority(classOrExtraToken, teacherRawState, opts = 
     if (tLow === BOOKED_CLASS_SLOT_STATE) {
         return BOOKED_CLASS_SLOT_STATE;
     }
-    if (tLow === 'available') {
-        return 'available';
+    if (tLow === 'available' || isAvailabilitySplitState(tLow)) {
+        return teacherRawState;
     }
     if (opts.includeTeacherNonPriorityFallback !== false && tLow && tLow !== 'null') {
         return teacherRawState;
@@ -5591,7 +5632,7 @@ function isTeacherSlotOccupiedForAvailability(day, hour) {
     if (isSchoolManagedTeacherSlotLocked(day, hour)) return true;
     const state = getSlotState(day, hour);
     const low = String(state || '').trim().toLowerCase();
-    if (!low || low === 'null' || low === 'available') return false;
+    if (!low || low === 'null' || low === 'available' || isAvailabilitySplitState(low)) return false;
     return true;
 }
 
@@ -5801,7 +5842,8 @@ function syncWeeklyClassToAllTeacherSchedules() {
 function stripTeacherAvailabilityFromStudentScheduleCopy(sched) {
     const out = { ...sched };
     Object.keys(out).forEach((k) => {
-        if (String(out[k] || '').trim().toLowerCase() === 'available') {
+        const low = String(out[k] || '').trim().toLowerCase();
+        if (low === 'available' || isAvailabilitySplitState(low)) {
             delete out[k];
         }
     });
@@ -5818,6 +5860,7 @@ function stripTeacherOverlayStatesFromStudentScheduleCopy(sched) {
         const low = String(out[k] || '').trim().toLowerCase();
         if (
             low === 'available' ||
+            isAvailabilitySplitState(low) ||
             low === 'unavailable' ||
             low === 'rescheduled' ||
             low === BOOKED_CLASS_SLOT_STATE
@@ -6346,6 +6389,10 @@ function isSchoolManagedTeacherSlotLocked(day, hour) {
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
     if (!slotEl) return;
+    if (isAvailabilitySplitState(state)) {
+        slotEl.classList.remove('time-slot--with-student-names');
+        return;
+    }
     if (
         isTeacherViewingStudentCalendar() &&
         String(state || '').trim().toLowerCase() === PEER_STUDENT_CLASS_SLOT_STATE
@@ -6478,6 +6525,35 @@ function teacherBookGreenSlotForStudent(day, hour, studentName) {
     return true;
 }
 
+function clearAvailabilityHalves(slot) {
+    if (!slot) return;
+    slot.classList.remove('time-slot--halves');
+    slot.querySelectorAll('.time-slot-half').forEach((el) => el.remove());
+}
+
+function renderAvailabilityHalves(slot, state) {
+    clearAvailabilityHalves(slot);
+    const halves = availabilitySplitHalvesFromState(state);
+    if (!halves || !slot) return;
+    const hour = Number.parseInt(String(slot.dataset.hour || ''), 10);
+    slot.classList.add('time-slot--halves');
+    slot.querySelectorAll('.time-slot-student-names').forEach((el) => el.remove());
+    halves.forEach((on, index) => {
+        const el = document.createElement('div');
+        el.className = 'time-slot-half' + (on ? ' time-slot-half--on' : '');
+        el.dataset.half = String(index);
+        const startMin = hour * 60 + (index === 1 ? 30 : 0);
+        const endMin = startMin + 30;
+        const fullLabel = availabilityHalfRangeLabel(hour, index);
+        el.dataset.start = formatClockMinutes(startMin);
+        el.dataset.end = formatClockMinutes(endMin);
+        el.title = fullLabel;
+        el.setAttribute('aria-label', fullLabel);
+        el.textContent = fullLabel;
+        slot.appendChild(el);
+    });
+}
+
 function applyStateVisualToSlot(slot, state) {
     if (!slot) return;
     slot.classList.remove(
@@ -6490,6 +6566,11 @@ function applyStateVisualToSlot(slot, state) {
     slot.style.removeProperty('--slot-school-bg');
     slot.style.removeProperty('--slot-school-border');
     slot.style.removeProperty('--slot-school-shadow');
+    if (isAvailabilitySplitState(state)) {
+        renderAvailabilityHalves(slot, state);
+        return;
+    }
+    clearAvailabilityHalves(slot);
     if (!state) return;
     const normalized = String(state || '').trim().toLowerCase();
     if (normalized === PEER_STUDENT_CLASS_SLOT_STATE) {
@@ -9854,7 +9935,7 @@ function getDisplaySlotState(day, hour) {
     if (isAdminLoggedIn) return raw;
     if (!shouldMaskSuperviseeScheduleAvailabilityOnly()) return raw;
     const low = String(raw || '').trim().toLowerCase();
-    if (low === 'available') return raw;
+    if (low === 'available' || isAvailabilitySplitState(low)) return raw;
     return null;
 }
 
@@ -18625,7 +18706,7 @@ function clearStudentScheduledClassFromSlot(day, hour) {
 function tutorSlotStateForStudentCalendarMerge(rawState) {
     const low = String(rawState ?? '').trim().toLowerCase();
     if (!low || low === 'null') return null;
-    if (low === 'available') return 'available';
+    if (low === 'available' || isAvailabilitySplitState(low)) return rawState;
     if (low === 'unavailable' || low === 'rescheduled' || low === BOOKED_CLASS_SLOT_STATE) {
         return rawState;
     }
@@ -18837,6 +18918,16 @@ function initCalendar() {
             slot.addEventListener('click', (e) => {
                 if (e.button !== 0 && e.button != null) return;
                 if (e.target.closest('.time-slot-student-chip')) return;
+                const halfEl = e.target.closest && e.target.closest('.time-slot-half');
+                if (halfEl && slot.contains(halfEl)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
+                    const halfIndex = Number(halfEl.dataset.half);
+                    if (halfIndex !== 0 && halfIndex !== 1) return;
+                    toggleTeacherAvailabilityHalf(day, hour, halfIndex);
+                    return;
+                }
                 if (!currentTeacher) return;
                 if (isActiveTeacherName(currentTeacher)) {
                     cycleTeacherAvailabilitySlotState(day, hour);
@@ -19445,7 +19536,8 @@ function setSlotState(day, hour, state) {
 }
 
 /**
- * Teacher roster only: white ↔ green on left-click. Class, extra, reposition, and booked cells are inert.
+ * Teacher roster: white → 60-minute green, then that green cell → two 30-minute halves.
+ * Class, extra, reposition, and booked cells are inert.
  */
 function cycleTeacherAvailabilitySlotState(day, hour) {
     if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
@@ -19466,9 +19558,22 @@ function cycleTeacherAvailabilitySlotState(day, hour) {
         return;
     }
     if (curLow === 'available') {
-        setSlotState(day, hour, null);
+        setSlotState(day, hour, 'available-split');
         return;
     }
+}
+
+/** Teacher roster: turn one 30-minute half on or off. Both off returns the hour to white. */
+function toggleTeacherAvailabilityHalf(day, hour, halfIndex) {
+    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
+    if (isLoggedInStudentCalendarReadOnly()) return;
+    if (isGateViewingAlienTeacherGrid()) return;
+    if (halfIndex !== 0 && halfIndex !== 1) return;
+    const halves = availabilitySplitHalvesFromState(getSlotState(day, hour));
+    if (!halves) return;
+    const next = [halves[0], halves[1]];
+    next[halfIndex] = !next[halfIndex];
+    setSlotState(day, hour, availabilitySplitStateFromHalves(next));
 }
 
 // Show context menu on right click
@@ -19925,7 +20030,7 @@ function clearAll() {
             
             if (slot) {
                 const currentState = String(slotStates[key] || '').trim().toLowerCase();
-                if (currentState !== 'available') {
+                if (currentState !== 'available' && !isAvailabilitySplitState(currentState)) {
                     return;
                 }
                 slotStates[key] = null;

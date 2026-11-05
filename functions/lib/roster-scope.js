@@ -550,7 +550,16 @@ function isClearingScheduleSlotState(state) {
 /** Scheduled classes, bookings, and school tokens must not be wiped by availability-only sync payloads. */
 function isProtectedScheduleSlotState(state) {
   const s = normalizedScheduleSlotState(state);
-  if (!s || s === 'null' || s === 'available') return false;
+  if (
+    !s ||
+    s === 'null' ||
+    s === 'available' ||
+    s === 'available-split' ||
+    s === 'available-split:0' ||
+    s === 'available-split:1'
+  ) {
+    return false;
+  }
   if (s === 'booked' || s === 'unavailable' || s === 'rescheduled') return true;
   if (/^school::.+::(class|extra|reposition)$/.test(s)) return true;
   if (['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(s)) return true;
