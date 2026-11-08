@@ -1,6 +1,7 @@
 import {
   filterSupervisionLinksForActor,
   getSupervisionLinksArray,
+  isActiveSupervisionStatus,
   studentsVisibleViaSupervision,
   supervisedTeacherProfilesForSuperior,
   supervisedTeacherProfilesForClassSupervisor,
@@ -72,15 +73,70 @@ function filterMapByKeys(map, allowed) {
   return out;
 }
 
+function filterStudentMapByNames(map, allowedNames) {
+  const src = map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  const out = {};
+  for (const name of allowedNames) {
+    const nm = String(name || '').trim();
+    if (!nm) continue;
+    if (Object.prototype.hasOwnProperty.call(src, nm)) {
+      out[nm] = src[nm];
+      continue;
+    }
+    const nlc = nm.toLowerCase();
+    const key = Object.keys(src).find((k) => String(k || '').trim().toLowerCase() === nlc);
+    if (key) out[nm] = src[key];
+  }
+  return out;
+}
+
 function normSchoolTitleKey(title) {
   return String(title || '').trim().toLowerCase();
+}
+
+function mapValueForStudentName(map, studentName) {
+  const nm = String(studentName || '').trim();
+  if (!nm || !map || typeof map !== 'object') return '';
+  if (Object.prototype.hasOwnProperty.call(map, nm)) return String(map[nm] || '').trim();
+  const nlc = nm.toLowerCase();
+  const key = Object.keys(map).find((k) => String(k || '').trim().toLowerCase() === nlc);
+  return key ? String(map[key] || '').trim() : '';
+}
+
+function schoolTitleForRosterStudent(roster, studentName) {
+  const sch = roster?.studentSchools && typeof roster.studentSchools === 'object' ? roster.studentSchools : {};
+  return mapValueForStudentName(sch, studentName);
 }
 
 function studentNamesInSchoolRoster(roster, schoolTitle) {
   const sk = normSchoolTitleKey(schoolTitle);
   if (!sk) return [];
-  const st = roster?.studentSchools && typeof roster.studentSchools === 'object' ? roster.studentSchools : {};
-  return allRosterStudentNames(roster).filter((n) => normSchoolTitleKey(st[String(n)]) === sk);
+  return allRosterStudentNames(roster).filter(
+    (n) => normSchoolTitleKey(schoolTitleForRosterStudent(roster, n)) === sk
+  );
+}
+
+/** Every student in a school the actor can already see, including students with no class and students assigned to another tutor. */
+function addSchoolPeersToAllowedStudents(roster, allowedStudents, actorProfile, role) {
+  const schoolKeys = new Set();
+  for (const n of allowedStudents) {
+    const sch = normSchoolTitleKey(schoolTitleForRosterStudent(roster, n));
+    if (sch) schoolKeys.add(sch);
+  }
+  if (role === 'gate') {
+    for (const link of getSupervisionLinksArray(roster)) {
+      if (String(link?.superiorProfile || '').trim() !== actorProfile) continue;
+      if (!isActiveSupervisionStatus(link?.status)) continue;
+      for (const title of Array.isArray(link?.schoolTitles) ? link.schoolTitles : []) {
+        const sk = normSchoolTitleKey(title);
+        if (sk) schoolKeys.add(sk);
+      }
+    }
+  }
+  for (const name of allRosterStudentNames(roster)) {
+    const sch = normSchoolTitleKey(schoolTitleForRosterStudent(roster, name));
+    if (sch && schoolKeys.has(sch)) allowedStudents.add(name);
+  }
 }
 
 /** Match client `getCustomSchoolsVisibleInSession`: empty custom schools are shared; otherwise tutor must own every student in that school (unassigned students are shared). */
@@ -248,6 +304,7 @@ export function filterRosterForActor(roster, actor) {
     if (role === 'gate') {
       for (const s of studentsVisibleViaSupervision(roster, tp)) allowedStudents.add(s);
     }
+    addSchoolPeersToAllowedStudents(roster, allowedStudents, tp, role);
 
     const keepStudent = (name) => allowedStudents.has(String(name || '').trim());
     r.private = (Array.isArray(r.private) ? r.private : []).filter(keepStudent);
@@ -281,19 +338,19 @@ export function filterRosterForActor(roster, actor) {
 
     r.adminAccount = { username: '', passwordHash: '' };
 
-    r.studentSchools = filterMapByKeys(r.studentSchools, allowedStudents);
-    r.studentPhones = filterMapByKeys(r.studentPhones, allowedStudents);
-    r.studentTeachers = filterMapByKeys(r.studentTeachers, allowedStudents);
-    r.studentEmails = filterMapByKeys(r.studentEmails, allowedStudents);
-    r.studentUsernames = filterMapByKeys(r.studentUsernames, allowedStudents);
-    r.studentPasswords = filterMapByKeys(r.studentPasswords, allowedStudents);
-    r.studentCities = filterMapByKeys(r.studentCities, allowedStudents);
-    r.studentCountries = filterMapByKeys(r.studentCountries, allowedStudents);
-    r.studentBirthDates = filterMapByKeys(r.studentBirthDates, allowedStudents);
-    r.studentAges = filterMapByKeys(r.studentAges, allowedStudents);
-    r.studentLevels = filterMapByKeys(r.studentLevels, allowedStudents);
-    r.studentExternalFollowUpLinks = filterMapByKeys(r.studentExternalFollowUpLinks, allowedStudents);
-    r.studentGoogleMeetLinks = filterMapByKeys(r.studentGoogleMeetLinks, allowedStudents);
+    r.studentSchools = filterStudentMapByNames(r.studentSchools, allowedStudents);
+    r.studentPhones = filterStudentMapByNames(r.studentPhones, allowedStudents);
+    r.studentTeachers = filterStudentMapByNames(r.studentTeachers, allowedStudents);
+    r.studentEmails = filterStudentMapByNames(r.studentEmails, allowedStudents);
+    r.studentUsernames = filterStudentMapByNames(r.studentUsernames, allowedStudents);
+    r.studentPasswords = filterStudentMapByNames(r.studentPasswords, allowedStudents);
+    r.studentCities = filterStudentMapByNames(r.studentCities, allowedStudents);
+    r.studentCountries = filterStudentMapByNames(r.studentCountries, allowedStudents);
+    r.studentBirthDates = filterStudentMapByNames(r.studentBirthDates, allowedStudents);
+    r.studentAges = filterStudentMapByNames(r.studentAges, allowedStudents);
+    r.studentLevels = filterStudentMapByNames(r.studentLevels, allowedStudents);
+    r.studentExternalFollowUpLinks = filterStudentMapByNames(r.studentExternalFollowUpLinks, allowedStudents);
+    r.studentGoogleMeetLinks = filterStudentMapByNames(r.studentGoogleMeetLinks, allowedStudents);
 
     const schoolsNeeded = new Set();
     for (const n of allowedStudents) {

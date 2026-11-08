@@ -141,7 +141,13 @@ export function studentsVisibleViaSupervision(roster, superiorProfile) {
     for (const name of allNames) {
       const tutor = tutorFor(name);
       if (!tutor || tutor.toLowerCase() !== teacherProf.toLowerCase()) continue;
-      const sch = String(schMap[name] || '').trim();
+      const schDirect = String(schMap[name] || '').trim();
+      let sch = schDirect;
+      if (!sch) {
+        const nlc = name.toLowerCase();
+        const key = Object.keys(schMap).find((k) => String(k || '').trim().toLowerCase() === nlc);
+        sch = key ? String(schMap[key] || '').trim() : '';
+      }
       if (!sch) continue;
       if (schoolKeys.has(normSchoolTitleKey(sch))) out.add(name);
     }

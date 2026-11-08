@@ -560,6 +560,22 @@ function getStudentNamesVisibleToClassSupervisor() {
     return [...visible];
 }
 
+/**
+ * Schools sidebar and Class Report use the loaded roster as-is.
+ * School membership is not limited to students who already have a class or a tutor assignment.
+ * Logged-in students still see only themselves.
+ */
+function getStudentNamesForSchoolLists() {
+    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
+        .map((name) => String(name || '').trim())
+        .filter(Boolean);
+    if (loggedInStudentFullName) {
+        const self = String(loggedInStudentFullName || '').trim().toLowerCase();
+        return allStudents.filter((name) => name.toLowerCase() === self);
+    }
+    return allStudents;
+}
+
 /** Schools sidebar + Class Report: admin: all; student: self; class-supervisor: shared supervisees only; other teachers: assigned students + unassigned. */
 function getStudentNamesVisibleInNavigation() {
     const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList];
@@ -3700,7 +3716,7 @@ async function initRoster(preloadedRoster = null) {
             : {};
     studentSchoolByName = {};
     getAllStudentNames().forEach((name) => {
-        const stored = String(fromStorage[name] || '').trim();
+        const stored = String(rosterRecordForStudentName(fromStorage, name) || '').trim();
         if (stored) studentSchoolByName[name] = stored;
     });
     const phonesRaw =
@@ -5407,10 +5423,20 @@ function isStudentName(name) {
     );
 }
 
+function rosterRecordForStudentName(map, studentName) {
+    if (!map || typeof map !== 'object') return undefined;
+    const key = String(studentName || '').trim();
+    if (!key) return undefined;
+    if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+    const keyLc = key.toLowerCase();
+    const found = Object.keys(map).find((entry) => String(entry || '').trim().toLowerCase() === keyLc);
+    return found ? map[found] : undefined;
+}
+
 function getStudentSchoolName(name) {
     const key = String(name || '').trim();
     if (!key) return '';
-    const stored = String(studentSchoolByName[key] || '').trim();
+    const stored = String(rosterRecordForStudentName(studentSchoolByName, key) || '').trim();
     if (stored) return stored;
     const n = key.toLowerCase();
     if (speakonStudentsList.some((x) => x.trim().toLowerCase() === n)) {
@@ -12775,7 +12801,7 @@ function renderSidebar() {
     });
 
     const studentGroups = new Map();
-    const rosterScopeStudents = getStudentNamesVisibleInNavigation();
+    const rosterScopeStudents = getStudentNamesForSchoolLists();
     rosterScopeStudents.forEach((name) => {
         const school = getStudentSchoolName(name) || getDefaultSchoolTitle();
         const key = school.trim().toLowerCase();
@@ -13269,7 +13295,7 @@ function populateClassReportStudentLists(container) {
     };
 
     const grouped = new Map();
-    const rosterScopeStudents = getStudentNamesVisibleInNavigation();
+    const rosterScopeStudents = getStudentNamesForSchoolLists();
     rosterScopeStudents.forEach((name) => {
         const school = getStudentSchoolName(name) || getDefaultSchoolTitle();
         const key = school.trim().toLowerCase();
