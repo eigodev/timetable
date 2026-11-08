@@ -56,10 +56,14 @@
         IE: { iso: 'IE', dialCode: '+353', flagSrc: 'https://flagcdn.com/w40/ie.png', country: 'Ireland', placeholder: '85 123 4567' },
         GB: { iso: 'GB', dialCode: '+44', flagSrc: 'https://flagcdn.com/w40/gb.png', country: 'United Kingdom', placeholder: '7400 123456' },
         US: { iso: 'US', dialCode: '+1', flagSrc: 'https://flagcdn.com/w40/us.png', country: 'United States', placeholder: '(201) 555-0123' },
-        CA: { iso: 'CA', dialCode: '+1', flagSrc: 'https://flagcdn.com/w40/ca.png', country: 'Canada', placeholder: '(416) 555-0123' }
+        CA: { iso: 'CA', dialCode: '+1', flagSrc: 'https://flagcdn.com/w40/ca.png', country: 'Canada', placeholder: '(416) 555-0123' },
+        DE: { iso: 'DE', dialCode: '+49', flagSrc: 'https://flagcdn.com/w40/de.png', country: 'Germany', placeholder: '151 23456789' },
+        FR: { iso: 'FR', dialCode: '+33', flagSrc: 'https://flagcdn.com/w40/fr.png', country: 'France', placeholder: '6 12 34 56 78' },
+        PT: { iso: 'PT', dialCode: '+351', flagSrc: 'https://flagcdn.com/w40/pt.png', country: 'Portugal', placeholder: '912 345 678' },
+        ES: { iso: 'ES', dialCode: '+34', flagSrc: 'https://flagcdn.com/w40/es.png', country: 'Spain', placeholder: '612 345 678' }
     };
-    const COUNTRY_CODE_ORDER = ['+353', '+55', '+44', '+1'];
-    const COUNTRY_CODE_TO_ISO = { '+353': 'IE', '+55': 'BR', '+44': 'GB', '+1': 'US' };
+    const COUNTRY_CODE_ORDER = ['+353', '+351', '+55', '+49', '+44', '+34', '+33', '+1'];
+    const COUNTRY_CODE_TO_ISO = { '+353': 'IE', '+351': 'PT', '+55': 'BR', '+49': 'DE', '+44': 'GB', '+34': 'ES', '+33': 'FR', '+1': 'US' };
     let selectedCountryIso = 'BR';
 
     function getStoredRoster() {
@@ -211,6 +215,8 @@
         if (iso === 'GB') return digitCount >= 9 && digitCount <= 10;
         if (iso === 'BR') return digitCount >= 10 && digitCount <= 11;
         if (iso === 'US' || iso === 'CA') return digitCount === 10;
+        if (iso === 'DE') return digitCount >= 10 && digitCount <= 11;
+        if (iso === 'FR' || iso === 'PT' || iso === 'ES') return digitCount === 9;
         return digitCount >= 8 && digitCount <= 15;
     }
 
@@ -273,10 +279,44 @@
         return { detectedIso: null, localDigits: digits };
     }
 
+    function formatGermanyPhone(rawDigits) {
+        let digits = String(rawDigits || '').replace(/\D/g, '');
+        if (digits.startsWith('0') && (digits.length === 11 || digits.length === 12)) {
+            digits = digits.slice(1);
+        }
+        digits = digits.slice(0, 11);
+        if (!digits) return '';
+        if (digits.length <= 3) return digits;
+        return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+    }
+
+    function formatFrancePhone(rawDigits) {
+        let digits = String(rawDigits || '').replace(/\D/g, '');
+        if (digits.length === 10 && digits.startsWith('0')) {
+            digits = digits.slice(1);
+        }
+        digits = digits.slice(0, 9);
+        if (!digits) return '';
+        if (digits.length <= 1) return digits;
+        const pairs = digits.slice(1).match(/.{1,2}/g) || [];
+        return [digits.slice(0, 1), ...pairs].join(' ');
+    }
+
+    function formatTriplePhone(rawDigits) {
+        const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 9);
+        if (!digits) return '';
+        if (digits.length <= 3) return digits;
+        if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+        return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+    }
+
     function formatLocalPhoneForSelectedCountry(rawDigits) {
         if (selectedCountryIso === 'BR') return formatBrazilPhone(rawDigits);
         if (selectedCountryIso === 'GB') return formatUkPhone(rawDigits);
         if (selectedCountryIso === 'IE') return formatIrelandPhone(rawDigits);
+        if (selectedCountryIso === 'DE') return formatGermanyPhone(rawDigits);
+        if (selectedCountryIso === 'FR') return formatFrancePhone(rawDigits);
+        if (selectedCountryIso === 'PT' || selectedCountryIso === 'ES') return formatTriplePhone(rawDigits);
         return formatUsLikePhone(rawDigits);
     }
 
@@ -326,7 +366,16 @@
 
         const firstName = fields.firstName.value.trim();
         const lastName = fields.lastName.value.trim();
-        const phoneDigits = fields.phoneNumber.value.replace(/\D/g, '');
+        let phoneDigits = fields.phoneNumber.value.replace(/\D/g, '');
+        if (selectedCountryIso === 'IE' && phoneDigits.length === 10 && phoneDigits.startsWith('0')) {
+            phoneDigits = phoneDigits.slice(1);
+        }
+        if (selectedCountryIso === 'FR' && phoneDigits.length === 10 && phoneDigits.startsWith('0')) {
+            phoneDigits = phoneDigits.slice(1);
+        }
+        if (selectedCountryIso === 'DE' && phoneDigits.startsWith('0') && (phoneDigits.length === 11 || phoneDigits.length === 12)) {
+            phoneDigits = phoneDigits.slice(1);
+        }
         const school = fields.school.value.trim();
         const ageRaw = fields.age.value.trim();
         const numericAge = ageRaw === '60+' ? 61 : Number(ageRaw);
