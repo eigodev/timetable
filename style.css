@@ -8711,7 +8711,7 @@ body.student-school-calendar .time-slot.state-available:hover {
     max-width: 100%;
     min-width: 0;
     overflow: hidden;
-    font-size: clamp(0.42rem, 0.14rem + 3.4cqi, 0.52rem) !important;
+    font-size: 10px !important;
     line-height: 1.05;
 }
 
@@ -8720,7 +8720,7 @@ body.student-school-calendar .time-slot.state-available:hover {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: clamp(0.42rem, 0.14rem + 3.4cqi, 0.52rem);
+    font-size: 10px;
     line-height: 1.05;
 }
 
