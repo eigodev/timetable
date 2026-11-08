@@ -566,9 +566,18 @@ function getStudentNamesVisibleToClassSupervisor() {
  * Logged-in students still see only themselves.
  */
 function getStudentNamesForSchoolLists() {
-    const allStudents = [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList]
-        .map((name) => String(name || '').trim())
-        .filter(Boolean);
+    const seen = new Set();
+    const allStudents = [];
+    const addName = (raw) => {
+        const name = String(raw || '').trim();
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        allStudents.push(name);
+    };
+    [...privateStudentsList, ...speakonStudentsList, ...passportStudentsList].forEach(addName);
+    Object.keys(studentSchoolByName || {}).forEach(addName);
     if (loggedInStudentFullName) {
         const self = String(loggedInStudentFullName || '').trim().toLowerCase();
         return allStudents.filter((name) => name.toLowerCase() === self);
@@ -3715,9 +3724,14 @@ async function initRoster(preloadedRoster = null) {
             ? { ...saved.studentSchools }
             : {};
     studentSchoolByName = {};
-    getAllStudentNames().forEach((name) => {
-        const stored = String(rosterRecordForStudentName(fromStorage, name) || '').trim();
-        if (stored) studentSchoolByName[name] = stored;
+    Object.keys(fromStorage).forEach((rawKey) => {
+        const storedName = String(rawKey || '').trim();
+        const school = String(fromStorage[rawKey] || '').trim();
+        if (!storedName || !school) return;
+        const canonical = getAllStudentNames().find(
+            (name) => String(name || '').trim().toLowerCase() === storedName.toLowerCase()
+        );
+        studentSchoolByName[canonical || storedName] = school;
     });
     const phonesRaw =
         saved.studentPhones && typeof saved.studentPhones === 'object' && !Array.isArray(saved.studentPhones)
@@ -13234,7 +13248,8 @@ function populateClassReportStudentLists(container) {
                 const prevTransition = body.style.transition;
                 body.style.transition = 'none';
                 group.classList.toggle('collapsed', collapsed);
-                body.style.maxHeight = collapsed ? '0px' : '';
+                body.style.maxHeight = collapsed ? '0px' : 'none';
+                body.style.overflow = collapsed ? 'hidden' : 'visible';
                 body.style.opacity = collapsed ? '0' : '1';
                 body.style.transform = collapsed ? 'translateY(-4px)' : 'translateY(0)';
                 // Force style flush before restoring transition.
@@ -13261,7 +13276,8 @@ function populateClassReportStudentLists(container) {
             body.style.opacity = '0';
             body.style.transform = 'translateY(-4px)';
             requestAnimationFrame(() => {
-                body.style.maxHeight = `${body.scrollHeight}px`;
+                body.style.maxHeight = 'none';
+                body.style.overflow = 'visible';
                 body.style.opacity = '1';
                 body.style.transform = 'translateY(0)';
             });
@@ -14192,7 +14208,8 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
             sectionItems.style.transform = 'translateY(-4px)';
         } else {
             section.classList.remove('collapsed');
-            sectionItems.style.maxHeight = `${sectionItems.scrollHeight}px`;
+            sectionItems.style.maxHeight = 'none';
+            sectionItems.style.overflow = 'visible';
             sectionItems.style.opacity = '1';
             sectionItems.style.transform = 'translateY(0)';
         }
@@ -14218,7 +14235,8 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
         sectionItems.style.opacity = '0';
         sectionItems.style.transform = 'translateY(-4px)';
         requestAnimationFrame(() => {
-            sectionItems.style.maxHeight = `${sectionItems.scrollHeight}px`;
+            sectionItems.style.maxHeight = 'none';
+            sectionItems.style.overflow = 'visible';
             sectionItems.style.opacity = '1';
             sectionItems.style.transform = 'translateY(0)';
         });

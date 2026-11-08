@@ -4960,6 +4960,11 @@ tr td.add-teacher-availability-table-day {
     max-height: none;
 }
 
+.sidebar.is-logged-in .sidebar-pane-students-inner {
+    max-height: none;
+    overflow: visible;
+}
+
 .sidebar-pane.is-collapsed .sidebar-pane-teachers-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-students-inner,
 .sidebar-pane.is-collapsed .sidebar-pane-class-report-inner,
@@ -5011,11 +5016,16 @@ tr td.add-teacher-availability-table-day {
 
 .class-report-group-body {
     display: block;
-    overflow: hidden;
-    max-height: 999px;
+    overflow: visible;
+    max-height: none;
     opacity: 1;
     transform: translateY(0);
     transition: max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease;
+}
+
+.class-report-group.collapsed .class-report-group-body {
+    overflow: hidden;
+    max-height: 0;
 }
 
 .class-report-group-body > .class-report-empty:only-child {
@@ -5679,8 +5689,8 @@ tr td.add-teacher-availability-table-day {
 .sidebar-category-items {
     display: block;
     padding-top: 0;
-    overflow: hidden;
-    max-height: 1000px;
+    overflow: visible;
+    max-height: none;
     opacity: 1;
     transform: translateY(0);
     transition: max-height 0.28s ease, opacity 0.22s ease, transform 0.22s ease;
