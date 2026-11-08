@@ -6652,13 +6652,9 @@ function renderAvailabilityHalves(slot, state) {
                 chip.textContent = normalizeStudentDisplayName(booking.studentName);
                 chip.title = booking.studentName;
                 wrap.appendChild(chip);
-                const time = document.createElement('span');
-                time.className = 'time-slot-half-time';
-                time.textContent = fullLabel;
                 body.appendChild(wrap);
-                body.appendChild(time);
                 el.appendChild(body);
-                el.title = `${booking.studentName} — ${fullLabel}`;
+                el.title = booking.studentName;
             } else {
                 el.classList.add('time-slot-half--peer');
                 el.title = fullLabel;

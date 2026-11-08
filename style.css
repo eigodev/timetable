@@ -8695,10 +8695,31 @@ body.student-school-calendar .time-slot.state-available:hover {
     color: #fff;
 }
 
+.time-slot-half--booked .time-slot-half-body {
+    height: 100%;
+    min-height: 0;
+    padding: 0 2px;
+    box-sizing: border-box;
+}
+
 .time-slot-half--booked .time-slot-student-names {
     animation: none;
-    font-size: 0.58rem;
-    line-height: 1.1;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    font-size: clamp(0.5rem, 0.2rem + 5.8cqi, 0.62rem);
+    line-height: 1.05;
+}
+
+.time-slot-half--booked .time-slot-student-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .time-slot.time-slot--halves .time-slot-half--peer {
