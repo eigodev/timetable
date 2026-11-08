@@ -8625,30 +8625,37 @@ body.student-school-calendar .time-slot.state-available:hover {
 .time-slot.time-slot--halves {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    margin: 0;
     padding: 0;
-    background: #e0e0e0;
+    border-width: 0;
+    background: transparent;
     box-shadow: none;
 }
 
 .time-slot-half {
-    flex: 1 1 0;
+    flex: 0 0 50%;
+    width: 100%;
+    height: 50%;
     min-height: 0;
     min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    padding: 0 2px;
-    box-sizing: border-box;
     background: #fff;
     color: #5c6570;
     font-size: 0.62rem;
     font-weight: 600;
-    line-height: 1.1;
+    line-height: 1;
     text-align: center;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    white-space: normal;
 }
 
 .time-slot-half--on {
@@ -8661,7 +8668,7 @@ body.teacher-calendar-roster .time-slot.time-slot--halves .time-slot-half {
 }
 
 body.teacher-calendar-roster .time-slot.time-slot--halves:hover {
-    background: #e0e0e0;
+    background: transparent;
     border-color: transparent;
     box-shadow: none;
 }
