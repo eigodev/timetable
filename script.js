@@ -67,7 +67,11 @@ const PHONE_COUNTRY_OPTIONS = [
     { iso: 'US', flag: '🇺🇸', name: 'United States', dialCode: '+1', sample: '(___) ___-____' },
     { iso: 'GB', flag: '🇬🇧', name: 'United Kingdom', dialCode: '+44', sample: '____ ______' },
     { iso: 'IE', flag: '🇮🇪', name: 'Ireland', dialCode: '+353', sample: '__ ___ ____' },
-    { iso: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', sample: '(___) ___-____' }
+    { iso: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', sample: '(___) ___-____' },
+    { iso: 'DE', flag: '🇩🇪', name: 'Germany', dialCode: '+49', sample: '___ ________' },
+    { iso: 'FR', flag: '🇫🇷', name: 'France', dialCode: '+33', sample: '_ __ __ __ __' },
+    { iso: 'PT', flag: '🇵🇹', name: 'Portugal', dialCode: '+351', sample: '___ ___ ___' },
+    { iso: 'ES', flag: '🇪🇸', name: 'Spain', dialCode: '+34', sample: '___ ___ ___' }
 ];
 const DEFAULT_PHONE_COUNTRY_ISO = 'BR';
 const BRAZIL_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsBr0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsBr0)%22%3E%3Cpath%20fill%3D%22%236da544%22%20d%3D%22M0%200h512v512H0z%22/%3E%3Cpath%20fill%3D%22%23ffda44%22%20d%3D%22M256%20100.2L467.5%20256L256%20411.8L44.5%20256z%22/%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22M174.2%20221a87%2087%200%200%200-7.2%2036.3l162%2049.8a88.5%2088.5%200%200%200%2014.4-34c-40.6-65.3-119.7-80.3-169.1-52z%22/%3E%3Cpath%20fill%3D%22%230052b4%22%20d%3D%22M255.7%20167a89%2089%200%200%200-41.9%2010.6a89%2089%200%200%200-39.6%2043.4a181.7%20181.7%200%200%201%20169.1%2052.2a89%2089%200%200%200-9-59.4a89%2089%200%200%200-78.6-46.8zM212%20250.5a149%20149%200%200%200-45%206.8a89%2089%200%200%200%2010.5%2040.9a89%2089%200%200%200%20120.6%2036.2a89%2089%200%200%200%2030.7-27.3A151%20151%200%200%200%20212%20250.5z%22/%3E%3C/g%3E%3C/svg%3E';
@@ -75,12 +79,20 @@ const IRELAND_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22h
 const UNITED_KINGDOM_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20width%3D%22200%22%20height%3D%22200%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsEn0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsEn0)%22%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22m0%200l8%2022l-8%2023v23l32%2054l-32%2054v32l32%2048l-32%2048v32l32%2054l-32%2054v68l22-8l23%208h23l54-32l54%2032h32l48-32l48%2032h32l54-32l54%2032h68l-8-22l8-23v-23l-32-54l32-54v-32l-32-48l32-48v-32l-32-54l32-54V0l-22%208l-23-8h-23l-54%2032l-54-32h-32l-48%2032l-48-32h-32l-54%2032L68%200z%22/%3E%3Cpath%20fill%3D%22%230052b4%22%20d%3D%22M336%200v108L444%200Zm176%2068L404%20176h108zM0%20176h108L0%2068ZM68%200l108%20108V0Zm108%20512V404L68%20512ZM0%20444l108-108H0Zm512-108H404l108%20108Zm-68%20176L336%20404v108z%22/%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M0%200v45l131%20131h45zm208%200v208H0v96h208v208h96V304h208v-96H304V0zm259%200L336%20131v45L512%200zM176%20336L0%20512h45l131-131zm160%200l176%20176v-45L381%20336z%22/%3E%3C/g%3E%3C/svg%3E';
 const UNITED_STATES_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20width%3D%22200%22%20height%3D%22200%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2036%2036%22%3E%3Cpath%20fill%3D%22%23B22334%22%20d%3D%22M35.445%207C34.752%205.809%2033.477%205%2032%205H18v2h17.445zM0%2025h36v2H0zm18-8h18v2H18zm0-4h18v2H18zM0%2021h36v2H0zm4%2010h28c1.477%200%202.752-.809%203.445-2H.555c.693%201.191%201.968%202%203.445%202zM18%209h18v2H18z%22/%3E%3Cpath%20fill%3D%22%23EEE%22%20d%3D%22M.068%2027.679c.017.093.036.186.059.277c.026.101.058.198.092.296c.089.259.197.509.333.743L.555%2029h34.89l.002-.004a4.22%204.22%200%200%200%20.332-.741a3.75%203.75%200%200%200%20.152-.576c.041-.22.069-.446.069-.679H0c0%20.233.028.458.068.679zM0%2023h36v2H0zm0-4v2h36v-2H18zm18-4h18v2H18zm0-4h18v2H18zM0%209zm.555-2l-.003.005L.555%207zM.128%208.044c.025-.102.06-.199.092-.297a3.78%203.78%200%200%200-.092.297zM18%209h18c0-.233-.028-.459-.069-.68a3.606%203.606%200%200%200-.153-.576A4.21%204.21%200%200%200%2035.445%207H18v2z%22/%3E%3Cpath%20fill%3D%22%233C3B6E%22%20d%3D%22M18%205H4a4%204%200%200%200-4%204v10h18V5z%22/%3E%3Cpath%20fill%3D%22%23FFF%22%20d%3D%22M2.001%207.726l.618.449l-.236.725L3%208.452l.618.448l-.236-.725L4%207.726h-.764L3%207l-.235.726zm2%202l.618.449l-.236.725l.617-.448l.618.448l-.236-.725L6%209.726h-.764L5%209l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L9%209l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L13%209l-.235.726zm-8%204l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L5%2013l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L9%2013l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L13%2013l-.235.726zm-6-6l.618.449l-.236.725L7%208.452l.618.448l-.236-.725L8%207.726h-.764L7%207l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L11%207l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L15%207l-.235.726zm-12%204l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L3%2011l-.235.726zM6.383%2012.9L7%2012.452l.618.448l-.236-.725l.618-.449h-.764L7%2011l-.235.726h-.764l.618.449zm3.618-1.174l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L11%2011l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L15%2011l-.235.726zm-12%204l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L3%2015l-.235.726zM6.383%2016.9L7%2016.452l.618.448l-.236-.725l.618-.449h-.764L7%2015l-.235.726h-.764l.618.449zm3.618-1.174l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L11%2015l-.235.726zm4%200l.618.449l-.236.725l.617-.448l.618.448l-.236-.725l.618-.449h-.764L15%2015l-.235.726z%22/%3E%3C/svg%3E';
 const CANADA_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsCa0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22/%3E%3C/mask%3E%3Cg%20mask%3D%22url(%23circleFlagsCa0)%22%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M0%200v512h144l112-64l112%2064h144V0H368L256%2064L144%200Z%22/%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22M144%200h224v512H144Z%22/%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22m301%20289l44-22l-22-11v-22l-45%2022l23-44h-23l-22-34l-22%2033h-23l23%2045l-45-22v22l-22%2011l45%2022l-12%2023h45v33h22v-33h45z%22/%3E%3C/g%3E%3C/svg%3E';
+const GERMANY_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsDe0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fmask%3E%3Cg%20mask%3D%22url(%23circleFlagsDe0)%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M0%200h512v170.7H0z%22%2F%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M0%20170.7h512v170.6H0z%22%2F%3E%3Cpath%20fill%3D%22%23ffda44%22%20d%3D%22M0%20341.3h512V512H0z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
+const FRANCE_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsFr0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fmask%3E%3Cg%20mask%3D%22url(%23circleFlagsFr0)%22%3E%3Cpath%20fill%3D%22%230055a4%22%20d%3D%22M0%200h171v512H0z%22%2F%3E%3Cpath%20fill%3D%22%23eee%22%20d%3D%22M171%200h170v512H171z%22%2F%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M341%200h171v512H341z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
+const PORTUGAL_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsPt0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fmask%3E%3Cg%20mask%3D%22url(%23circleFlagsPt0)%22%3E%3Cpath%20fill%3D%22%23006600%22%20d%3D%22M0%200h205v512H0z%22%2F%3E%3Cpath%20fill%3D%22%23d80027%22%20d%3D%22M205%200h307v512H205z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
+const SPAIN_FLAG_SVG_DATA_URI = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22200%22%20height%3D%22200%22%20viewBox%3D%220%200%20512%20512%22%3E%3Cmask%20id%3D%22circleFlagsEs0%22%3E%3Ccircle%20cx%3D%22256%22%20cy%3D%22256%22%20r%3D%22256%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fmask%3E%3Cg%20mask%3D%22url(%23circleFlagsEs0)%22%3E%3Cpath%20fill%3D%22%23aa151b%22%20d%3D%22M0%200h512v512H0z%22%2F%3E%3Cpath%20fill%3D%22%23f1bf00%22%20d%3D%22M0%20128h512v256H0z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
 const PHONE_COUNTRY_FLAG_DATA_URIS = {
     BR: BRAZIL_FLAG_SVG_DATA_URI,
     US: UNITED_STATES_FLAG_SVG_DATA_URI,
     GB: UNITED_KINGDOM_FLAG_SVG_DATA_URI,
     IE: IRELAND_FLAG_SVG_DATA_URI,
-    CA: CANADA_FLAG_SVG_DATA_URI
+    CA: CANADA_FLAG_SVG_DATA_URI,
+    DE: GERMANY_FLAG_SVG_DATA_URI,
+    FR: FRANCE_FLAG_SVG_DATA_URI,
+    PT: PORTUGAL_FLAG_SVG_DATA_URI,
+    ES: SPAIN_FLAG_SVG_DATA_URI
 };
 
 function getPhoneCountryFlagImageSrc(countryIso) {
@@ -105,7 +117,7 @@ function isPhoneCountrySelectorAlwaysInteractive(countrySelect) {
 }
 
 function getPreferredStudentPhoneCountryOptions() {
-    const preferred = new Set(['BR', 'IE', 'GB', 'US', 'CA']);
+    const preferred = new Set(['BR', 'IE', 'GB', 'US', 'CA', 'DE', 'FR', 'PT', 'ES']);
     const filtered = PHONE_COUNTRY_OPTIONS.filter((country) => preferred.has(String(country.iso || '').toUpperCase()));
     return filtered.length > 0 ? filtered : PHONE_COUNTRY_OPTIONS;
 }
@@ -2964,6 +2976,12 @@ function sanitizeNationalPhoneDigits(countryIso, digitString) {
     if (iso === 'IE' && d.length === 10 && d.startsWith('0')) {
         d = d.slice(1);
     }
+    if (iso === 'FR' && d.length === 10 && d.startsWith('0')) {
+        d = d.slice(1);
+    }
+    if (iso === 'DE' && d.startsWith('0') && (d.length === 11 || d.length === 12)) {
+        d = d.slice(1);
+    }
     return d;
 }
 
@@ -2977,6 +2995,8 @@ function isPlausibleNationalPhoneDigits(countryIso, digitCount) {
     if (iso === 'GB') return digitCount >= 9 && digitCount <= 10;
     if (iso === 'BR') return digitCount >= 10 && digitCount <= 11;
     if (iso === 'US' || iso === 'CA') return digitCount === 10;
+    if (iso === 'DE') return digitCount >= 10 && digitCount <= 11;
+    if (iso === 'FR' || iso === 'PT' || iso === 'ES') return digitCount === 9;
     return digitCount >= 8 && digitCount <= 15;
 }
 
@@ -3014,6 +3034,30 @@ function formatIrelandNationalPhoneDisplay(rawDigits) {
     return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5)}`;
 }
 
+function formatGermanyNationalPhoneDisplay(rawDigits) {
+    const digits = sanitizeNationalPhoneDigits('DE', rawDigits).slice(0, 11);
+    if (!digits) return '';
+    if (digits.length <= 3) return digits;
+    return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+}
+
+function formatFranceNationalPhoneDisplay(rawDigits) {
+    const digits = sanitizeNationalPhoneDigits('FR', rawDigits).slice(0, 9);
+    if (!digits) return '';
+    if (digits.length <= 1) return digits;
+    const rest = digits.slice(1);
+    const pairs = rest.match(/.{1,2}/g) || [];
+    return [digits.slice(0, 1), ...pairs].join(' ');
+}
+
+function formatGroupedTripleNationalPhoneDisplay(countryIso, rawDigits) {
+    const digits = sanitizeNationalPhoneDigits(countryIso, rawDigits).slice(0, 9);
+    if (!digits) return '';
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+}
+
 /** WhatsApp/UI-friendly national display for the app's supported dial countries. */
 function formatNationalPhoneDisplay(countryIso, rawDigitsOrFormatted) {
     const iso = String(countryIso || '').trim().toUpperCase();
@@ -3021,6 +3065,9 @@ function formatNationalPhoneDisplay(countryIso, rawDigitsOrFormatted) {
     if (iso === 'GB') return formatUkNationalPhoneDisplay(rawDigitsOrFormatted);
     if (iso === 'IE') return formatIrelandNationalPhoneDisplay(rawDigitsOrFormatted);
     if (iso === 'US' || iso === 'CA') return formatNanpNationalPhoneDisplay(rawDigitsOrFormatted);
+    if (iso === 'DE') return formatGermanyNationalPhoneDisplay(rawDigitsOrFormatted);
+    if (iso === 'FR') return formatFranceNationalPhoneDisplay(rawDigitsOrFormatted);
+    if (iso === 'PT' || iso === 'ES') return formatGroupedTripleNationalPhoneDisplay(iso, rawDigitsOrFormatted);
     const d = sanitizeNationalPhoneDigits(iso, digitsOnly(rawDigitsOrFormatted));
     return d.replace(/(.{4})/g, '$1 ').trim();
 }
