@@ -600,7 +600,7 @@ function mergeScheduleSlotMaps(baseSlots, incomingSlots, logContext = {}) {
           continue;
         }
         if (
-          /^school::.+::(class|extra)$/.test(baseLow) ||
+          /^school::.+::(class|extra)(?:::half[01]+)?$/.test(baseLow) ||
           ['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(baseLow)
         ) {
           merged[key] = null;

@@ -2381,6 +2381,30 @@ function availabilityHalfRangeLabel(hour, halfIndex) {
     return `${formatClockMinutes(start)} – ${formatClockMinutes(start + 30)}`;
 }
 
+/** Class/extra stored on one 30-minute half: `school::{key}::class::half0` (or `half1` / `half01`). */
+function parseHalfClassSlotState(state) {
+    const low = String(state ?? '').trim().toLowerCase();
+    const match = /^school::(.+)::(class|extra)::half([01]+)$/.exec(low);
+    if (!match) return null;
+    const halfIndexes = [];
+    if (match[3].includes('0')) halfIndexes.push(0);
+    if (match[3].includes('1')) halfIndexes.push(1);
+    if (halfIndexes.length === 0) return null;
+    return {
+        schoolKey: match[1],
+        variant: match[2],
+        halfIndexes,
+        baseToken: `school::${match[1]}::${match[2]}`
+    };
+}
+
+function makeHalfClassSlotState(schoolTitle, variant, halfIndexes) {
+    const indexes = [...new Set((halfIndexes || []).filter((n) => n === 0 || n === 1))].sort();
+    if (indexes.length === 0) return null;
+    const base = makeSchoolStateToken(schoolTitle, variant === 'extra' ? 'extra' : 'class');
+    return `${base}::half${indexes.join('')}`;
+}
+
 /** Scheduled classes and school tokens must not be wiped by availability-only cloud payloads. */
 function isProtectedScheduleSlotStateClient(state) {
     const s = normalizedScheduleSlotStateClient(state);
@@ -2402,6 +2426,7 @@ function isStudentClassOrExtraScheduleSlotStateClient(state) {
     const low = normalizedScheduleSlotStateClient(state);
     if (!low || isStudentSchoolRepositionSlotState(low)) return false;
     if (/^school::.+::(class|extra)$/.test(low)) return true;
+    if (parseHalfClassSlotState(low)) return true;
     return ['navy', 'cyan', 'magenta', 'salmon', 'special'].includes(low);
 }
 
@@ -2478,6 +2503,7 @@ function studentScheduleGridHasClassSlots(slots) {
     return Object.values(map).some((v) => {
         const low = normalizedScheduleSlotStateClient(v);
         if (isClearingScheduleSlotStateClient(low)) return false;
+        if (parseHalfClassSlotState(low)) return true;
         return !!(parseSchoolStateToken(low) || isLegacyOverlayState(low));
     });
 }
@@ -5519,13 +5545,13 @@ function mergeWeeklyClassIntoScheduleCopy(sched, studentName) {
     const eh = Number.parseInt(String(c.extraHour || ''), 10);
     if (c.classDay && !Number.isNaN(ch) && ch >= START_HOUR && ch < END_HOUR) {
         const ck = `${c.classDay}-${ch}`;
-        if (out[ck] !== null) {
+        if (out[ck] !== null && !parseHalfClassSlotState(out[ck])) {
             out[ck] = states.classState;
         }
     }
     if (c.extraDay && !Number.isNaN(eh) && eh >= START_HOUR && eh < END_HOUR) {
         const ek = `${c.extraDay}-${eh}`;
-        if (out[ek] !== null) {
+        if (out[ek] !== null && !parseHalfClassSlotState(out[ek])) {
             out[ek] = states.extraState;
         }
     }
@@ -6389,7 +6415,7 @@ function isSchoolManagedTeacherSlotLocked(day, hour) {
 
 function renderStudentNamesInSlot(slotEl, day, hour, state) {
     if (!slotEl) return;
-    if (isAvailabilitySplitState(state)) {
+    if (isAvailabilitySplitState(state) || parseHalfClassSlotState(state)) {
         slotEl.classList.remove('time-slot--with-student-names');
         return;
     }
@@ -6531,27 +6557,126 @@ function clearAvailabilityHalves(slot) {
     slot.querySelectorAll('.time-slot-half').forEach((el) => el.remove());
 }
 
+function getTutorKeyForCurrentCalendar() {
+    if (currentTeacher && isActiveTeacherName(currentTeacher)) return String(currentTeacher).trim();
+    if (currentTeacher && isStudentName(currentTeacher)) {
+        return String(getTutorRosterNameForStudent(currentTeacher) || '').trim();
+    }
+    return '';
+}
+
+function availabilityHalvesForDisplayedSlot(day, hour, state) {
+    const fromState = availabilitySplitHalvesFromState(state);
+    if (fromState) return fromState;
+    const tutorKey = getTutorKeyForCurrentCalendar();
+    if (!tutorKey) return [false, false];
+    const tutorState = getScheduleSlotMapWithoutMeta(teacherSchedules[tutorKey] || {})[`${day}-${hour}`];
+    return availabilitySplitHalvesFromState(tutorState) || [false, false];
+}
+
+function halfClassColorForToken(baseToken, variant) {
+    const info = resolveSchoolTokenInfoFromState(baseToken);
+    if (info?.color) return info.color;
+    return variant === 'extra' ? '#5c6bc0' : '#206dac';
+}
+
+/** Bookings on each 30-minute half for this hour. Index 0 is :00, index 1 is :30. */
+function collectHalfClassBookings(day, hour) {
+    const key = `${day}-${hour}`;
+    const tutorKey = getTutorKeyForCurrentCalendar();
+    const bookings = [null, null];
+    getAllRosterStudentNamesSorted().forEach((studentName) => {
+        if (tutorKey && !isStudentRosterAssignedToTeacherProfile(studentName, tutorKey)) return;
+        const parsed = parseHalfClassSlotState(
+            getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {})[key]
+        );
+        if (!parsed) return;
+        parsed.halfIndexes.forEach((index) => {
+            if (bookings[index]) return;
+            bookings[index] = {
+                studentName,
+                color: halfClassColorForToken(parsed.baseToken, parsed.variant),
+                variant: parsed.variant
+            };
+        });
+    });
+    return bookings;
+}
+
 function renderAvailabilityHalves(slot, state) {
     clearAvailabilityHalves(slot);
-    const halves = availabilitySplitHalvesFromState(state);
-    if (!halves || !slot) return;
+    if (!slot) return;
+    const split = availabilitySplitHalvesFromState(state);
+    const halfClass = parseHalfClassSlotState(state);
+    if (!split && !halfClass) return;
+    const day = slot.dataset.day;
     const hour = Number.parseInt(String(slot.dataset.hour || ''), 10);
+    const availability = availabilityHalvesForDisplayedSlot(day, hour, state);
+    const bookings = collectHalfClassBookings(day, hour);
+    if (halfClass && currentTeacher && isStudentName(currentTeacher)) {
+        halfClass.halfIndexes.forEach((index) => {
+            if (bookings[index]) return;
+            bookings[index] = {
+                studentName: String(currentTeacher).trim(),
+                color: halfClassColorForToken(halfClass.baseToken, halfClass.variant),
+                variant: halfClass.variant
+            };
+        });
+    }
     slot.classList.add('time-slot--halves');
-    slot.querySelectorAll('.time-slot-student-names').forEach((el) => el.remove());
-    halves.forEach((on, index) => {
+    const viewedName = String(currentTeacher || '').trim().toLowerCase();
+    const showBookedIdentity = isActiveTeacherName(currentTeacher) || isStudentName(currentTeacher);
+    for (let index = 0; index < 2; index++) {
+        const booking = bookings[index];
         const el = document.createElement('div');
-        el.className = 'time-slot-half' + (on ? ' time-slot-half--on' : '');
+        el.className = 'time-slot-half';
         el.dataset.half = String(index);
         const startMin = hour * 60 + (index === 1 ? 30 : 0);
-        const endMin = startMin + 30;
         const fullLabel = availabilityHalfRangeLabel(hour, index);
         el.dataset.start = formatClockMinutes(startMin);
-        el.dataset.end = formatClockMinutes(endMin);
-        el.title = fullLabel;
-        el.setAttribute('aria-label', fullLabel);
-        el.textContent = fullLabel;
+        el.dataset.end = formatClockMinutes(startMin + 30);
+        if (booking && showBookedIdentity) {
+            const isOwnStudent =
+                isStudentName(currentTeacher) && booking.studentName.trim().toLowerCase() === viewedName;
+            if (isOwnStudent || isActiveTeacherName(currentTeacher)) {
+                el.classList.add('time-slot-half--booked');
+                el.style.setProperty('--half-booked-bg', booking.color);
+                const body = document.createElement('div');
+                body.className = 'time-slot-half-body';
+                const wrap = document.createElement('span');
+                wrap.className = 'time-slot-student-names';
+                const chip = document.createElement('span');
+                chip.className = 'time-slot-student-chip';
+                chip.dataset.studentName = booking.studentName;
+                chip.dataset.studentId = buildGoogleMeetStudentId(booking.studentName);
+                chip.textContent = normalizeStudentDisplayName(booking.studentName);
+                chip.title = booking.studentName;
+                wrap.appendChild(chip);
+                const time = document.createElement('span');
+                time.className = 'time-slot-half-time';
+                time.textContent = fullLabel;
+                body.appendChild(wrap);
+                body.appendChild(time);
+                el.appendChild(body);
+                el.title = `${booking.studentName} — ${fullLabel}`;
+            } else {
+                el.classList.add('time-slot-half--peer');
+                el.title = fullLabel;
+            }
+        } else if (booking) {
+            el.classList.add('time-slot-half--peer');
+            el.title = fullLabel;
+        } else if (availability[index]) {
+            el.classList.add('time-slot-half--on');
+            el.textContent = fullLabel;
+            el.title = fullLabel;
+        } else {
+            el.textContent = fullLabel;
+            el.title = fullLabel;
+        }
+        el.setAttribute('aria-label', el.title || fullLabel);
         slot.appendChild(el);
-    });
+    }
 }
 
 function applyStateVisualToSlot(slot, state) {
@@ -6566,7 +6691,7 @@ function applyStateVisualToSlot(slot, state) {
     slot.style.removeProperty('--slot-school-bg');
     slot.style.removeProperty('--slot-school-border');
     slot.style.removeProperty('--slot-school-shadow');
-    if (isAvailabilitySplitState(state)) {
+    if (isAvailabilitySplitState(state) || parseHalfClassSlotState(state)) {
         renderAvailabilityHalves(slot, state);
         return;
     }
@@ -9909,6 +10034,7 @@ function refreshCalendarTeacherAggregateOverlay() {
 }
 
 function mergeTeacherStudentViewDisplaySlot(studentSlot, aggregateSlot) {
+    if (parseHalfClassSlotState(studentSlot)) return studentSlot;
     const classToken =
         getClassOrExtraTokenFromSlotState(studentSlot) ||
         getClassOrExtraTokenFromSlotState(aggregateSlot);
@@ -18459,6 +18585,9 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
         if (isStudentSchoolRepositionSlotState(v)) {
             allKeys.add(k);
         }
+        if (parseHalfClassSlotState(v)) {
+            allKeys.add(k);
+        }
         const liveLow = String(v ?? '').trim().toLowerCase();
         if (
             (liveLow === 'available' || liveLow === 'null' || v === null || v === undefined) &&
@@ -18470,6 +18599,18 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
 
     allKeys.forEach((key) => {
         const liveVal = live[key];
+        const liveHalf = parseHalfClassSlotState(liveVal);
+        if (liveHalf) {
+            const halfPainted = normalizeStudentScheduleOverlayToken(liveHalf.baseToken, student);
+            if (halfPainted === classState || (extraState && halfPainted === extraState)) {
+                out[key] = makeHalfClassSlotState(
+                    getStudentSchoolName(student) || getDefaultSchoolTitle(),
+                    liveHalf.variant,
+                    liveHalf.halfIndexes
+                );
+                return;
+            }
+        }
         const livePainted = normalizeStudentScheduleOverlayToken(liveVal, student);
         if (livePainted === classState || (extraState && livePainted === extraState)) {
             out[key] = livePainted;
@@ -18482,17 +18623,21 @@ function persistStudentScheduleFromCalendarView(studentName, liveSlotStates) {
         const existingPainted = normalizeStudentScheduleOverlayToken(existing[key], student);
         const hadClassOrExtra =
             existingPainted === classState || (extraState && existingPainted === extraState);
+        const hadHalfClass = !!parseHalfClassSlotState(existing[key]);
         const hadReposition = isStudentSchoolRepositionSlotState(existing[key]);
+        const liveLow = String(liveVal ?? '').trim().toLowerCase();
         const clearedInView =
             liveVal === null ||
             liveVal === undefined ||
-            String(liveVal ?? '').trim().toLowerCase() === 'available' ||
-            String(liveVal ?? '').trim() === '';
+            liveLow === 'available' ||
+            liveLow === 'null' ||
+            liveLow === '' ||
+            (hadHalfClass && isAvailabilitySplitState(liveLow));
         if (existing[key] === null) {
             out[key] = null;
             return;
         }
-        if ((hadClassOrExtra || hadReposition) && clearedInView) {
+        if ((hadClassOrExtra || hadReposition || hadHalfClass) && clearedInView) {
             out[key] = null;
             return;
         }
@@ -18749,6 +18894,10 @@ function mergeStudentCalendarWithTutorFreeSlots(studentName, tutorKey) {
         for (let hour = START_HOUR; hour < END_HOUR; hour++) {
             const key = `${day}-${hour}`;
             const s = stu[key];
+            if (parseHalfClassSlotState(s)) {
+                merged[key] = s;
+                continue;
+            }
             let t = tutorSlotStateForStudentCalendarMerge(tut[key]);
             if (!t && tutorAvailMeta[key] && !isTutorSlotDisplayedClassColorState(tut[key])) {
                 t = 'available';
@@ -18917,15 +19066,22 @@ function initCalendar() {
 
             slot.addEventListener('click', (e) => {
                 if (e.button !== 0 && e.button != null) return;
-                if (e.target.closest('.time-slot-student-chip')) return;
                 const halfEl = e.target.closest && e.target.closest('.time-slot-half');
+                const chip = e.target.closest && e.target.closest('.time-slot-student-chip');
+                const studentHalfClick = halfEl && slot.contains(halfEl) && isStudentName(currentTeacher);
+                if (chip && !studentHalfClick) return;
                 if (halfEl && slot.contains(halfEl)) {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (!currentTeacher || !isActiveTeacherName(currentTeacher)) return;
                     const halfIndex = Number(halfEl.dataset.half);
                     if (halfIndex !== 0 && halfIndex !== 1) return;
-                    toggleTeacherAvailabilityHalf(day, hour, halfIndex);
+                    if (currentTeacher && isActiveTeacherName(currentTeacher)) {
+                        toggleTeacherAvailabilityHalf(day, hour, halfIndex);
+                        return;
+                    }
+                    if (isCustomContextMenuEnabledForCurrentSelection()) {
+                        handleStudentSchoolHalfClick(day, hour, halfIndex);
+                    }
                     return;
                 }
                 if (!currentTeacher) return;
@@ -19569,11 +19725,47 @@ function toggleTeacherAvailabilityHalf(day, hour, halfIndex) {
     if (isLoggedInStudentCalendarReadOnly()) return;
     if (isGateViewingAlienTeacherGrid()) return;
     if (halfIndex !== 0 && halfIndex !== 1) return;
+    if (collectHalfClassBookings(day, hour)[halfIndex]) return;
     const halves = availabilitySplitHalvesFromState(getSlotState(day, hour));
     if (!halves) return;
     const next = [halves[0], halves[1]];
     next[halfIndex] = !next[halfIndex];
     setSlotState(day, hour, availabilitySplitStateFromHalves(next));
+}
+
+/**
+ * Schools calendar: book or clear one 30-minute half for the selected student.
+ * The other half stays on the tutor availability split.
+ */
+function handleStudentSchoolHalfClick(day, hour, halfIndex) {
+    const studentName = String(currentTeacher || '').trim();
+    if (!studentName || !isStudentName(studentName)) return;
+    if (isLoggedInStudentCalendarReadOnly()) return;
+    if (halfIndex !== 0 && halfIndex !== 1) return;
+
+    const key = `${day}-${hour}`;
+    const stored = parseHalfClassSlotState(
+        getScheduleSlotMapWithoutMeta(teacherSchedules[studentName] || {})[key]
+    );
+    const ownsThisHalf = !!(stored && stored.halfIndexes.includes(halfIndex));
+    if (ownsThisHalf) {
+        const remaining = stored.halfIndexes.filter((index) => index !== halfIndex);
+        if (remaining.length === 0) {
+            setSlotState(day, hour, null);
+            return;
+        }
+        const schoolTitle = getStudentSchoolName(studentName) || getDefaultSchoolTitle();
+        setSlotState(day, hour, makeHalfClassSlotState(schoolTitle, stored.variant, remaining));
+        return;
+    }
+
+    if (collectHalfClassBookings(day, hour)[halfIndex]) return;
+    const availability = availabilityHalvesForDisplayedSlot(day, hour, getDisplaySlotState(day, hour));
+    if (!availability[halfIndex]) return;
+
+    const schoolTitle = getStudentSchoolName(studentName) || getDefaultSchoolTitle();
+    const indexes = stored ? [...stored.halfIndexes, halfIndex] : [halfIndex];
+    setSlotState(day, hour, makeHalfClassSlotState(schoolTitle, 'class', indexes));
 }
 
 // Show context menu on right click
@@ -19995,6 +20187,9 @@ function selectAll() {
                 if (isSchoolManagedTeacherSlotLocked(day, hour) || isTeacherSlotOccupiedForAvailability(day, hour)) {
                     return;
                 }
+                if (collectHalfClassBookings(day, hour).some(Boolean)) {
+                    return;
+                }
                 slotStates[key] = 'available';
                 patchTeacherAvailabilitySlotMeta(currentTeacher, key, true);
                 applyStateVisualToSlot(slot, 'available');
@@ -20031,6 +20226,9 @@ function clearAll() {
             if (slot) {
                 const currentState = String(slotStates[key] || '').trim().toLowerCase();
                 if (currentState !== 'available' && !isAvailabilitySplitState(currentState)) {
+                    return;
+                }
+                if (collectHalfClassBookings(day, hour).some(Boolean)) {
                     return;
                 }
                 slotStates[key] = null;
