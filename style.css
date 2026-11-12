@@ -5712,6 +5712,8 @@ tr td.add-teacher-availability-table-day {
     max-height: 0;
     opacity: 0;
     transform: translateY(-4px);
+    overflow: hidden;
+    pointer-events: none;
 }
 
 .sidebar-category-items .teacher-item {

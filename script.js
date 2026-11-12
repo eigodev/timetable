@@ -14251,12 +14251,15 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
         if (collapsed) {
             section.classList.add('collapsed');
             sectionItems.style.maxHeight = '0px';
+            sectionItems.style.overflow = 'hidden';
+            sectionItems.style.pointerEvents = 'none';
             sectionItems.style.opacity = '0';
             sectionItems.style.transform = 'translateY(-4px)';
         } else {
             section.classList.remove('collapsed');
             sectionItems.style.maxHeight = 'none';
             sectionItems.style.overflow = 'visible';
+            sectionItems.style.pointerEvents = 'auto';
             sectionItems.style.opacity = '1';
             sectionItems.style.transform = 'translateY(0)';
         }
@@ -14273,17 +14276,22 @@ function setSidebarSectionCollapsed(section, collapsed, animate = true) {
         requestAnimationFrame(() => {
             section.classList.add('collapsed');
             sectionItems.style.maxHeight = '0px';
+            sectionItems.style.overflow = 'hidden';
+            sectionItems.style.pointerEvents = 'none';
             sectionItems.style.opacity = '0';
             sectionItems.style.transform = 'translateY(-4px)';
         });
     } else {
         section.classList.remove('collapsed');
         sectionItems.style.maxHeight = '0px';
+        sectionItems.style.overflow = 'hidden';
+        sectionItems.style.pointerEvents = 'none';
         sectionItems.style.opacity = '0';
         sectionItems.style.transform = 'translateY(-4px)';
         requestAnimationFrame(() => {
             sectionItems.style.maxHeight = 'none';
             sectionItems.style.overflow = 'visible';
+            sectionItems.style.pointerEvents = 'auto';
             sectionItems.style.opacity = '1';
             sectionItems.style.transform = 'translateY(0)';
         });
